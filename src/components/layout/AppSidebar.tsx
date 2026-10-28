@@ -25,6 +25,8 @@ import {
   Database,
   ArrowRightLeft,
   PieChart,
+  BookOpen,
+  Settings,
 } from 'lucide-react';
 
 export function AppSidebar() {
@@ -35,6 +37,7 @@ export function AppSidebar() {
     { href: '/', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/productivity/inbox', label: 'Inbox / Capture', icon: Inbox },
     { href: '/productivity/today', label: 'Today View', icon: CalendarCheck },
+    { href: '/productivity/weekly-review', label: 'Weekly Review', icon: CalendarCheck },
     { href: '/productivity/tasks', label: 'Tasks', icon: CheckSquare },
     { href: '/productivity/calendar', label: 'Calendar & Planning', icon: Calendar },
     { href: '/productivity/projects', label: 'Projects & Milestones', icon: Briefcase },
@@ -59,8 +62,10 @@ export function AppSidebar() {
 
   const overviewLinks = [
     { href: '/overview', label: 'Executive Pulse', icon: LayoutDashboard },
+    { href: '/overview/metrics', label: 'Metric Dictionary', icon: BookOpen },
     { href: '/overview/formulas', label: 'Custom Formula Studio', icon: Sliders },
     { href: '/overview/ai-governance', label: 'AI Governance & Policies', icon: ShieldAlert },
+    { href: '/overview/settings', label: 'Operating Rules', icon: Settings },
     { href: '/overview/backup', label: 'Data Backup & Export', icon: Database },
   ];
 

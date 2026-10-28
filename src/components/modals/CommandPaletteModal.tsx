@@ -15,6 +15,8 @@ import {
   Clock,
   FileSpreadsheet,
   ArrowRight,
+  BookOpen,
+  Sliders,
 } from 'lucide-react';
 
 export function CommandPaletteModal() {
@@ -60,28 +62,70 @@ export function CommandPaletteModal() {
       title: "Open Today's Daily Plan",
       subtitle: 'View today schedule and AI prioritized tasks',
       icon: CalendarCheck,
-      action: () => router.push('/productivity/today'),
+      action: () => {
+        setIsCommandPaletteOpen(false);
+        router.push('/productivity/today');
+      },
+    },
+    {
+      id: 'act_review',
+      title: 'Open Weekly Review Workspace',
+      subtitle: 'Structured review of tasks, habits, blockers, and commitments',
+      icon: CalendarCheck,
+      action: () => {
+        setIsCommandPaletteOpen(false);
+        router.push('/productivity/weekly-review');
+      },
     },
     {
       id: 'act_timer',
       title: 'Start Focus Timer',
       subtitle: 'Open focus session tracking',
       icon: Clock,
-      action: () => router.push('/productivity/focus'),
+      action: () => {
+        setIsCommandPaletteOpen(false);
+        router.push('/productivity/focus');
+      },
     },
     {
       id: 'act_tx',
       title: 'View Transactions Ledger',
       subtitle: 'Inspect financial journal and balances',
       icon: Receipt,
-      action: () => router.push('/finance/transactions'),
+      action: () => {
+        setIsCommandPaletteOpen(false);
+        router.push('/finance/transactions');
+      },
     },
     {
       id: 'act_import',
       title: 'Import Bank CSV Statement',
       subtitle: 'Upload, deduplicate, and commit bank files',
       icon: FileSpreadsheet,
-      action: () => router.push('/finance/import'),
+      action: () => {
+        setIsCommandPaletteOpen(false);
+        router.push('/finance/import');
+      },
+    },
+    {
+      id: 'act_metrics',
+      title: 'Browse Metric Dictionary',
+      subtitle: 'Authoritative formulas, what counts, and calculation contracts',
+      icon: BookOpen,
+      action: () => {
+        setIsCommandPaletteOpen(false);
+        router.push('/overview/metrics');
+      },
+    },
+    {
+      id: 'act_settings',
+      title: 'Personal Operating Rules & Settings',
+      subtitle: 'Workload limits, quiet hours, and safety buffers',
+      icon: Sliders,
+      action: () => {
+        setIsCommandPaletteOpen(false);
+        router.push('/overview/settings');
+      },
     },
   ];
 
