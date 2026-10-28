@@ -47,7 +47,7 @@ export default function OverviewPage() {
   const completedHabits = habits.filter(h => h.isCompletedToday).length;
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="w-full px-8 py-6 space-y-6">
       {/* Top Banner */}
       <div className="p-5 bg-gradient-to-r from-zinc-900 via-zinc-900 to-amber-950/40 border border-zinc-800 rounded-xl space-y-1">
         <div className="flex items-center gap-2">

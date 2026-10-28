@@ -115,7 +115,7 @@ export default function CsvImportPage() {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="w-full px-8 py-6 space-y-6">
       <div>
         <h1 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
           <FileSpreadsheet className="w-5 h-5 text-emerald-400" />

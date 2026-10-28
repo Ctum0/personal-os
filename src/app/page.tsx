@@ -91,7 +91,7 @@ export default function ProductivityDashboard() {
   const completedHabitsCount = habits.filter(h => h.isCompletedToday).length;
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="w-full px-8 py-6 space-y-6">
       {/* Top Banner / Welcome & Quick Daily Planning */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-5 bg-gradient-to-r from-zinc-900 via-zinc-900 to-indigo-950/40 border border-zinc-800 rounded-xl">
         <div className="space-y-1">

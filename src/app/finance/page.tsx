@@ -55,7 +55,7 @@ export default function FinanceDashboard() {
     .reduce((sum, a) => sum + Math.max(0, parseFloat(a.currentBalance)), 0);
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="w-full px-8 py-6 space-y-6">
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 bg-gradient-to-r from-zinc-900 via-zinc-900 to-emerald-950/40 border border-zinc-800 rounded-xl">
         <div className="space-y-1">
