@@ -22,12 +22,15 @@ Guiding rules:
 
 ## Verified defects
 
+Line numbers drift as code changes. Every pointer below is a grep-able token;
+where a line number is given it was true at the commit named in the Status cell.
+
 | # | Defect | Evidence | Status |
 |---|---|---|---|
-| 1 | Calendar dates computed in UTC. Every evening after 18:30 UTC (00:00 Asia/Colombo) habit logs, streaks, daily plan, dashboard "today" and due dates write to the previous day. | `src/lib/productivity/engine.ts:214`, `:324`, `src/app/page.tsx:37` + 46 `toISOString()` sites | **FIXED** in `57d92fd`, `1e09bc0` - `src/lib/time/index.ts`, 31 call sites converted, 8 new tests |
-| 2 | Money aggregates cast TEXT to REAL inside SQL, so precision is lost before any decimal library runs. Balances drift. | `src/lib/finance/engine.ts:121,216,227,482,616` (`CAST(amount AS REAL)`); columns are `amount TEXT` | OPEN |
-| 3 | Voiding a transaction deletes its `journal_lines`, contradicting the "preserve history" comment and leaving balances and audit trail inconsistent. | `src/app/api/finance/transactions/route.ts:177-184` | OPEN |
-| 4 | No schema migration system. Tables are `CREATE TABLE IF NOT EXISTS` only; an existing DB can never gain a column. | `src/lib/db/index.ts:32-37`; no `PRAGMA user_version`, no `ALTER TABLE`, no `migrations/` | OPEN |
+| 1 | Calendar dates computed in UTC. Every evening after 18:30 UTC (00:00 Asia/Colombo) habit logs, streaks, daily plan, dashboard "today" and due dates write to the previous day. | `toISOString()` appeared 46 times across 25 files before the fix; zero remain outside `src/lib/time/` and tests | **FIXED** in `57d92fd`, `1e09bc0` - `src/lib/time/index.ts`, 31 call sites converted, 8 new tests |
+| 2 | Money aggregates cast TEXT to REAL inside SQL, so precision is lost before any decimal library runs. Balances drift. | `CAST(amount AS REAL)` in `src/lib/finance/engine.ts` (13 occurrences); the columns are `amount TEXT` | OPEN |
+| 3 | Voiding a transaction deletes its `journal_lines`, contradicting the "preserve history" comment and leaving balances and audit trail inconsistent. | `src/app/api/finance/transactions/route.ts` - the DELETE handler runs `DELETE FROM journal_lines` right after setting `status='voided'` | OPEN |
+| 4 | No schema migration system. Tables are `CREATE TABLE IF NOT EXISTS` only; an existing DB can never gain a column. | `src/lib/db/index.ts` - `initSchema()` only, no `PRAGMA user_version`, no `ALTER TABLE`, no `migrations/` | OPEN |
 | 5 | No authentication. Anything that reaches the port reads and writes the DB. | no session/middleware under `src/app/api` | OPEN |
 | 6 | No restore path. Backup page exports partial JSON; there is no import, no SQLite snapshot, no scheduled copy. | `src/app/overview/backup/page.tsx` | OPEN |
 | 7 | Dead surfaces that silently discard input: focus sessions, settings save, AI governance toggles, metric dictionary, operating rules. | `focus/page.tsx:23`, `settings/page.tsx:28`, `ai-governance/page.tsx:15`, `metrics/page.tsx:30` | OPEN |
