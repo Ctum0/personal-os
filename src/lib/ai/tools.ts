@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3';
 import { calculateAccountBalances, calculateIncomeAndExpenses, calculateBudget, calculateSafeToSpend } from '@/lib/finance/engine';
 import { calculateProjectProgress, calculateGoalProgress, calculateHabitStreak, generateDailyPlanProposal } from '@/lib/productivity/engine';
-import { todayISO } from "@/lib/time";
+import { todayISO, toISODate } from "@/lib/time";
 
 export type ToolPermissionLevel = 'read_and_recommend' | 'prepare_and_confirm' | 'auto_execute';
 
@@ -320,7 +320,7 @@ export const AI_TOOLS: Record<string, AiToolDefinition> = {
       const today = todayISO();
       const future = new Date();
       future.setDate(future.getDate() + days);
-      const endDate = future.toISOString().slice(0, 10);
+      const endDate = toISODate(future);
 
       return db.prepare(`
         SELECT r.id, r.name, r.expected_amount, r.currency, r.next_due_date, r.rule_type, a.name as account_name

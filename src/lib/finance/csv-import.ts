@@ -1,6 +1,7 @@
 import Papa from 'papaparse';
 import { Decimal } from 'decimal.js';
 import type Database from 'better-sqlite3';
+import { toISODate } from "@/lib/time";
 
 export interface ColumnMapping {
   dateColumn: string;
@@ -65,7 +66,7 @@ export function normalizeDate(dateStr: string): string | null {
 
   const parsed = new Date(clean);
   if (!isNaN(parsed.getTime())) {
-    return parsed.toISOString().slice(0, 10);
+    return toISODate(parsed);
   }
 
   return null;

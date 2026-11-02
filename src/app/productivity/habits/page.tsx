@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
-import { todayISO } from "@/lib/time";
+import { todayISO, toISODate } from "@/lib/time";
 import {
   Flame,
   Plus,
@@ -50,7 +50,7 @@ export default function HabitsPage() {
     const days = Array.from({ length: 7 }, (_, i) => {
       const d = new Date();
       d.setDate(d.getDate() - (6 - i));
-      return d.toISOString().slice(0, 10);
+      return toISODate(d);
     });
     setPastDays(days);
   }, []);

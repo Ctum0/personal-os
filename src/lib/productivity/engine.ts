@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import { todayISO } from "@/lib/time";
+import { todayISO, toISODate } from "@/lib/time";
 
 export interface ProjectProgressResult {
   projectId: string;
@@ -270,7 +270,7 @@ export function calculateHabitStreak(
 
   while (cursor >= startDateObj && safetyCount < 365) {
     safetyCount++;
-    const dateStr = cursor.toISOString().slice(0, 10);
+    const dateStr = toISODate(cursor);
     // JS getDay(): 0 = Sun, 1 = Mon ... convert to 1 = Mon .. 7 = Sun
     const jsDay = cursor.getDay();
     const isoDay = jsDay === 0 ? 7 : jsDay;

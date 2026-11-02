@@ -1,6 +1,6 @@
 import { Decimal } from 'decimal.js';
 import type Database from 'better-sqlite3';
-import { todayISO } from "@/lib/time";
+import { todayISO, toISODate } from "@/lib/time";
 
 // Configure Decimal.js for financial accuracy
 Decimal.set({ precision: 28, rounding: Decimal.ROUND_HALF_UP });
@@ -477,7 +477,7 @@ export function calculateSafeToSpend(db: Database.Database, tenantId: string): S
   const today = todayISO();
   const futureDate = new Date();
   futureDate.setDate(futureDate.getDate() + horizonDays);
-  const horizonEndDate = futureDate.toISOString().slice(0, 10);
+  const horizonEndDate = toISODate(futureDate);
 
   const upcomingBills = db.prepare(`
     SELECT coalesce(sum(CAST(expected_amount AS REAL)), 0) as total

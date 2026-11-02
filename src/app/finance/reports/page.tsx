@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import { toISODate } from "@/lib/time";
 import {
   Sliders,
   TrendingUp,
@@ -20,7 +21,7 @@ export default function FinanceReportsPage() {
   useEffect(() => {
     const now = new Date();
     setStartDate(now.toISOString().slice(0, 7) + '-01');
-    setEndDate(now.toISOString().slice(0, 10));
+    setEndDate(toISODate(now));
   }, []);
 
   const loadReports = () => {
