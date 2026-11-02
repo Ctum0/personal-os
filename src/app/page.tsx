@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import { todayISO } from "@/lib/time";
 import {
   CalendarCheck,
   CheckCircle2,
@@ -34,7 +35,7 @@ export default function ProductivityDashboard() {
   const loadData = () => {
     setIsLoading(true);
     const spaceQuery = activeSpaceId !== 'all' ? `?spaceId=${activeSpaceId}` : '';
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayISO();
 
     Promise.all([
       fetch(`/api/tasks${spaceQuery}`).then(r => r.json()),
@@ -71,7 +72,7 @@ export default function ProductivityDashboard() {
   };
 
   const logHabit = async (habitId: string, currentStatus: boolean) => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayISO();
     const method = currentStatus ? 'DELETE' : 'POST';
     if (currentStatus) {
       await fetch(`/api/habits/log?habitId=${habitId}&date=${today}`, { method: 'DELETE' });

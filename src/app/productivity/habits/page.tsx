@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import { todayISO } from "@/lib/time";
 import {
   Flame,
   Plus,
@@ -68,7 +69,7 @@ export default function HabitsPage() {
   }, [activeSpaceId]);
 
   const toggleHabit = async (habitId: string, currentStatus: boolean) => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayISO();
     if (currentStatus) {
       await fetch(`/api/habits/log?habitId=${habitId}&date=${today}`, { method: 'DELETE' });
     } else {

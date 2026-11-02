@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { calculateHabitStreak } from '@/lib/productivity/engine';
+import { todayISO } from "@/lib/time";
 
 export async function GET(request: Request) {
   try {
@@ -9,7 +10,7 @@ export async function GET(request: Request) {
     const db = getDb();
     const { searchParams } = new URL(request.url);
     const spaceId = searchParams.get('spaceId');
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayISO();
 
     let query = 'SELECT * FROM habits WHERE tenant_id = ?';
     const params: any[] = [session.tenantId];

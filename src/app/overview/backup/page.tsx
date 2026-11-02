@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { todayISO } from "@/lib/time";
 import {
   Database,
   Download,
@@ -48,7 +49,7 @@ export default function BackupExportPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `personal_os_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `personal_os_backup_${todayISO()}.json`;
       a.click();
       URL.revokeObjectURL(url);
     } finally {

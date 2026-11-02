@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { todayISO } from "@/lib/time";
 
 // Database file path in project root
 const DB_DIR = path.join(process.cwd(), 'data');
@@ -897,7 +898,7 @@ export function seedDefaultData(db: Database.Database) {
   }
 
   // Sample habit logs for current week
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   db.prepare(`
     INSERT OR REPLACE INTO habit_logs (id, tenant_id, habit_id, log_date, value, status)
     VALUES (?, ?, ?, ?, ?, ?)

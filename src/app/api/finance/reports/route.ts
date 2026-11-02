@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { calculateIncomeAndExpenses } from '@/lib/finance/engine';
+import { todayISO } from "@/lib/time";
 
 export async function GET(request: Request) {
   try {
@@ -9,7 +10,7 @@ export async function GET(request: Request) {
     const db = getDb();
     const { searchParams } = new URL(request.url);
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayISO();
     const startDate = searchParams.get('startDate') || today.slice(0, 7) + '-01';
     const endDate = searchParams.get('endDate') || today;
 

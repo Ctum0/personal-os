@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import { todayISO } from "@/lib/time";
 import {
   Calendar as CalendarIcon,
   Plus,
@@ -29,7 +30,7 @@ export default function CalendarPage() {
   };
 
   useEffect(() => {
-    setCurrentDate(new Date().toISOString().slice(0, 10));
+    setCurrentDate(todayISO());
     loadEvents();
   }, [activeSpaceId]);
 

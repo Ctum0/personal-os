@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3';
 import { calculateAccountBalances, calculateIncomeAndExpenses, calculateBudget, calculateSafeToSpend } from '@/lib/finance/engine';
 import { calculateProjectProgress, calculateGoalProgress, calculateHabitStreak, generateDailyPlanProposal } from '@/lib/productivity/engine';
+import { todayISO } from "@/lib/time";
 
 export type ToolPermissionLevel = 'read_and_recommend' | 'prepare_and_confirm' | 'auto_execute';
 
@@ -215,7 +216,7 @@ export const AI_TOOLS: Record<string, AiToolDefinition> = {
     defaultLevel: 'read_and_recommend',
     isConsequential: false,
     execute: (db, tenantId) => {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayISO();
       const openTasks = (db.prepare("SELECT count(*) as c FROM tasks WHERE tenant_id = ? AND is_deleted = 0 AND status IN ('inbox', 'next', 'in_progress')").get(tenantId) as any).c;
       const completedToday = (db.prepare("SELECT count(*) as c FROM tasks WHERE tenant_id = ? AND status = 'completed' AND date(completion_at) = ?").get(tenantId, today) as any).c;
       const safeSpend = calculateSafeToSpend(db, tenantId);
@@ -254,7 +255,7 @@ export const AI_TOOLS: Record<string, AiToolDefinition> = {
     defaultLevel: 'read_and_recommend',
     isConsequential: false,
     execute: (db, tenantId, _, args) => {
-      const targetDate = args?.date || new Date().toISOString().slice(0, 10);
+      const targetDate = args?.date || todayISO();
       return db.prepare(`
         SELECT id, title, start_time, end_time, event_type
         FROM calendar_events
@@ -292,7 +293,7 @@ export const AI_TOOLS: Record<string, AiToolDefinition> = {
     defaultLevel: 'read_and_recommend',
     isConsequential: false,
     execute: (db, tenantId, _, args) => {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayISO();
       const start = args?.startDate || today.slice(0, 7) + '-01';
       const end = args?.endDate || today;
       return calculateIncomeAndExpenses(db, tenantId, start, end);
@@ -316,7 +317,7 @@ export const AI_TOOLS: Record<string, AiToolDefinition> = {
     isConsequential: false,
     execute: (db, tenantId, _, args) => {
       const days = args?.days || 30;
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayISO();
       const future = new Date();
       future.setDate(future.getDate() + days);
       const endDate = future.toISOString().slice(0, 10);
@@ -337,7 +338,7 @@ export const AI_TOOLS: Record<string, AiToolDefinition> = {
     defaultLevel: 'prepare_and_confirm',
     isConsequential: true,
     execute: (db, tenantId, userId, args) => {
-      const date = args?.date || new Date().toISOString().slice(0, 10);
+      const date = args?.date || todayISO();
       const proposal = generateDailyPlanProposal(db, tenantId, date);
       return createAiActionDraft(
         db,

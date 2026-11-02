@@ -1,5 +1,6 @@
 import { Decimal } from 'decimal.js';
 import type Database from 'better-sqlite3';
+import { todayISO } from "@/lib/time";
 
 // Configure Decimal.js for financial accuracy
 Decimal.set({ precision: 28, rounding: Decimal.ROUND_HALF_UP });
@@ -473,7 +474,7 @@ export function calculateSafeToSpend(db: Database.Database, tenantId: string): S
   }
 
   // 2. Reserved upcoming obligations (recurring bills due in horizon)
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const futureDate = new Date();
   futureDate.setDate(futureDate.getDate() + horizonDays);
   const horizonEndDate = futureDate.toISOString().slice(0, 10);
@@ -575,7 +576,7 @@ export function calculateNetWorth(db: Database.Database, tenantId: string): NetW
   }
 
   const netWorth = totalAssets.minus(totalLiabilities);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
 
   return {
     totalAssets: totalAssets.toFixed(2),

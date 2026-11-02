@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+import { todayISO } from "@/lib/time";
 
 export interface ProjectProgressResult {
   projectId: string;
@@ -211,7 +212,7 @@ export function calculateHabitStreak(
   db: Database.Database,
   tenantId: string,
   habitId: string,
-  referenceDate: string = new Date().toISOString().slice(0, 10)
+  referenceDate: string = todayISO()
 ): HabitStreakResult | null {
   const habit = db.prepare('SELECT * FROM habits WHERE tenant_id = ? AND id = ?').get(tenantId, habitId) as {
     id: string;
@@ -321,7 +322,7 @@ export function calculateHabitStreak(
 export function generateDailyPlanProposal(
   db: Database.Database,
   tenantId: string,
-  targetDate: string = new Date().toISOString().slice(0, 10)
+  targetDate: string = todayISO()
 ) {
   // 1. Get due or open priority tasks
   const tasks = db.prepare(`

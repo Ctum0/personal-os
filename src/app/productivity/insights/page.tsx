@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import { todayISO } from "@/lib/time";
 import {
   BarChart3,
   TrendingUp,
@@ -21,7 +22,7 @@ export default function ProductivityInsightsPage() {
   const [today, setToday] = useState('2026-10-29');
 
   useEffect(() => {
-    setToday(new Date().toISOString().slice(0, 10));
+    setToday(todayISO());
   }, []);
 
   useEffect(() => {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
+import { todayISO } from "@/lib/time";
 
 export async function POST(request: Request) {
   try {
@@ -13,7 +14,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Habit ID is required' }, { status: 400 });
     }
 
-    const logDate = date || new Date().toISOString().slice(0, 10);
+    const logDate = date || todayISO();
     const logId = `hl_${habitId}_${logDate.replace(/-/g, '')}`;
     const logStatus = status || 'completed';
     const logVal = value !== undefined ? value : 1;
@@ -50,7 +51,7 @@ export async function DELETE(request: Request) {
     const db = getDb();
     const { searchParams } = new URL(request.url);
     const habitId = searchParams.get('habitId');
-    const date = searchParams.get('date') || new Date().toISOString().slice(0, 10);
+    const date = searchParams.get('date') || todayISO();
 
     if (!habitId) {
       return NextResponse.json({ error: 'Habit ID is required' }, { status: 400 });

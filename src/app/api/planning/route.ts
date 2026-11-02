@@ -2,13 +2,14 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { generateDailyPlanProposal } from '@/lib/productivity/engine';
+import { todayISO } from "@/lib/time";
 
 export async function GET(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
     const { searchParams } = new URL(request.url);
-    const date = searchParams.get('date') || new Date().toISOString().slice(0, 10);
+    const date = searchParams.get('date') || todayISO();
 
     const proposal = generateDailyPlanProposal(db, session.tenantId, date);
     return NextResponse.json({ proposal });

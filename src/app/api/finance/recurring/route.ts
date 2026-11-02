@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
+import { todayISO } from "@/lib/time";
 
 export async function GET() {
   try {
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
 
     const ruleId = `rec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const amount = String(Number(body.expectedAmount).toFixed(2));
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayISO();
 
     db.prepare(`
       INSERT INTO recurring_financial_rules (

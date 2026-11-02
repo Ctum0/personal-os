@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import { todayISO } from "@/lib/time";
 import {
   CalendarCheck,
   CheckCircle2,
@@ -31,7 +32,7 @@ export default function TodayPage() {
 
   const loadTodayData = () => {
     setIsLoading(true);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayISO();
     const spaceQuery = activeSpaceId !== 'all' ? `&spaceId=${activeSpaceId}` : '';
     Promise.all([
       fetch(`/api/tasks?dueDate=${today}${spaceQuery}`).then(r => r.json()),

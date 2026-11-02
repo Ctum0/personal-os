@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { Decimal } from 'decimal.js';
+import { todayISO } from "@/lib/time";
 
 export async function GET(request: Request) {
   try {
@@ -84,7 +85,7 @@ export async function POST(request: Request) {
 
     const txType = transactionType || 'expense';
     const txId = `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const txDate = date || new Date().toISOString().slice(0, 10);
+    const txDate = date || todayISO();
     const decAmount = new Decimal(amount).abs().toFixed(2);
 
     // Get account currency

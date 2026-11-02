@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useWorkspace } from '../layout/WorkspaceContext';
+import { todayISO } from "@/lib/time";
 import {
   X,
   CheckSquare,
@@ -69,7 +70,7 @@ export function QuickAddModal() {
             amount,
             description: title.trim(),
             notes: description,
-            date: dueDate || new Date().toISOString().slice(0, 10),
+            date: dueDate || todayISO(),
           }),
         });
         if (!res.ok) throw new Error('Failed to record transaction');
