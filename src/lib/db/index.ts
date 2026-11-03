@@ -2,6 +2,8 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { todayISO } from "@/lib/time";
+import { mkdirSync as __mkdirSync } from "node:fs";
+import { dirname as __dirnameOf, join as __joinPath } from "node:path";
 
 // Database file path in project root
 const DB_DIR = path.join(process.cwd(), 'data');
@@ -18,7 +20,7 @@ export function getDb(): Database.Database {
     dbInstance = new Database(DB_PATH);
     dbInstance.pragma('journal_mode = WAL');
     dbInstance.pragma('foreign_keys = ON');
-    initSchema(dbInstance);
+    runMigrations(dbInstance);
   }
   return dbInstance;
 }
@@ -1021,4 +1023,62 @@ export function seedDefaultData(db: Database.Database) {
     INSERT INTO debts (id, tenant_id, name, liability_type, principal_balance, interest_rate, minimum_payment, due_day_of_month, payoff_strategy, linked_account_id)
     VALUES (?, ?, 'Sapphire Credit Card Balance', 'credit_card', '620.50', '18.99', '50.00', 15, 'avalanche', 'acc_credit')
   `).run('debt_sapphire', tenantId);
+}
+
+// ---------------------------------------------------------------------------
+// Schema migrations
+// ---------------------------------------------------------------------------
+
+
+export type Migration = {
+  version: number;
+  name: string;
+  up: (db: Database.Database) => void;
+};
+
+/**
+ * Ordered and append-only. Never edit a shipped migration - add a new one.
+ * Migration 1 is the baseline: it runs the original DDL, which is idempotent,
+ * so it is safe on a fresh database and on one created before versioning existed.
+ */
+const MIGRATIONS: Migration[] = [
+  { version: 1, name: "baseline", up: (db) => initSchema(db) },
+];
+
+export function schemaVersion(db: Database.Database): number {
+  return Number(db.pragma("user_version", { simple: true }) ?? 0);
+}
+
+/** Snapshot with VACUUM INTO (WAL-safe). A raw file copy can miss uncommitted WAL pages. */
+export function snapshotDatabase(db: Database.Database, version: number): string {
+  const dir = __joinPath(__dirnameOf(DB_PATH), "backups");
+  __mkdirSync(dir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const file = __joinPath(dir, "personal_os-v" + version + "-" + stamp + ".db");
+  db.exec("VACUUM INTO '" + file.replace(/'/g, "''") + "'");
+  return file;
+}
+
+export type MigrationResult = {
+  from: number;
+  to: number;
+  applied: number[];
+  backup: string | null;
+};
+
+export function runMigrations(db: Database.Database): MigrationResult {
+  const from = schemaVersion(db);
+  const pending = MIGRATIONS.filter((m) => m.version > from).sort((a, b) => a.version - b.version);
+  if (pending.length === 0) {
+    return { from, to: from, applied: [], backup: null };
+  }
+  const backup = from > 0 ? snapshotDatabase(db, from) : null;
+  const apply = db.transaction(() => {
+    for (const m of pending) {
+      m.up(db);
+      db.pragma("user_version = " + m.version);
+    }
+  });
+  apply();
+  return { from, to: schemaVersion(db), applied: pending.map((m) => m.version), backup };
 }
