@@ -20,22 +20,44 @@ export default function FocusTimerPage() {
   const [isRunning, setIsRunning] = useState(false);
   const [interruptionsCount, setInterruptionsCount] = useState(0);
   const [sessionNotes, setSessionNotes] = useState('');
-  const [completedSessions, setCompletedSessions] = useState<any[]>([
-    {
-      id: 'fs_1',
-      title: 'Distributed Architecture Specification Review',
-      duration: 25,
-      interruptions: 0,
-      timestamp: 'Today, 10:30 AM',
-    },
-    {
-      id: 'fs_2',
-      title: 'Ledger Balancing & Double-Entry Invariants',
-      duration: 45,
-      interruptions: 1,
-      timestamp: 'Today, 02:15 PM',
-    },
-  ]);
+  const [completedSessions, setCompletedSessions] = useState<any[]>([]);
+
+  const loadSessions = () => {
+    fetch('/api/focus')
+      .then(r => r.json())
+      .then(data => {
+        if (data.sessions) {
+          setCompletedSessions(data.sessions.map((s: any) => ({
+            id: s.id,
+            title: s.notes || s.task_title || 'Deep Work Session',
+            duration: s.actual_duration || s.planned_duration,
+            interruptions: s.interruptions_count || 0,
+            timestamp: s.created_at ? new Date(s.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recently',
+          })));
+        }
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    loadSessions();
+  }, []);
+
+  const saveCompletedSession = async (duration: number, notes: string, interruptions: number) => {
+    try {
+      await fetch('/api/focus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plannedDuration: duration,
+          actualDuration: duration,
+          notes: notes || 'Focus Session',
+          interruptions,
+        }),
+      });
+      loadSessions();
+    } catch {}
+  };
 
   useEffect(() => {
     let timer: any = null;
@@ -45,20 +67,11 @@ export default function FocusTimerPage() {
       }, 1000);
     } else if (secondsRemaining === 0 && isRunning) {
       setIsRunning(false);
-      // Auto complete session
-      setCompletedSessions(prev => [
-        {
-          id: `fs_${Date.now()}`,
-          title: sessionNotes || 'Focus Session',
-          duration: sessionDurationMinutes,
-          interruptions: interruptionsCount,
-          timestamp: 'Just now',
-        },
-        ...prev,
-      ]);
+      saveCompletedSession(sessionDurationMinutes, sessionNotes, interruptionsCount);
+      setSessionNotes('');
     }
     return () => clearInterval(intervalCleanup(timer));
-  }, [isRunning, secondsRemaining]);
+  }, [isRunning, secondsRemaining, sessionDurationMinutes, sessionNotes, interruptionsCount]);
 
   const intervalCleanup = (t: any) => t;
 

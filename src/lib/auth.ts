@@ -64,3 +64,29 @@ export function getCurrentSession(): UserSession {
     preferences: prefs,
   };
 }
+
+/**
+ * Validates request for local protection. If PERSONAL_OS_PIN is set in the environment,
+ * requests must provide matching x-personal-os-pin header or personal_os_session cookie.
+ */
+export function validateApiRequest(request?: Request): { authorized: boolean; reason?: string } {
+  const pin = process.env.PERSONAL_OS_PIN;
+  if (!pin) {
+    // Local workstation mode: open on 127.0.0.1 by default
+    return { authorized: true };
+  }
+
+  if (!request) {
+    return { authorized: true };
+  }
+
+  const headerPin = request.headers.get('x-personal-os-pin');
+  const cookieHeader = request.headers.get('cookie') || '';
+  const hasCookie = cookieHeader.includes(`personal_os_session=${pin}`);
+
+  if (headerPin === pin || hasCookie) {
+    return { authorized: true };
+  }
+
+  return { authorized: false, reason: 'Invalid or missing Personal OS authentication PIN' };
+}

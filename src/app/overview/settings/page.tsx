@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sliders,
   Clock,
@@ -25,9 +25,48 @@ export default function PersonalOperatingRulesPage() {
   const [enableFinancialInPlanning, setEnableFinancialInPlanning] = useState(true);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
-  const handleSave = () => {
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3000);
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.json())
+      .then(data => {
+        if (data.preferences) {
+          const p = data.preferences;
+          if (p.workStart) setWorkStart(p.workStart);
+          if (p.workEnd) setWorkEnd(p.workEnd);
+          if (p.maxDailyWorkloadHours) setMaxDailyWorkloadHours(p.maxDailyWorkloadHours);
+          if (p.focusWindowMinutes) setFocusWindowMinutes(p.focusWindowMinutes);
+          if (p.shortBreakMinutes) setShortBreakMinutes(p.shortBreakMinutes);
+          if (p.safetyBufferAmount) setSafetyBufferAmount(p.safetyBufferAmount);
+          if (p.baseCurrency) setBaseCurrency(p.baseCurrency);
+          if (p.quietHoursStart) setQuietHoursStart(p.quietHoursStart);
+          if (p.quietHoursEnd) setQuietHoursEnd(p.quietHoursEnd);
+          if (typeof p.enableFinancialInPlanning === 'boolean') setEnableFinancialInPlanning(p.enableFinancialInPlanning);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSave = async () => {
+    try {
+      await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workStart,
+          workEnd,
+          maxDailyWorkloadHours,
+          focusWindowMinutes,
+          shortBreakMinutes,
+          safetyBufferAmount,
+          baseCurrency,
+          quietHoursStart,
+          quietHoursEnd,
+          enableFinancialInPlanning,
+        }),
+      });
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3000);
+    } catch {}
   };
 
   return (

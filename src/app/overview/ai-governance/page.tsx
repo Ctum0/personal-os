@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldAlert,
   ShieldCheck,
@@ -27,10 +27,46 @@ export default function AiGovernancePage() {
     { name: 'suggest_transaction_category', level: 'read_and_recommend', enabled: true, isConsequential: false, desc: 'Predict category based on merchant history' },
   ]);
 
-  const toggleTool = (idx: number) => {
+  useEffect(() => {
+    fetch('/api/ai/policies')
+      .then(r => r.json())
+      .then(data => {
+        if (data.policies && Array.isArray(data.policies) && data.policies.length > 0) {
+          const map = new Map<string, any>(data.policies.map((p: any) => [p.tool_name, p]));
+          setTools(prev => prev.map(t => {
+            const pol = map.get(t.name);
+            if (pol) {
+              return {
+                ...t,
+                level: pol.capability_level || t.level,
+                enabled: pol.allow_auto_execution !== undefined ? Boolean(pol.allow_auto_execution || t.enabled) : t.enabled,
+              };
+            }
+            return t;
+          }));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const toggleTool = async (idx: number) => {
+    const target = tools[idx];
+    const newEnabled = !target.enabled;
     setTools(prev =>
-      prev.map((t, i) => (i === idx ? { ...t, enabled: !t.enabled } : t))
+      prev.map((t, i) => (i === idx ? { ...t, enabled: newEnabled } : t))
     );
+
+    try {
+      await fetch('/api/ai/policies', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          toolName: target.name,
+          capabilityLevel: target.level,
+          allowAutoExecution: newEnabled,
+        }),
+      });
+    } catch {}
   };
 
   return (

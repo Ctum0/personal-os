@@ -174,16 +174,12 @@ export async function DELETE(request: Request) {
     }
 
     db.transaction(() => {
-      // Per spec: financial corrections preserve history or mark as reversed/voided
+      // Per spec: financial corrections preserve history or mark as reversed/voided.
+      // journal_lines are preserved intact for immutable audit history.
       db.prepare(`
         UPDATE journal_transactions 
         SET status = 'voided', updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
-      `).run(id, session.tenantId);
-
-      db.prepare(`
-        DELETE FROM journal_lines 
-        WHERE transaction_id = ? AND tenant_id = ?
       `).run(id, session.tenantId);
 
       db.prepare(`

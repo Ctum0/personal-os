@@ -65,3 +65,49 @@ export function removeSyncedMutations(): void {
   const pending = queue.filter(m => m.status !== 'synced');
   saveOfflineQueue(pending);
 }
+
+export async function syncOfflineQueue(): Promise<{ synced: number; failed: number }> {
+  if (typeof window === 'undefined' || !navigator.onLine) {
+    return { synced: 0, failed: 0 };
+  }
+  const queue = getOfflineQueue();
+  const pending = queue.filter(m => m.status === 'queued' || m.status === 'failed');
+  let synced = 0;
+  let failed = 0;
+
+  for (const item of pending) {
+    try {
+      markMutationStatus(item.id, 'syncing');
+      let url = '/api/tasks';
+
+      if (item.type === 'create_task' || item.type === 'quick_capture') {
+        url = '/api/tasks';
+      } else if (item.type === 'log_habit') {
+        url = '/api/habits/log';
+      }
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Idempotency-Key': item.idempotencyKey,
+        },
+        body: JSON.stringify(item.payload),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Server returned status ${res.status}`);
+      }
+
+      markMutationStatus(item.id, 'synced');
+      synced++;
+    } catch (err: any) {
+      markMutationStatus(item.id, 'failed', err.message);
+      failed++;
+    }
+  }
+
+  removeSyncedMutations();
+  return { synced, failed };
+}
+

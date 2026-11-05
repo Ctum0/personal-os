@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { calculateDebtPayoffScenarios } from '@/lib/finance/engine';
+import { Decimal } from 'decimal.js';
 
 export async function GET(request: Request) {
   try {
@@ -15,8 +16,9 @@ export async function GET(request: Request) {
       FROM debts d
       LEFT JOIN finance_accounts a ON d.linked_account_id = a.id
       WHERE d.tenant_id = ?
-      ORDER BY CAST(d.interest_rate AS REAL) DESC
-    `).all(session.tenantId);
+    `).all(session.tenantId) as any[];
+
+    debts.sort((a, b) => new Decimal(b.interest_rate || '0').minus(new Decimal(a.interest_rate || '0')).toNumber());
 
     const payoffScenarios = calculateDebtPayoffScenarios(db, session.tenantId, extraPayment);
 

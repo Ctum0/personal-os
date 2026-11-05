@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { getOfflineQueue, syncOfflineQueue } from '@/lib/offline/queue';
 
 export type Workspace = 'productivity' | 'finance' | 'overview';
 
@@ -58,7 +59,25 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+
+    // Offline queue check and auto-sync on network reconnect
+    const updateQueueCount = () => {
+      const q = getOfflineQueue();
+      setOfflinePendingCount(q.filter(m => m.status === 'queued' || m.status === 'failed').length);
+    };
+
+    const handleOnline = async () => {
+      await syncOfflineQueue();
+      updateQueueCount();
+    };
+
+    updateQueueCount();
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('online', handleOnline);
+    };
   }, []);
 
   return (

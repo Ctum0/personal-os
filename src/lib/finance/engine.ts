@@ -5,6 +5,22 @@ import { todayISO, toISODate } from "@/lib/time";
 // Configure Decimal.js for financial accuracy
 Decimal.set({ precision: 28, rounding: Decimal.ROUND_HALF_UP });
 
+/**
+ * Exact Decimal summation over an array of string amount rows or string values.
+ * Prevents IEEE-754 binary floating-point drift caused by SQL CAST(... AS REAL).
+ */
+export function sumDecimalAmounts(rows: Array<{ amount?: string; total?: string } | string | null | undefined>): Decimal {
+  let total = new Decimal('0.00');
+  for (const r of rows) {
+    if (!r) continue;
+    const val = typeof r === 'string' ? r : (r.amount || r.total);
+    if (val) {
+      total = total.plus(new Decimal(val));
+    }
+  }
+  return total;
+}
+
 export interface FinancialMetricExplainer {
   metricName: string;
   definition: string;
@@ -118,44 +134,44 @@ export function calculateAccountBalances(db: Database.Database, tenantId: string
     const opening = new Decimal(acc.opening_balance || '0.00');
 
     // Posted income to this account
-    const incomeRow = db.prepare(`
-      SELECT coalesce(sum(CAST(amount AS REAL)), 0) as total
+    const incomeRows = db.prepare(`
+      SELECT amount
       FROM journal_transactions
       WHERE tenant_id = ? AND account_id = ? AND transaction_type = 'income' AND status = 'posted'
-    `).get(tenantId, acc.id) as { total: number };
-    const income = new Decimal(incomeRow.total);
+    `).all(tenantId, acc.id) as Array<{ amount: string }>;
+    const income = sumDecimalAmounts(incomeRows);
 
     // Posted expenses from this account
-    const expenseRow = db.prepare(`
-      SELECT coalesce(sum(CAST(amount AS REAL)), 0) as total
+    const expenseRows = db.prepare(`
+      SELECT amount
       FROM journal_transactions
       WHERE tenant_id = ? AND account_id = ? AND transaction_type = 'expense' AND status = 'posted'
-    `).get(tenantId, acc.id) as { total: number };
-    const expenses = new Decimal(expenseRow.total);
+    `).all(tenantId, acc.id) as Array<{ amount: string }>;
+    const expenses = sumDecimalAmounts(expenseRows);
 
     // Posted transfers IN to this account
-    const transfersInRow = db.prepare(`
-      SELECT coalesce(sum(CAST(amount AS REAL)), 0) as total
+    const transfersInRows = db.prepare(`
+      SELECT amount
       FROM journal_transactions
       WHERE tenant_id = ? AND to_account_id = ? AND transaction_type = 'transfer' AND status = 'posted'
-    `).get(tenantId, acc.id) as { total: number };
-    const transfersIn = new Decimal(transfersInRow.total);
+    `).all(tenantId, acc.id) as Array<{ amount: string }>;
+    const transfersIn = sumDecimalAmounts(transfersInRows);
 
     // Posted transfers OUT from this account
-    const transfersOutRow = db.prepare(`
-      SELECT coalesce(sum(CAST(amount AS REAL)), 0) as total
+    const transfersOutRows = db.prepare(`
+      SELECT amount
       FROM journal_transactions
       WHERE tenant_id = ? AND account_id = ? AND transaction_type = 'transfer' AND status = 'posted'
-    `).get(tenantId, acc.id) as { total: number };
-    const transfersOut = new Decimal(transfersOutRow.total);
+    `).all(tenantId, acc.id) as Array<{ amount: string }>;
+    const transfersOut = sumDecimalAmounts(transfersOutRows);
 
     // Associated refunds to this account
-    const refundsRow = db.prepare(`
-      SELECT coalesce(sum(CAST(amount AS REAL)), 0) as total
+    const refundsRows = db.prepare(`
+      SELECT amount
       FROM journal_transactions
       WHERE tenant_id = ? AND account_id = ? AND transaction_type = 'refund' AND status = 'posted'
-    `).get(tenantId, acc.id) as { total: number };
-    const refunds = new Decimal(refundsRow.total);
+    `).all(tenantId, acc.id) as Array<{ amount: string }>;
+    const refunds = sumDecimalAmounts(refundsRows);
 
     // Balance calculation based on account type
     let current: Decimal;
@@ -213,61 +229,77 @@ export function calculateIncomeAndExpenses(
   currency: string = 'USD'
 ): IncomeExpenseResult {
   // Income
-  const incomeRows = db.prepare(`
-    SELECT coalesce(c.id, 'uncategorized') as cat_id, coalesce(c.name, 'Uncategorized') as cat_name, coalesce(c.color, '#10b981') as cat_color, sum(CAST(t.amount AS REAL)) as total
+  const rawIncomeRows = db.prepare(`
+    SELECT coalesce(c.id, 'uncategorized') as cat_id, coalesce(c.name, 'Uncategorized') as cat_name, coalesce(c.color, '#10b981') as cat_color, t.amount
     FROM journal_transactions t
     LEFT JOIN categories c ON t.category_id = c.id
     WHERE t.tenant_id = ? AND t.status = 'posted' AND t.transaction_type = 'income'
       AND t.date >= ? AND t.date <= ?
-    GROUP BY c.id
-    ORDER BY total DESC
-  `).all(tenantId, startDate, endDate) as Array<{ cat_id: string; cat_name: string; cat_color: string; total: number }>;
+  `).all(tenantId, startDate, endDate) as Array<{ cat_id: string; cat_name: string; cat_color: string; amount: string }>;
+
+  const incomeMap = new Map<string, { cat_id: string; cat_name: string; cat_color: string; total: Decimal }>();
+  let totalIncomeDec = new Decimal(0);
+  for (const r of rawIncomeRows) {
+    const amt = new Decimal(r.amount || '0.00');
+    totalIncomeDec = totalIncomeDec.plus(amt);
+    const existing = incomeMap.get(r.cat_id);
+    if (existing) {
+      existing.total = existing.total.plus(amt);
+    } else {
+      incomeMap.set(r.cat_id, { cat_id: r.cat_id, cat_name: r.cat_name, cat_color: r.cat_color, total: amt });
+    }
+  }
+
+  const incomeByCategory = Array.from(incomeMap.values())
+    .sort((a, b) => b.total.minus(a.total).toNumber())
+    .map(r => ({
+      categoryId: r.cat_id,
+      categoryName: r.cat_name,
+      amount: r.total.toFixed(2),
+      percentage: '0.0',
+      color: r.cat_color,
+    }));
 
   // Expenses (accounting for refunds in the same period)
-  const expenseRows = db.prepare(`
-    SELECT coalesce(c.id, 'uncategorized') as cat_id, coalesce(c.name, 'Uncategorized') as cat_name, coalesce(c.color, '#64748b') as cat_color, sum(CAST(t.amount AS REAL)) as total
+  const rawExpenseRows = db.prepare(`
+    SELECT coalesce(c.id, 'uncategorized') as cat_id, coalesce(c.name, 'Uncategorized') as cat_name, coalesce(c.color, '#64748b') as cat_color, t.amount
     FROM journal_transactions t
     LEFT JOIN categories c ON t.category_id = c.id
     WHERE t.tenant_id = ? AND t.status = 'posted' AND t.transaction_type = 'expense'
       AND t.date >= ? AND t.date <= ?
-    GROUP BY c.id
-    ORDER BY total DESC
-  `).all(tenantId, startDate, endDate) as Array<{ cat_id: string; cat_name: string; cat_color: string; total: number }>;
+  `).all(tenantId, startDate, endDate) as Array<{ cat_id: string; cat_name: string; cat_color: string; amount: string }>;
+
+  const expenseMap = new Map<string, { cat_id: string; cat_name: string; cat_color: string; total: Decimal }>();
+  let rawExpenseDec = new Decimal(0);
+  for (const r of rawExpenseRows) {
+    const amt = new Decimal(r.amount || '0.00');
+    rawExpenseDec = rawExpenseDec.plus(amt);
+    const existing = expenseMap.get(r.cat_id);
+    if (existing) {
+      existing.total = existing.total.plus(amt);
+    } else {
+      expenseMap.set(r.cat_id, { cat_id: r.cat_id, cat_name: r.cat_name, cat_color: r.cat_color, total: amt });
+    }
+  }
+
+  const expenseByCategory = Array.from(expenseMap.values())
+    .sort((a, b) => b.total.minus(a.total).toNumber())
+    .map(r => ({
+      categoryId: r.cat_id,
+      categoryName: r.cat_name,
+      amount: r.total.toFixed(2),
+      percentage: '0.0',
+      color: r.cat_color,
+    }));
 
   // Period refunds
-  const refundsRow = db.prepare(`
-    SELECT coalesce(sum(CAST(amount AS REAL)), 0) as total
+  const refundsRows = db.prepare(`
+    SELECT amount
     FROM journal_transactions
     WHERE tenant_id = ? AND status = 'posted' AND transaction_type = 'refund'
       AND date >= ? AND date <= ?
-  `).get(tenantId, startDate, endDate) as { total: number };
-  const totalRefunds = new Decimal(refundsRow.total);
-
-  let totalIncomeDec = new Decimal(0);
-  const incomeByCategory = incomeRows.map(r => {
-    const dec = new Decimal(r.total);
-    totalIncomeDec = totalIncomeDec.plus(dec);
-    return {
-      categoryId: r.cat_id,
-      categoryName: r.cat_name,
-      amount: dec.toFixed(2),
-      percentage: '0.0',
-      color: r.cat_color,
-    };
-  });
-
-  let rawExpenseDec = new Decimal(0);
-  const expenseByCategory = expenseRows.map(r => {
-    const dec = new Decimal(r.total);
-    rawExpenseDec = rawExpenseDec.plus(dec);
-    return {
-      categoryId: r.cat_id,
-      categoryName: r.cat_name,
-      amount: dec.toFixed(2),
-      percentage: '0.0',
-      color: r.cat_color,
-    };
-  });
+  `).all(tenantId, startDate, endDate) as Array<{ amount: string }>;
+  const totalRefunds = sumDecimalAmounts(refundsRows);
 
   const totalExpenseDec = rawExpenseDec.minus(totalRefunds);
   const netSavingsDec = totalIncomeDec.minus(totalExpenseDec);
@@ -363,22 +395,24 @@ export function calculateBudget(
     const totalBudgeted = allocated.plus(rollover);
 
     // Sum of expenses in this category during budget period
-    const spentRow = db.prepare(`
-      SELECT coalesce(sum(CAST(amount AS REAL)), 0) as total
+    const spentRows = db.prepare(`
+      SELECT amount
       FROM journal_transactions
       WHERE tenant_id = ? AND category_id = ? AND transaction_type = 'expense'
         AND status = 'posted' AND date >= ? AND date <= ?
-    `).get(tenantId, line.category_id, b.start_date, b.end_date) as { total: number };
+    `).all(tenantId, line.category_id, b.start_date, b.end_date) as Array<{ amount: string }>;
+    const categorySpent = sumDecimalAmounts(spentRows);
 
     // Subtract refunds in this category during budget period
-    const refundRow = db.prepare(`
-      SELECT coalesce(sum(CAST(amount AS REAL)), 0) as total
+    const refundRows = db.prepare(`
+      SELECT amount
       FROM journal_transactions
       WHERE tenant_id = ? AND category_id = ? AND transaction_type = 'refund'
         AND status = 'posted' AND date >= ? AND date <= ?
-    `).get(tenantId, line.category_id, b.start_date, b.end_date) as { total: number };
+    `).all(tenantId, line.category_id, b.start_date, b.end_date) as Array<{ amount: string }>;
+    const categoryRefunds = sumDecimalAmounts(refundRows);
 
-    const spent = new Decimal(spentRow.total).minus(new Decimal(refundRow.total));
+    const spent = categorySpent.minus(categoryRefunds);
     const remaining = totalBudgeted.minus(spent);
 
     totalAllocatedDec = totalAllocatedDec.plus(totalBudgeted);
@@ -480,20 +514,20 @@ export function calculateSafeToSpend(db: Database.Database, tenantId: string): S
   const horizonEndDate = toISODate(futureDate);
 
   const upcomingBills = db.prepare(`
-    SELECT coalesce(sum(CAST(expected_amount AS REAL)), 0) as total
+    SELECT expected_amount as amount
     FROM recurring_financial_rules
     WHERE tenant_id = ? AND is_active = 1 AND rule_type IN ('bill', 'subscription', 'loan_payment')
       AND next_due_date >= ? AND next_due_date <= ?
-  `).get(tenantId, today, horizonEndDate) as { total: number };
-  const upcomingObligations = new Decimal(upcomingBills.total);
+  `).all(tenantId, today, horizonEndDate) as Array<{ amount: string }>;
+  const upcomingObligations = sumDecimalAmounts(upcomingBills);
 
   // 3. Earmarked funds from active savings goals not already counted
-  const savingsGoalsRow = db.prepare(`
-    SELECT coalesce(sum(CAST(current_amount AS REAL)), 0) as total
+  const savingsGoalsRows = db.prepare(`
+    SELECT current_amount as amount
     FROM savings_goals
     WHERE tenant_id = ? AND status = 'active'
-  `).get(tenantId) as { total: number };
-  const earmarkedSavings = new Decimal(savingsGoalsRow.total);
+  `).all(tenantId) as Array<{ amount: string }>;
+  const earmarkedSavings = sumDecimalAmounts(savingsGoalsRows);
 
   // Safe-to-spend calculation:
   // Liquid funds - obligations - earmarked savings - buffer
@@ -614,7 +648,7 @@ export function calculateDebtPayoffScenarios(
   extraMonthlyPayment: string = '100.00'
 ) {
   const debts = db.prepare(`
-    SELECT * FROM debts WHERE tenant_id = ? ORDER BY CAST(interest_rate AS REAL) DESC
+    SELECT * FROM debts WHERE tenant_id = ?
   `).all(tenantId) as Array<{
     id: string;
     name: string;
@@ -626,9 +660,9 @@ export function calculateDebtPayoffScenarios(
   const extra = new Decimal(extraMonthlyPayment || '0.00');
 
   // Avalanche: Sort by interest rate desc
-  const avalancheDebts = [...debts].sort((a, b) => parseFloat(b.interest_rate) - parseFloat(a.interest_rate));
+  const avalancheDebts = [...debts].sort((a, b) => new Decimal(b.interest_rate || '0').minus(new Decimal(a.interest_rate || '0')).toNumber());
   // Snowball: Sort by principal balance asc
-  const snowballDebts = [...debts].sort((a, b) => parseFloat(a.principal_balance) - parseFloat(b.principal_balance));
+  const snowballDebts = [...debts].sort((a, b) => new Decimal(a.principal_balance || '0').minus(new Decimal(b.principal_balance || '0')).toNumber());
 
   return {
     extraMonthlyPayment: extra.toFixed(2),

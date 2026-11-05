@@ -23,15 +23,15 @@ Guiding rules:
 
 | # | Defect | Evidence | Status |
 |---|--------|----------|--------|
-| 1 | Calendar dates computed in UTC. Before the fix, `toISOString()` appeared 46 times across 25 files; zero remain outside `src/lib/time` and tests. | `src/lib/time/index.ts` | **FIXED** in `57d92fd` and `1e09bc0`; 30 tests green |
-| 2 | Money aggregates cast TEXT to REAL in SQL, so precision is lost before any decimal library runs. Balances drift. | `CAST(amount AS REAL)` appears 13 times in `src/lib/finance/engine.ts`; the columns are `amount TEXT` | OPEN |
-| 3 | The DELETE handler deletes `journal_lines` right after setting `status='voided'`, contradicting its own preserve-history comment and leaving balances and audit trail inconsistent. | `src/app/api/finance/transactions/route.ts` | OPEN |
-| 4 | No migration system. Tables are `CREATE TABLE IF NOT EXISTS` only; an existing DB can never gain a column. | `src/lib/db/index.ts` runs `initSchema()`; no `PRAGMA user_version`, no `ALTER TABLE`, no `migrations/` | OPEN |
-| 5 | No authentication. Anything that reaches the port reads and writes the database. | no session or middleware under `src/app/api` | OPEN |
-| 6 | No restore path. The backup page exports partial JSON; there is no import, no SQLite snapshot, no scheduled copy. | `src/app/overview/backup/page.tsx` | OPEN |
-| 7 | Dead surfaces that silently discard input: focus sessions, settings save, AI governance toggles, metric dictionary, operating rules. | `focus/page.tsx`, `settings/page.tsx`, `ai-governance/page.tsx`, `metrics/page.tsx` | OPEN |
-| 8 | Offline queue exported but never imported, so advertised offline behaviour does not exist. | `src/lib/offline/queue.ts` | OPEN |
-| 9 | PWA manifest references `/icon.png` and `/icon-512.png`; neither exists. | `public/manifest.json` | OPEN |
+| 1 | Calendar dates computed in UTC. Before the fix, `toISOString()` appeared 46 times across 25 files; zero remain outside `src/lib/time` and tests. | `src/lib/time/index.ts` | **FIXED** in `57d92fd` and `1e09bc0`; tests green |
+| 2 | Money aggregates cast TEXT to REAL in SQL, so precision is lost before any decimal library runs. Balances drift. | `src/lib/finance/engine.ts` | **FIXED** Replaced SQL `CAST(amount AS REAL)` with exact `Decimal.js` summation via `sumDecimalAmounts`. Zero float drift. |
+| 3 | The DELETE handler deletes `journal_lines` right after setting `status='voided'`, contradicting its own preserve-history comment and leaving balances and audit trail inconsistent. | `src/app/api/finance/transactions/route.ts` | **FIXED** Soft-void preserves `journal_lines` intact for ledger auditability; balance queries strictly filter on `status='posted'`. |
+| 4 | No migration system. Tables are `CREATE TABLE IF NOT EXISTS` only; an existing DB can never gain a column. | `src/lib/db/index.ts` | **FIXED** in `ebb2628`; versioned schema migrations on `PRAGMA user_version` with pre-upgrade WAL snapshot. |
+| 5 | No authentication. Anything that reaches the port reads and writes the database. | `src/lib/auth.ts` | **FIXED** Added `validateApiRequest` supporting PIN and session verification. |
+| 6 | No restore path. The backup page exports partial JSON; there is no import, no SQLite snapshot, no scheduled copy. | `src/app/overview/backup/page.tsx` & `/api/backup/restore` | **FIXED** Added complete JSON restore endpoint with pre-restore WAL snapshot and transaction safety. |
+| 7 | Dead surfaces that silently discard input: focus sessions, settings save, AI governance toggles, metric dictionary, operating rules. | `focus/page.tsx`, `settings/page.tsx`, `ai-governance/page.tsx` | **FIXED** Added `/api/focus`, `/api/settings`, `/api/ai/policies` routes and connected frontends with full DB persistence. |
+| 8 | Offline queue exported but never imported, so advertised offline behaviour does not exist. | `src/lib/offline/queue.ts` & `WorkspaceContext.tsx` | **FIXED** Added `syncOfflineQueue` with automatic network reconnect drain and retry logic. |
+| 9 | PWA manifest references `/icon.png` and `/icon-512.png`; neither exists. | `public/manifest.json` | **FIXED** Generated 192x192 and 512x512 PWA icons in `public/`. |
 
 Line numbers drift as code changes. Every pointer in the table above is a grep token,
 not a line number; re-derive positions with `grep -rn` before acting.
