@@ -312,33 +312,36 @@ export function commitCsvImport(
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    for (const r of rowsToImport) {
-      const rowId = `ir_${batchId}_${r.rowIndex}`;
+    for (let idx = 0; idx < rowsToImport.length; idx++) {
+      const r = rowsToImport[idx];
+      const rIndex = r.rowIndex ?? idx;
+      const rawData = JSON.stringify(r.raw || {});
+      const rowId = `ir_${batchId}_${rIndex}`;
 
       if (r.error) {
         skippedCount++;
-        insertImportRow.run(rowId, tenantId, batchId, r.rowIndex, JSON.stringify(r.raw), r.parsedDate, r.parsedAmount, r.parsedPayee, 'error', null, r.error);
+        insertImportRow.run(rowId, tenantId, batchId, rIndex, rawData, r.parsedDate, r.parsedAmount, r.parsedPayee, 'error', null, r.error);
         continue;
       }
 
       if (r.isDuplicate && skipDuplicates) {
         skippedCount++;
-        insertImportRow.run(rowId, tenantId, batchId, r.rowIndex, JSON.stringify(r.raw), r.parsedDate, r.parsedAmount, r.parsedPayee, 'skipped', null, r.duplicateReason);
+        insertImportRow.run(rowId, tenantId, batchId, rIndex, rawData, r.parsedDate, r.parsedAmount, r.parsedPayee, 'skipped', null, r.duplicateReason);
         continue;
       }
 
-      const txId = `tx_imp_${batchId}_${r.rowIndex}`;
+      const txId = `tx_imp_${batchId}_${rIndex}`;
       insertTx.run(
         txId,
         tenantId,
-        r.parsedType,
+        r.parsedType || 'expense',
         r.parsedDate,
         accountId,
         r.parsedAmount,
         currency,
         r.parsedAmount,
-        r.parsedPayee,
-        r.parsedDescription,
+        r.parsedPayee || '',
+        r.parsedDescription || '',
         batchId
       );
 
@@ -353,10 +356,10 @@ export function commitCsvImport(
         r.parsedAmount,
         currency,
         r.parsedAmount,
-        r.parsedDescription
+        r.parsedDescription || 'CSV imported'
       );
 
-      insertImportRow.run(rowId, tenantId, batchId, r.rowIndex, JSON.stringify(r.raw), r.parsedDate, r.parsedAmount, r.parsedPayee, 'accepted', txId, null);
+      insertImportRow.run(rowId, tenantId, batchId, rIndex, rawData, r.parsedDate, r.parsedAmount, r.parsedPayee, 'accepted', txId, null);
       importedCount++;
     }
 
@@ -364,8 +367,8 @@ export function commitCsvImport(
     db.prepare(`
       UPDATE import_batches
       SET accepted_rows = ?, skipped_rows = ?
-      WHERE id = ?
-    `).run(importedCount, skippedCount, batchId);
+      WHERE id = ? AND tenant_id = ?
+    `).run(importedCount, skippedCount, batchId, tenantId);
   })();
 
   return { batchId, importedCount, skippedCount };
@@ -378,7 +381,7 @@ export function reverseImportBatch(
   db: Database.Database,
   tenantId: string,
   batchId: string
-): { success: boolean; reversedCount: number } {
+): { success: boolean; reversedCount: number; deletedCount?: number } {
   let reversedCount = 0;
 
   db.transaction(() => {
@@ -410,5 +413,5 @@ export function reverseImportBatch(
     `).run(batchId, tenantId);
   })();
 
-  return { success: true, reversedCount };
+  return { success: true, reversedCount, deletedCount: reversedCount };
 }

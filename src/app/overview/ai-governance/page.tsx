@@ -93,27 +93,27 @@ export default function AiGovernancePage() {
       </div>
 
       {/* Tools Table */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-sm">
-        <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
-          <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
+      <div className="bg-zinc-950/60 border border-white/[0.06] rounded-lg overflow-hidden">
+        <div className="p-3.5 border-b border-white/[0.06] flex items-center justify-between">
+          <span className="text-xs font-mono uppercase tracking-wider text-zinc-400">
             Registered AI Tools & Permissions ({tools.length})
           </span>
-          <span className="text-[11px] text-zinc-500">Spec Section 10.3 Baseline</span>
+          <span className="text-[11px] font-mono text-zinc-500">Spec Section 10.3 Baseline</span>
         </div>
 
-        <div className="divide-y divide-zinc-800/60">
+        <div className="divide-y divide-white/[0.04]">
           {tools.map((tool, idx) => (
-            <div key={tool.name} className="p-4 flex items-center justify-between hover:bg-zinc-800/40 transition-colors">
+            <div key={tool.name} className="p-3.5 flex items-center justify-between hover:bg-white/[0.02] transition-colors">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs font-bold text-zinc-200">{tool.name}</span>
+                  <span className="font-mono text-xs font-medium text-zinc-200">{tool.name}</span>
                   {tool.isConsequential ? (
-                    <span className="flex items-center gap-1 text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 font-semibold">
+                    <span className="flex items-center gap-1 text-[10px] text-amber-400/90 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 font-mono">
                       <Lock className="w-3 h-3" />
                       Consequential (Confirmation Required)
                     </span>
                   ) : (
-                    <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-semibold">
+                    <span className="flex items-center gap-1 text-[10px] text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded border border-white/[0.06] font-mono">
                       <Eye className="w-3 h-3" />
                       Read & Recommend
                     </span>
@@ -125,10 +125,10 @@ export default function AiGovernancePage() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => toggleTool(idx)}
-                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
+                  className={`px-3 py-1 text-xs font-mono rounded transition-colors ${
                     tool.enabled
-                      ? 'bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-600/30'
-                      : 'bg-zinc-800 text-zinc-500 hover:text-zinc-300'
+                      ? 'bg-zinc-100 text-zinc-950 hover:bg-white'
+                      : 'bg-zinc-900 text-zinc-500 border border-white/[0.06] hover:text-zinc-300'
                   }`}
                 >
                   {tool.enabled ? 'Enabled' : 'Disabled'}

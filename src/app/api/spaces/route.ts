@@ -45,7 +45,7 @@ export async function POST(request: Request) {
       body.description || ''
     );
 
-    const space = db.prepare('SELECT * FROM spaces WHERE id = ?').get(spaceId);
+    const space = db.prepare('SELECT * FROM spaces WHERE id = ? AND tenant_id = ?').get(spaceId, session.tenantId);
     return NextResponse.json({ space }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

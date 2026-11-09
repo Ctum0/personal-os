@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { generateDailyPlanProposal } from '@/lib/productivity/engine';
+import { getPlanningContext } from '@/lib/productivity/planner';
 import { todayISO } from "@/lib/time";
 
 export async function GET(request: Request) {
@@ -12,7 +13,30 @@ export async function GET(request: Request) {
     const date = searchParams.get('date') || todayISO();
 
     const proposal = generateDailyPlanProposal(db, session.tenantId, date);
-    return NextResponse.json({ proposal });
+    const context = getPlanningContext(db, session.tenantId, date);
+
+    // Check if an approved daily plan already exists in daily_plans
+    const approvedPlan = db.prepare(`
+      SELECT * FROM daily_plans 
+      WHERE tenant_id = ? AND plan_date = ? 
+      ORDER BY revision DESC LIMIT 1
+    `).get(session.tenantId, date) as any;
+
+    let planItems: any[] = [];
+    if (approvedPlan) {
+      planItems = db.prepare(`
+        SELECT * FROM daily_plan_items 
+        WHERE tenant_id = ? AND plan_id = ? 
+        ORDER BY sort_order ASC
+      `).all(session.tenantId, approvedPlan.id);
+    }
+
+    return NextResponse.json({
+      proposal,
+      context,
+      approvedPlan: approvedPlan ? { ...approvedPlan, items: planItems } : null,
+      missedTasks: context.missedTasks,
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

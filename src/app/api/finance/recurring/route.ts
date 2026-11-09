@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { todayISO } from "@/lib/time";
+import { Decimal } from 'decimal.js';
 
 export async function GET() {
   try {
@@ -29,12 +30,34 @@ export async function POST(request: Request) {
     const db = getDb();
     const body = await request.json();
 
-    if (!body.name || !body.expectedAmount || !body.accountId || !body.nextDueDate) {
+    if (!body.name || !body.name.trim() || body.expectedAmount === undefined || !body.accountId || !body.nextDueDate) {
       return NextResponse.json({ error: 'Name, expectedAmount, accountId, and nextDueDate are required' }, { status: 400 });
     }
 
+    let amountDec: Decimal;
+    try {
+      amountDec = new Decimal(body.expectedAmount);
+      if (!amountDec.isFinite() || amountDec.lte(0)) {
+        return NextResponse.json({ error: 'expectedAmount must be a positive number' }, { status: 400 });
+      }
+    } catch {
+      return NextResponse.json({ error: 'Invalid expectedAmount' }, { status: 400 });
+    }
+
+    const account = db.prepare('SELECT id FROM finance_accounts WHERE id = ? AND tenant_id = ?').get(body.accountId, session.tenantId);
+    if (!account) {
+      return NextResponse.json({ error: 'Account not found' }, { status: 404 });
+    }
+
+    if (body.categoryId) {
+      const cat = db.prepare('SELECT id FROM categories WHERE id = ? AND tenant_id = ?').get(body.categoryId, session.tenantId);
+      if (!cat) {
+        return NextResponse.json({ error: 'Category not found' }, { status: 404 });
+      }
+    }
+
     const ruleId = `rec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const amount = String(Number(body.expectedAmount).toFixed(2));
+    const amount = amountDec.toFixed(2);
     const today = todayISO();
 
     db.prepare(`
@@ -57,7 +80,7 @@ export async function POST(request: Request) {
       body.nextDueDate
     );
 
-    const created = db.prepare('SELECT * FROM recurring_financial_rules WHERE id = ?').get(ruleId);
+    const created = db.prepare('SELECT * FROM recurring_financial_rules WHERE id = ? AND tenant_id = ?').get(ruleId, session.tenantId);
     return NextResponse.json({ recurringRule: created }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

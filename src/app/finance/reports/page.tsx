@@ -35,7 +35,7 @@ export default function FinanceReportsPage() {
   }, [startDate, endDate]);
 
   return (
-    <div className="w-full px-8 py-6 space-y-6">
+    <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
@@ -58,22 +58,63 @@ export default function FinanceReportsPage() {
         )}
       </div>
 
-      {/* Date Filter Bar */}
-      <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center gap-3 text-xs">
-        <span className="text-zinc-400 font-medium">Reporting Period:</span>
-        <input
-          type="date"
-          value={startDate}
-          onChange={e => setStartDate(e.target.value)}
-          className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-zinc-200"
-        />
-        <span className="text-zinc-500">to</span>
-        <input
-          type="date"
-          value={endDate}
-          onChange={e => setEndDate(e.target.value)}
-          className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-zinc-200"
-        />
+      {/* Date Filter & Preset Bar */}
+      <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-3">
+          <span className="text-zinc-400 font-medium">Period:</span>
+          <input
+            type="date"
+            aria-label="Reporting start date"
+            value={startDate}
+            onChange={e => setStartDate(e.target.value)}
+            className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-zinc-200"
+          />
+          <span className="text-zinc-500">to</span>
+          <input
+            type="date"
+            aria-label="Reporting end date"
+            value={endDate}
+            onChange={e => setEndDate(e.target.value)}
+            className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-zinc-200"
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              const now = new Date();
+              setStartDate(now.toISOString().slice(0, 7) + '-01');
+              setEndDate(toISODate(now));
+            }}
+            className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md text-[11px] font-medium transition-colors"
+          >
+            This Month
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const now = new Date();
+              const prev = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+              setStartDate(toISODate(prev));
+              setEndDate(toISODate(now));
+            }}
+            className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md text-[11px] font-medium transition-colors"
+          >
+            Last 30 Days
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const now = new Date();
+              setStartDate(`${now.getFullYear()}-01-01`);
+              setEndDate(toISODate(now));
+            }}
+            className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md text-[11px] font-medium transition-colors"
+          >
+            Year to Date
+          </button>
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -108,30 +149,94 @@ export default function FinanceReportsPage() {
         </div>
       )}
 
-      {/* Category Expense Breakdown */}
+      {/* Transfer Neutrality Callout */}
+      <div className="p-3.5 bg-zinc-900 border border-zinc-800 rounded-xl flex items-start gap-3">
+        <HelpCircle className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+        <div className="text-xs text-zinc-300">
+          <span className="font-semibold text-zinc-200">Transfer-Neutrality Verification: </span>
+          Internal transfers between ledger accounts are net-zero balance movements and are strictly excluded from Operating Income and Expense totals to prevent false cash-flow inflation.
+        </div>
+      </div>
+
+      {/* Category Breakdowns: Income & Expenses Side-by-Side */}
       {reports && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
-          <h2 className="text-sm font-bold text-zinc-200">Spending Breakdown by Category</h2>
-          <div className="space-y-3">
-            {reports.expenseByCategory?.map((cat: any) => (
-              <div key={cat.categoryId} className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-medium text-zinc-200">{cat.categoryName}</span>
-                  <span className="font-mono text-zinc-300 font-semibold">
-                    ${cat.amount} ({cat.percentage}%)
-                  </span>
-                </div>
-                <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${cat.percentage}%`,
-                      backgroundColor: cat.color || '#6366f1',
-                    }}
-                  />
-                </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {/* Income Breakdown */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <h2 className="text-sm font-bold text-zinc-200 flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-emerald-400" />
+                <span>Operating Income Sources</span>
+              </h2>
+              <span className="text-xs font-mono font-bold text-emerald-400">${reports.totalIncome}</span>
+            </div>
+
+            {(!reports.incomeByCategory || reports.incomeByCategory.length === 0) ? (
+              <div className="py-8 text-center text-xs text-zinc-500">
+                No operating income transactions recorded in this period.
               </div>
-            ))}
+            ) : (
+              <div className="space-y-3">
+                {reports.incomeByCategory.map((cat: any) => (
+                  <div key={cat.categoryId} className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium text-zinc-200">{cat.categoryName}</span>
+                      <span className="font-mono text-emerald-400 font-semibold">
+                        ${cat.amount} ({cat.percentage}%)
+                      </span>
+                    </div>
+                    <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${cat.percentage}%`,
+                          backgroundColor: cat.color || '#10b981',
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Expense Breakdown */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <h2 className="text-sm font-bold text-zinc-200 flex items-center gap-2">
+                <TrendingDown className="w-4 h-4 text-red-400" />
+                <span>Spending by Category</span>
+              </h2>
+              <span className="text-xs font-mono font-bold text-red-400">${reports.totalExpenses}</span>
+            </div>
+
+            {(!reports.expenseByCategory || reports.expenseByCategory.length === 0) ? (
+              <div className="py-8 text-center text-xs text-zinc-500">
+                No operating expense transactions recorded in this period.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {reports.expenseByCategory.map((cat: any) => (
+                  <div key={cat.categoryId} className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium text-zinc-200">{cat.categoryName}</span>
+                      <span className="font-mono text-zinc-300 font-semibold">
+                        ${cat.amount} ({cat.percentage}%)
+                      </span>
+                    </div>
+                    <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${cat.percentage}%`,
+                          backgroundColor: cat.color || '#ef4444',
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

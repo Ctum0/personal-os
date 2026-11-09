@@ -22,11 +22,14 @@ export default function CsvImportPage() {
   const [batches, setBatches] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [reversingBatchId, setReversingBatchId] = useState<string | null>(null);
 
   const loadBatches = () => {
     fetch('/api/finance/import')
       .then(r => r.json())
-      .then(data => setBatches(data.batches || []));
+      .then(data => setBatches(data.batches || []))
+      .catch(() => {});
   };
 
   useEffect(() => {
@@ -37,7 +40,8 @@ export default function CsvImportPage() {
         if (data.accounts?.length > 0 && !selectedAccount) {
           setSelectedAccount(data.accounts[0].accountId);
         }
-      });
+      })
+      .catch(() => {});
 
     loadBatches();
   }, []);
@@ -46,12 +50,14 @@ export default function CsvImportPage() {
     if (e.target.files && e.target.files[0]) {
       setCsvFile(e.target.files[0]);
       setPreview(null);
+      setStatusMessage(null);
     }
   };
 
   const handlePreview = async () => {
     if (!csvFile || !selectedAccount) return;
     setIsLoading(true);
+    setStatusMessage(null);
 
     try {
       const text = await csvFile.text();
@@ -65,10 +71,15 @@ export default function CsvImportPage() {
           csvText: text,
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatusMessage({ type: 'error', text: data.error || 'CSV parsing error. Please check format.' });
+        setPreview(null);
+        return;
+      }
       setPreview(data.preview);
     } catch (err: any) {
-      alert(`CSV parse error: ${err.message}`);
+      setStatusMessage({ type: 'error', text: `CSV parse error: ${err.message}` });
     } finally {
       setIsLoading(false);
     }
@@ -77,6 +88,7 @@ export default function CsvImportPage() {
   const handleCommit = async () => {
     if (!preview || !selectedAccount) return;
     setIsCommitting(true);
+    setStatusMessage(null);
 
     try {
       const res = await fetch('/api/finance/import', {
@@ -91,31 +103,47 @@ export default function CsvImportPage() {
           skipDuplicates: true,
         }),
       });
-      const data = await res.json();
-      alert(`Import committed! ${data.importedCount} rows successfully written to ledger.`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatusMessage({ type: 'error', text: data.error || 'Failed to commit import batch.' });
+        return;
+      }
+      setStatusMessage({
+        type: 'success',
+        text: `Import committed! ${data.importedCount} rows successfully written to ledger.`
+      });
       setPreview(null);
       setCsvFile(null);
       loadBatches();
     } catch (err: any) {
-      alert(`Import failed: ${err.message}`);
+      setStatusMessage({ type: 'error', text: `Import failed: ${err.message}` });
     } finally {
       setIsCommitting(false);
     }
   };
 
   const handleReverseBatch = async (batchId: string) => {
-    if (!confirm('Are you sure you want to reverse this import batch? All transactions created by this batch will be atomically removed from your ledger.')) {
-      return;
+    setStatusMessage(null);
+    try {
+      const res = await fetch(`/api/finance/import?batchId=${batchId}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatusMessage({ type: 'error', text: data.error || 'Failed to reverse import batch.' });
+        return;
+      }
+      setStatusMessage({
+        type: 'success',
+        text: `Batch reversed! ${data.reversedCount} transactions cleanly rolled back.`
+      });
+      setReversingBatchId(null);
+      loadBatches();
+    } catch (err: any) {
+      setStatusMessage({ type: 'error', text: `Batch reversal failed: ${err.message}` });
     }
-
-    const res = await fetch(`/api/finance/import?batchId=${batchId}`, { method: 'DELETE' });
-    const data = await res.json();
-    alert(`Batch reversed! ${data.reversedCount} transactions cleanly rolled back.`);
-    loadBatches();
   };
 
   return (
-    <div className="w-full px-8 py-6 space-y-6">
+    <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       <div>
         <h1 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
           <FileSpreadsheet className="w-5 h-5 text-emerald-400" />
@@ -126,14 +154,42 @@ export default function CsvImportPage() {
         </p>
       </div>
 
+      {statusMessage && (
+        <div
+          className={`p-3.5 rounded-xl border text-xs flex items-center justify-between gap-3 ${
+            statusMessage.type === 'success'
+              ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-300'
+              : 'bg-red-950/40 border-red-800/60 text-red-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {statusMessage.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 shrink-0 text-red-400" />
+            )}
+            <span>{statusMessage.text}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setStatusMessage(null)}
+            className="text-[11px] underline opacity-80 hover:opacity-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Step 1: Upload & Account Selection */}
       <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-xl space-y-4">
         <h2 className="text-sm font-bold text-zinc-200">1. Select Destination Account & CSV File</h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Destination Account</label>
+            <label htmlFor="destination-account" className="block text-xs font-medium text-zinc-400 mb-1">Destination Account</label>
             <select
+              id="destination-account"
+              aria-label="Destination Account"
               value={selectedAccount}
               onChange={e => setSelectedAccount(e.target.value)}
               className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500"
@@ -147,8 +203,10 @@ export default function CsvImportPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">CSV Statement File</label>
+            <label htmlFor="csv-statement-file" className="block text-xs font-medium text-zinc-400 mb-1">CSV Statement File</label>
             <input
+              id="csv-statement-file"
+              aria-label="CSV Statement File"
               type="file"
               accept=".csv"
               onChange={handleFileChange}
@@ -259,32 +317,53 @@ export default function CsvImportPage() {
             </div>
           ) : (
             batches.map(b => (
-              <div key={b.id} className="py-3 flex items-center justify-between text-xs">
+              <div key={b.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-zinc-200">{b.file_name}</span>
                     <span className="text-[10px] text-zinc-500">→ {b.account_name}</span>
                     <span
-                      className={`text-[9px] uppercase px-1.5 py-0.2 rounded font-mono ${
-                        b.status === 'reversed' ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'
+                      className={`text-[9px] uppercase px-1.5 py-0.5 rounded font-mono ${
+                        b.status === 'reversed' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                       }`}
                     >
                       {b.status}
                     </span>
                   </div>
                   <p className="text-[11px] text-zinc-500 mt-0.5">
-                    {b.accepted_rows} rows imported • {new Date(b.created_at).toLocaleString()}
+                    {b.accepted_rows} rows imported • {b.created_at ? b.created_at.replace('T', ' ').slice(0, 19) : ''}
                   </p>
                 </div>
 
                 {b.status !== 'reversed' && (
-                  <button
-                    onClick={() => handleReverseBatch(b.id)}
-                    className="flex items-center gap-1 px-3 py-1 text-xs text-red-400 hover:bg-red-500/10 rounded-lg transition-colors border border-red-500/20"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>Rollback Batch</span>
-                  </button>
+                  reversingBatchId === b.id ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-amber-400">Rollback all transactions?</span>
+                      <button
+                        type="button"
+                        onClick={() => handleReverseBatch(b.id)}
+                        className="px-2.5 py-1 bg-red-600 hover:bg-red-500 text-white rounded-md text-[11px] font-semibold transition-colors"
+                      >
+                        Confirm
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReversingBatchId(null)}
+                        className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md text-[11px] transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setReversingBatchId(b.id)}
+                      className="flex items-center gap-1 px-3 py-1 text-xs text-red-400 hover:bg-red-500/10 rounded-lg transition-colors border border-red-500/20 self-start sm:self-auto"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Rollback Batch</span>
+                    </button>
+                  )
                 )}
               </div>
             ))

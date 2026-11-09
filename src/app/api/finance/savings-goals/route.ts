@@ -41,13 +41,42 @@ export async function POST(request: Request) {
     const db = getDb();
     const body = await request.json();
 
-    if (!body.name || !body.targetAmount) {
+    if (!body.name || !String(body.name).trim() || body.targetAmount === undefined || body.targetAmount === null) {
       return NextResponse.json({ error: 'Name and targetAmount are required' }, { status: 400 });
     }
 
+    let targetDec: Decimal;
+    try {
+      targetDec = new Decimal(body.targetAmount);
+      if (!targetDec.isFinite() || targetDec.isNaN() || targetDec.isZero() || targetDec.isNegative()) {
+        return NextResponse.json({ error: 'targetAmount must be a positive number' }, { status: 400 });
+      }
+    } catch {
+      return NextResponse.json({ error: 'targetAmount must be a valid numeric value' }, { status: 400 });
+    }
+
+    let currentDec = new Decimal(0);
+    if (body.currentAmount !== undefined && body.currentAmount !== null) {
+      try {
+        currentDec = new Decimal(body.currentAmount);
+        if (!currentDec.isFinite() || currentDec.isNaN() || currentDec.isNegative()) {
+          return NextResponse.json({ error: 'currentAmount must be a non-negative number' }, { status: 400 });
+        }
+      } catch {
+        return NextResponse.json({ error: 'currentAmount must be a valid numeric value' }, { status: 400 });
+      }
+    }
+
+    if (body.linkedAccountId) {
+      const acc = db.prepare('SELECT id FROM finance_accounts WHERE id = ? AND tenant_id = ?').get(body.linkedAccountId, session.tenantId);
+      if (!acc) {
+        return NextResponse.json({ error: 'Linked account not found' }, { status: 404 });
+      }
+    }
+
     const goalId = `sg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const target = String(Number(body.targetAmount).toFixed(2));
-    const current = body.currentAmount ? String(Number(body.currentAmount).toFixed(2)) : '0.00';
+    const target = targetDec.toFixed(2);
+    const current = currentDec.toFixed(2);
 
     db.prepare(`
       INSERT INTO savings_goals (
@@ -65,7 +94,7 @@ export async function POST(request: Request) {
       body.notes || ''
     );
 
-    const created = db.prepare('SELECT * FROM savings_goals WHERE id = ?').get(goalId);
+    const created = db.prepare('SELECT * FROM savings_goals WHERE id = ? AND tenant_id = ?').get(goalId, session.tenantId);
     return NextResponse.json({ savingsGoal: created }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -82,6 +111,37 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Goal ID is required' }, { status: 400 });
     }
 
+    const existing = db.prepare('SELECT * FROM savings_goals WHERE id = ? AND tenant_id = ?').get(body.id, session.tenantId) as any;
+    if (!existing) {
+      return NextResponse.json({ error: 'Goal not found' }, { status: 404 });
+    }
+
+    let targetStr: string | null = null;
+    if (body.targetAmount !== undefined && body.targetAmount !== null) {
+      try {
+        const d = new Decimal(body.targetAmount);
+        if (!d.isFinite() || d.isNaN() || d.isZero() || d.isNegative()) {
+          return NextResponse.json({ error: 'targetAmount must be a positive number' }, { status: 400 });
+        }
+        targetStr = d.toFixed(2);
+      } catch {
+        return NextResponse.json({ error: 'targetAmount must be a valid numeric value' }, { status: 400 });
+      }
+    }
+
+    let currentStr: string | null = null;
+    if (body.currentAmount !== undefined && body.currentAmount !== null) {
+      try {
+        const d = new Decimal(body.currentAmount);
+        if (!d.isFinite() || d.isNaN() || d.isNegative()) {
+          return NextResponse.json({ error: 'currentAmount must be a non-negative number' }, { status: 400 });
+        }
+        currentStr = d.toFixed(2);
+      } catch {
+        return NextResponse.json({ error: 'currentAmount must be a valid numeric value' }, { status: 400 });
+      }
+    }
+
     db.prepare(`
       UPDATE savings_goals
       SET 
@@ -95,8 +155,8 @@ export async function PUT(request: Request) {
       WHERE id = ? AND tenant_id = ?
     `).run(
       body.name,
-      body.targetAmount !== undefined ? String(Number(body.targetAmount).toFixed(2)) : null,
-      body.currentAmount !== undefined ? String(Number(body.currentAmount).toFixed(2)) : null,
+      targetStr,
+      currentStr,
       body.status,
       body.targetDate,
       body.notes,
@@ -104,7 +164,7 @@ export async function PUT(request: Request) {
       session.tenantId
     );
 
-    const updated = db.prepare('SELECT * FROM savings_goals WHERE id = ?').get(body.id);
+    const updated = db.prepare('SELECT * FROM savings_goals WHERE id = ? AND tenant_id = ?').get(body.id, session.tenantId);
     return NextResponse.json({ savingsGoal: updated });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

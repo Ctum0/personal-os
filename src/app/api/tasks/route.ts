@@ -64,8 +64,24 @@ export async function POST(request: Request) {
     const db = getDb();
     const body = await request.json();
 
-    if (!body.title || !body.title.trim()) {
+    if (!body.title || typeof body.title !== 'string' || !body.title.trim()) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
+    }
+
+    const validStatuses = ['inbox', 'next', 'todo', 'in_progress', 'done', 'completed', 'blocked', 'cancelled', 'waiting'];
+    const validPriorities = ['urgent', 'high', 'normal', 'low', 'critical', 'optional'];
+
+    if (body.status && !validStatuses.includes(body.status)) {
+      return NextResponse.json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` }, { status: 400 });
+    }
+    if (body.priority && !validPriorities.includes(body.priority)) {
+      return NextResponse.json({ error: `Invalid priority. Must be one of: ${validPriorities.join(', ')}` }, { status: 400 });
+    }
+    if (body.estimatedDuration !== undefined && (typeof body.estimatedDuration !== 'number' || body.estimatedDuration < 0 || isNaN(body.estimatedDuration))) {
+      return NextResponse.json({ error: 'estimatedDuration must be a non-negative number' }, { status: 400 });
+    }
+    if (body.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(body.dueDate)) {
+      return NextResponse.json({ error: 'dueDate must be in YYYY-MM-DD format' }, { status: 400 });
     }
 
     const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
@@ -98,7 +114,7 @@ export async function POST(request: Request) {
       VALUES (?, ?, ?, 'productivity', 'create_task', 'task', ?, ?)
     `).run(`aud_${taskId}`, session.tenantId, session.userId, taskId, JSON.stringify(body));
 
-    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+    const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND tenant_id = ?').get(taskId, session.tenantId);
     return NextResponse.json({ task }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -118,6 +134,25 @@ export async function PUT(request: Request) {
     const existing = db.prepare('SELECT * FROM tasks WHERE id = ? AND tenant_id = ?').get(body.id, session.tenantId) as any;
     if (!existing) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+    }
+
+    const validStatuses = ['inbox', 'next', 'todo', 'in_progress', 'done', 'completed', 'blocked', 'cancelled', 'waiting'];
+    const validPriorities = ['urgent', 'high', 'normal', 'low', 'critical', 'optional'];
+
+    if (body.status && !validStatuses.includes(body.status)) {
+      return NextResponse.json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` }, { status: 400 });
+    }
+    if (body.priority && !validPriorities.includes(body.priority)) {
+      return NextResponse.json({ error: `Invalid priority. Must be one of: ${validPriorities.join(', ')}` }, { status: 400 });
+    }
+    if (body.estimatedDuration !== undefined && (typeof body.estimatedDuration !== 'number' || body.estimatedDuration < 0 || isNaN(body.estimatedDuration))) {
+      return NextResponse.json({ error: 'estimatedDuration must be a non-negative number' }, { status: 400 });
+    }
+    if (body.actualDuration !== undefined && (typeof body.actualDuration !== 'number' || body.actualDuration < 0 || isNaN(body.actualDuration))) {
+      return NextResponse.json({ error: 'actualDuration must be a non-negative number' }, { status: 400 });
+    }
+    if (body.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(body.dueDate)) {
+      return NextResponse.json({ error: 'dueDate must be in YYYY-MM-DD format' }, { status: 400 });
     }
 
     let completionAt = existing.completion_at;
@@ -157,7 +192,7 @@ export async function PUT(request: Request) {
       session.tenantId
     );
 
-    const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(body.id);
+    const updated = db.prepare('SELECT * FROM tasks WHERE id = ? AND tenant_id = ?').get(body.id, session.tenantId);
     return NextResponse.json({ task: updated });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

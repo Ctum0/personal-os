@@ -10,26 +10,45 @@ import {
   ShieldAlert,
   Calendar,
   Percent,
+  ShieldCheck,
+  CheckCircle2,
+  Info,
+  HelpCircle,
+  Link2,
 } from 'lucide-react';
 
 export default function DebtsPage() {
   const [debts, setDebts] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<any[]>([]);
   const [payoffScenarios, setPayoffScenarios] = useState<any | null>(null);
   const [extraPayment, setExtraPayment] = useState('100.00');
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [showFormula, setShowFormula] = useState(false);
   const [name, setName] = useState('');
   const [balance, setBalance] = useState('');
   const [interestRate, setInterestRate] = useState('18.00');
   const [minimumPayment, setMinimumPayment] = useState('50.00');
+  const [linkedAccountId, setLinkedAccountId] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
   const loadDebts = () => {
+    setIsLoading(true);
     fetch(`/api/finance/debts?extra=${extraPayment}`)
       .then(r => r.json())
       .then(data => {
         setDebts(data.debts || []);
         setPayoffScenarios(data.payoffScenarios);
-      });
+        setIsLoading(false);
+      })
+      .catch(() => setIsLoading(false));
   };
+
+  useEffect(() => {
+    fetch('/api/finance/accounts')
+      .then(r => r.json())
+      .then(data => setAccounts(data.accounts || []))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     loadDebts();
@@ -47,11 +66,13 @@ export default function DebtsPage() {
         principalBalance: balance,
         interestRate,
         minimumPayment,
+        linkedAccountId: linkedAccountId || null,
       }),
     });
 
     setName('');
     setBalance('');
+    setLinkedAccountId('');
     setIsAddOpen(false);
     loadDebts();
   };
@@ -59,7 +80,7 @@ export default function DebtsPage() {
   const totalDebt = debts.reduce((sum, d) => sum + parseFloat(d.principal_balance || '0'), 0);
 
   return (
-    <div className="w-full px-8 py-6 space-y-6">
+    <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
@@ -97,6 +118,22 @@ export default function DebtsPage() {
               placeholder="e.g. Visa Credit Card"
               className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-100"
             />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-1">Linked Ledger Account (Optional)</label>
+            <select
+              value={linkedAccountId}
+              onChange={e => setLinkedAccountId(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-100"
+            >
+              <option value="">None (Standalone Liability)</option>
+              {accounts.filter(a => a.type === 'liability' || a.type === 'credit_card').map(a => (
+                <option key={a.id} value={a.id}>{a.name} ({a.type})</option>
+              ))}
+            </select>
+            <p className="text-[10px] text-zinc-500 mt-1">
+              Linked liabilities auto-reconcile with ledger balances and avoid double counting in Net Worth.
+            </p>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
@@ -141,11 +178,21 @@ export default function DebtsPage() {
       )}
 
       {/* Avalanche vs Snowball Scenario Comparison */}
-      {payoffScenarios && (
+      {payoffScenarios && debts.length > 0 && (
         <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-xl space-y-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-zinc-800 pb-3">
             <div>
-              <h2 className="text-sm font-bold text-zinc-100">Payoff Strategy Comparison</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold text-zinc-100">Payoff Strategy Comparison</h2>
+                <button
+                  type="button"
+                  onClick={() => setShowFormula(!showFormula)}
+                  className="flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors"
+                >
+                  <HelpCircle className="w-3.5 h-3.5" />
+                  <span>{showFormula ? 'Hide Formula' : 'Calculation Formula'}</span>
+                </button>
+              </div>
               <p className="text-xs text-zinc-400">Total Outstanding Liabilities: ${totalDebt.toFixed(2)}</p>
             </div>
             <div className="flex items-center gap-2">
@@ -159,6 +206,24 @@ export default function DebtsPage() {
               />
             </div>
           </div>
+
+          {showFormula && (
+            <div className="p-4 bg-zinc-950/80 border border-zinc-800 rounded-lg text-xs space-y-2">
+              <div className="font-semibold text-zinc-200">Compound Amortization Payoff Logic</div>
+              <p className="text-zinc-400 text-[11px] leading-relaxed">
+                Both strategies simulate monthly billing cycles where accrued interest is computed as <span className="font-mono text-zinc-300">I_m = Principal × (APR / 1200)</span>.
+                Minimum payments are fulfilled across all obligations first. Any surplus extra payment (<span className="font-mono text-zinc-300">${extraPayment}/mo</span>) is allocated to the priority debt until retired, after which its freed payment cascades into the next liability.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 text-[11px]">
+                <div className="border-l-2 border-indigo-500 pl-2 text-zinc-400">
+                  <strong className="text-indigo-300">Avalanche Method:</strong> Prioritizes highest APR first to mathematically minimize cumulative interest expense.
+                </div>
+                <div className="border-l-2 border-blue-500 pl-2 text-zinc-400">
+                  <strong className="text-blue-300">Snowball Method:</strong> Prioritizes lowest principal first to eliminate individual debt accounts faster for behavioral momentum.
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Avalanche */}
@@ -216,33 +281,72 @@ export default function DebtsPage() {
 
       {/* Debts Table */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-sm">
-        <div className="p-4 border-b border-zinc-800">
+        <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
           <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Current Liabilities</span>
+          <span className="text-[11px] text-zinc-500">
+            {debts.length} {debts.length === 1 ? 'record' : 'records'}
+          </span>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-zinc-950 text-zinc-400 uppercase text-[10px] tracking-wider border-b border-zinc-800">
-              <tr>
-                <th className="py-3 px-4">Liability</th>
-                <th className="py-3 px-4 text-right">Principal Balance</th>
-                <th className="py-3 px-4 text-right">Interest Rate (APR)</th>
-                <th className="py-3 px-4 text-right">Minimum Monthly</th>
-                <th className="py-3 px-4 text-center">Due Day</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800/60 font-mono">
-              {debts.map(d => (
-                <tr key={d.id} className="hover:bg-zinc-800/40">
-                  <td className="py-3 px-4 font-sans font-medium text-zinc-200">{d.name}</td>
-                  <td className="py-3 px-4 text-right font-bold text-red-400">${d.principal_balance}</td>
-                  <td className="py-3 px-4 text-right text-zinc-300">{d.interest_rate}%</td>
-                  <td className="py-3 px-4 text-right text-zinc-300">${d.minimum_payment}</td>
-                  <td className="py-3 px-4 text-center text-zinc-400">{d.due_day_of_month}th</td>
+
+        {debts.length === 0 ? (
+          <div className="p-8 text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-emerald-950/40 border border-emerald-800/40 flex items-center justify-center mx-auto text-emerald-400">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-zinc-200">Zero Outstanding Debt</h3>
+              <p className="text-xs text-zinc-400 max-w-md mx-auto mt-1">
+                You have no active liabilities or loan obligations registered. If you maintain credit cards, personal loans, or mortgages, track them here to compare payoff timelines.
+              </p>
+            </div>
+            <button
+              onClick={() => setIsAddOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-all"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Track First Liability</span>
+            </button>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-zinc-950 text-zinc-400 uppercase text-[10px] tracking-wider border-b border-zinc-800">
+                <tr>
+                  <th className="py-3 px-4">Liability & Linkage</th>
+                  <th className="py-3 px-4 text-right">Principal Balance</th>
+                  <th className="py-3 px-4 text-right">Interest Rate (APR)</th>
+                  <th className="py-3 px-4 text-right">Minimum Monthly</th>
+                  <th className="py-3 px-4 text-center">Due Day</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-zinc-800/60 font-mono">
+                {debts.map(d => (
+                  <tr key={d.id} className="hover:bg-zinc-800/40">
+                    <td className="py-3 px-4 font-sans">
+                      <div className="font-medium text-zinc-200">{d.name}</div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {d.linked_account_name ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-800/50">
+                            <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                            Linked: {d.linked_account_name} (Auto-reconciled with ledger)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-zinc-500 bg-zinc-950/40 px-1.5 py-0.5 rounded border border-zinc-800/50">
+                            Standalone Liability
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-right font-bold text-red-400">${d.principal_balance}</td>
+                    <td className="py-3 px-4 text-right text-zinc-300">{d.interest_rate}%</td>
+                    <td className="py-3 px-4 text-right text-zinc-300">${d.minimum_payment}</td>
+                    <td className="py-3 px-4 text-center text-zinc-400">{d.due_day_of_month}th</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

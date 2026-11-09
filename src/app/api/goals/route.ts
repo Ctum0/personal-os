@@ -62,38 +62,40 @@ export async function POST(request: Request) {
     const unit = body.unit || '%';
     const color = body.color || '#10b981';
 
-    db.prepare(`
-      INSERT INTO goals (
-        id, tenant_id, space_id, title, description, type, start_value, target_value, current_value, unit, direction, progress_method, start_date, deadline, cadence, status, linked_savings_goal_id, color
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      goalId,
-      session.tenantId,
-      body.spaceId || 'space_personal',
-      body.title.trim(),
-      body.description || '',
-      type,
-      startVal,
-      targetVal,
-      currentVal,
-      unit,
-      direction,
-      body.progressMethod || 'log_latest',
-      body.startDate || null,
-      body.deadline || null,
-      body.cadence || 'quarterly',
-      body.status || 'in_progress',
-      body.linkedSavingsGoalId || null,
-      color
-    );
+    db.transaction(() => {
+      db.prepare(`
+        INSERT INTO goals (
+          id, tenant_id, space_id, title, description, type, start_value, target_value, current_value, unit, direction, progress_method, start_date, deadline, cadence, status, linked_savings_goal_id, color
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        goalId,
+        session.tenantId,
+        body.spaceId || 'space_personal',
+        body.title.trim(),
+        body.description || '',
+        type,
+        startVal,
+        targetVal,
+        currentVal,
+        unit,
+        direction,
+        body.progressMethod || 'log_latest',
+        body.startDate || null,
+        body.deadline || null,
+        body.cadence || 'quarterly',
+        body.status || 'in_progress',
+        body.linkedSavingsGoalId || null,
+        color
+      );
 
-    // Initial progress log
-    db.prepare(`
-      INSERT INTO goal_progress_logs (id, tenant_id, goal_id, value, delta, note, source)
-      VALUES (?, ?, ?, ?, ?, 'Initial measurement', 'manual')
-    `).run(`gpl_${goalId}_0`, session.tenantId, goalId, currentVal, 0);
+      // Initial progress log
+      db.prepare(`
+        INSERT INTO goal_progress_logs (id, tenant_id, goal_id, value, delta, note, source)
+        VALUES (?, ?, ?, ?, ?, 'Initial measurement', 'manual')
+      `).run(`gpl_${goalId}_0`, session.tenantId, goalId, currentVal, 0);
+    })();
 
-    const goal = db.prepare('SELECT * FROM goals WHERE id = ?').get(goalId);
+    const goal = db.prepare('SELECT * FROM goals WHERE id = ? AND tenant_id = ?').get(goalId, session.tenantId);
     return NextResponse.json({ goal }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -115,42 +117,44 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Goal not found' }, { status: 404 });
     }
 
-    if (body.newLogValue !== undefined) {
-      const val = Number(body.newLogValue);
-      const delta = val - existing.current_value;
+    db.transaction(() => {
+      if (body.newLogValue !== undefined) {
+        const val = Number(body.newLogValue);
+        const delta = val - existing.current_value;
+        db.prepare(`
+          INSERT INTO goal_progress_logs (id, tenant_id, goal_id, value, delta, note, source)
+          VALUES (?, ?, ?, ?, ?, ?, 'manual')
+        `).run(`gpl_${body.id}_${Date.now()}`, session.tenantId, body.id, val, delta, body.note || 'Progress update');
+
+        body.currentValue = val;
+      }
+
       db.prepare(`
-        INSERT INTO goal_progress_logs (id, tenant_id, goal_id, value, delta, note, source)
-        VALUES (?, ?, ?, ?, ?, ?, 'manual')
-      `).run(`gpl_${body.id}_${Date.now()}`, session.tenantId, body.id, val, delta, body.note || 'Progress update');
+        UPDATE goals
+        SET 
+          title = coalesce(?, title),
+          description = coalesce(?, description),
+          current_value = coalesce(?, current_value),
+          target_value = coalesce(?, target_value),
+          status = coalesce(?, status),
+          deadline = coalesce(?, deadline),
+          color = coalesce(?, color),
+          updated_at = datetime('now')
+        WHERE id = ? AND tenant_id = ?
+      `).run(
+        body.title,
+        body.description,
+        body.currentValue,
+        body.targetValue,
+        body.status,
+        body.deadline,
+        body.color,
+        body.id,
+        session.tenantId
+      );
+    })();
 
-      body.currentValue = val;
-    }
-
-    db.prepare(`
-      UPDATE goals
-      SET 
-        title = coalesce(?, title),
-        description = coalesce(?, description),
-        current_value = coalesce(?, current_value),
-        target_value = coalesce(?, target_value),
-        status = coalesce(?, status),
-        deadline = coalesce(?, deadline),
-        color = coalesce(?, color),
-        updated_at = datetime('now')
-      WHERE id = ? AND tenant_id = ?
-    `).run(
-      body.title,
-      body.description,
-      body.currentValue,
-      body.targetValue,
-      body.status,
-      body.deadline,
-      body.color,
-      body.id,
-      session.tenantId
-    );
-
-    const updated = db.prepare('SELECT * FROM goals WHERE id = ?').get(body.id);
+    const updated = db.prepare('SELECT * FROM goals WHERE id = ? AND tenant_id = ?').get(body.id, session.tenantId);
     return NextResponse.json({ goal: updated });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

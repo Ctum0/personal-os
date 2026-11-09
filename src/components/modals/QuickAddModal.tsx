@@ -34,6 +34,18 @@ export function QuickAddModal() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  // Escape key handler
+  React.useEffect(() => {
+    if (!isQuickAddOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsQuickAddOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isQuickAddOpen, setIsQuickAddOpen]);
+
   if (!isQuickAddOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {

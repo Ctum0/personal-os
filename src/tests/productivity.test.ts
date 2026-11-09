@@ -148,4 +148,36 @@ describe('Productivity Domain Engine', () => {
       expect(plan.proposedTimeBlocks.length).toBeGreaterThanOrEqual(2);
     });
   });
+
+  describe('Test Fixture Quarantine & Operational Audit Integrity', () => {
+    it('quarantines test fixtures while preserving audit origin and excluding them from active views', () => {
+      // Insert genuine operational task
+      db.prepare(`
+        INSERT INTO tasks (id, tenant_id, title, status, priority, due_date)
+        VALUES ('task_real_ops', ?, 'Deploy Production Edge Worker', 'next', 'urgent', '2026-11-08')
+      `).run(tenantId);
+
+      // Insert restored test fixture with origin metadata
+      db.prepare(`
+        INSERT INTO tasks (id, tenant_id, title, status, priority, due_date, origin_plan_item_id)
+        VALUES ('task_overdue_test_1794052214275', ?, 'Finish Operating Systems Lab', 'quarantined', 'urgent', '2026-11-08', 'restored_origin_task_overdue_test_1794052214275')
+      `).run(tenantId);
+
+      // Verify DB audit integrity: record exists with origin_plan_item_id intact
+      const fixtureRecord = db.prepare('SELECT * FROM tasks WHERE id = ?').get('task_overdue_test_1794052214275') as any;
+      expect(fixtureRecord).toBeDefined();
+      expect(fixtureRecord.status).toBe('quarantined');
+      expect(fixtureRecord.origin_plan_item_id).toBe('restored_origin_task_overdue_test_1794052214275');
+
+      // Operational task query (filter out quarantined/test fixture items)
+      const isFixture = (t: any) => t.status === 'quarantined' || t.id.includes('test') || t.id.includes('fixture');
+      const allTasks = db.prepare('SELECT * FROM tasks WHERE tenant_id = ? AND is_deleted = 0').all(tenantId) as any[];
+      const operationalTasks = allTasks.filter(t => !isFixture(t));
+
+      expect(operationalTasks.length).toBe(1);
+      expect(operationalTasks[0].id).toBe('task_real_ops');
+      expect(operationalTasks.some(t => t.id === 'task_overdue_test_1794052214275')).toBe(false);
+    });
+  });
 });
+

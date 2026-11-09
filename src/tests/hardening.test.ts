@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { getInMemoryDb } from '@/lib/db';
 import { sumDecimalAmounts, calculateAccountBalances } from '@/lib/finance/engine';
 import { validateApiRequest } from '@/lib/auth';
+import { rescheduleTask } from '@/lib/productivity/planner';
 import { Decimal } from 'decimal.js';
 
 describe('Hardening - Exact Financial Arithmetic & Audit Invariants', () => {
@@ -88,5 +89,39 @@ describe('Hardening - Exact Financial Arithmetic & Audit Invariants', () => {
 
     // Cleanup
     delete process.env.PERSONAL_OS_PIN;
+  });
+
+  it('rescheduleTask strictly rejects attempts to access or modify other tenant tasks', () => {
+    const db = getInMemoryDb();
+    const tenantA = 'tenant_a';
+    const tenantB = 'tenant_b';
+
+    db.prepare(`INSERT INTO tenants (id, name, slug) VALUES (?, 'Tenant A', 'tenant-a')`).run(tenantA);
+    db.prepare(`INSERT INTO tenants (id, name, slug) VALUES (?, 'Tenant B', 'tenant-b')`).run(tenantB);
+
+    db.prepare(`
+      INSERT INTO tasks (id, tenant_id, title, status, due_date)
+      VALUES ('task_a_1', ?, 'Tenant A Secret Task', 'next', '2026-11-10')
+    `).run(tenantA);
+
+    // Tenant B attempts to reschedule Tenant A's task
+    expect(() => {
+      rescheduleTask(db, tenantB, 'task_a_1', '2026-11-12', 'Malicious reschedule', 'rescheduled');
+    }).toThrow('Task not found');
+
+    // Verify Tenant A's task was untouched
+    const task = db.prepare('SELECT due_date FROM tasks WHERE id = ?').get('task_a_1') as { due_date: string };
+    expect(task.due_date).toBe('2026-11-10');
+  });
+
+  it('composite performance indexes exist in database schema', () => {
+    const db = getInMemoryDb();
+    const indexRows = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'index'`).all() as Array<{ name: string }>;
+    const indexNames = new Set(indexRows.map(r => r.name));
+
+    expect(indexNames.has('idx_tasks_tenant_status_created')).toBe(true);
+    expect(indexNames.has('idx_habit_logs_tenant_habit_date')).toBe(true);
+    expect(indexNames.has('idx_calendar_events_tenant_time')).toBe(true);
+    expect(indexNames.has('idx_focus_sessions_tenant_started')).toBe(true);
   });
 });

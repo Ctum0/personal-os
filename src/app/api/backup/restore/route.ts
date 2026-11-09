@@ -92,29 +92,32 @@ export async function POST(request: Request) {
       if (finance?.transactions && Array.isArray(finance.transactions)) {
         const txStmt = db.prepare(`
           INSERT INTO journal_transactions (
-            id, tenant_id, transaction_type, status, date, amount, currency,
-            account_id, to_account_id, category_id, payee, description
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            id, tenant_id, transaction_type, status, date, amount, currency, base_amount,
+            account_id, to_account_id, category_id, payee_name, description
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
             status = excluded.status,
             amount = excluded.amount,
+            base_amount = excluded.base_amount,
             updated_at = datetime('now')
         `);
 
         for (const tx of finance.transactions) {
           if (tx.id && tx.amount) {
+            const dec = tx.amount;
             txStmt.run(
               tx.id,
               session.tenantId,
               tx.transaction_type || 'expense',
               tx.status || 'posted',
               tx.date || new Date().toISOString().slice(0, 10),
-              tx.amount,
+              dec,
               tx.currency || 'USD',
+              dec,
               tx.account_id || null,
               tx.to_account_id || null,
               tx.category_id || null,
-              tx.payee || null,
+              tx.payee || tx.payee_name || null,
               tx.description || ''
             );
             importedTxs++;
@@ -134,14 +137,17 @@ export async function POST(request: Request) {
       );
     })();
 
+    const importStats = {
+      tasks: importedTasks,
+      accounts: importedAccounts,
+      transactions: importedTxs,
+    };
+
     return NextResponse.json({
       success: true,
       snapshotPath,
-      imported: {
-        tasks: importedTasks,
-        accounts: importedAccounts,
-        transactions: importedTxs,
-      },
+      imported: importStats,
+      stats: importStats,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

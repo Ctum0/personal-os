@@ -56,6 +56,18 @@ Ask me:
     }
   }, [isAiDrawerOpen]);
 
+  // Escape key handler
+  useEffect(() => {
+    if (!isAiDrawerOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsAiDrawerOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isAiDrawerOpen, setIsAiDrawerOpen]);
+
   if (!isAiDrawerOpen) return null;
 
   const handleSend = async (e: React.FormEvent) => {
@@ -137,8 +149,17 @@ Ask me:
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex justify-end">
-      <div className="w-full max-w-md bg-zinc-900 border-l border-zinc-800 h-full flex flex-col justify-between shadow-2xl animate-in slide-in-from-right duration-200">
+    <div
+      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex justify-end"
+      onClick={() => setIsAiDrawerOpen(false)}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Agentic Assistant Drawer"
+    >
+      <div
+        className="w-full max-w-md bg-zinc-950 border-l border-zinc-800 h-full flex flex-col justify-between shadow-2xl animate-in slide-in-from-right duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/40">
           <div className="flex items-center gap-2">
@@ -155,7 +176,8 @@ Ask me:
           </div>
           <button
             onClick={() => setIsAiDrawerOpen(false)}
-            className="text-zinc-400 hover:text-zinc-200 p-1 rounded-md hover:bg-zinc-800"
+            className="text-zinc-400 hover:text-zinc-200 p-1.5 rounded-lg hover:bg-zinc-850"
+            aria-label="Close AI Assistant drawer"
           >
             <X className="w-4 h-4" />
           </button>

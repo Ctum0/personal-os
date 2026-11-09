@@ -19,6 +19,7 @@ export function getDb(): Database.Database {
   if (!dbInstance) {
     dbInstance = new Database(DB_PATH);
     dbInstance.pragma('journal_mode = WAL');
+    dbInstance.pragma('busy_timeout = 5000');
     dbInstance.pragma('foreign_keys = ON');
     runMigrations(dbInstance);
   }
@@ -287,6 +288,7 @@ export function initSchema(db: Database.Database) {
         completion_metadata TEXT DEFAULT '{}',
         tags TEXT DEFAULT '[]',
         sort_order INTEGER NOT NULL DEFAULT 0,
+        origin_plan_item_id TEXT,
         is_deleted INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -395,6 +397,62 @@ export function initSchema(db: Database.Database) {
         started_at TEXT NOT NULL,
         ended_at TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS daily_plans (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        plan_date TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'draft',
+        objective TEXT,
+        available_hours REAL NOT NULL DEFAULT 8,
+        estimated_workload_hours REAL NOT NULL DEFAULT 0,
+        summary TEXT,
+        revision INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(tenant_id, plan_date, revision)
+      );
+
+      CREATE TABLE IF NOT EXISTS daily_plan_items (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        plan_id TEXT NOT NULL REFERENCES daily_plans(id) ON DELETE CASCADE,
+        task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+        title TEXT NOT NULL,
+        item_type TEXT NOT NULL DEFAULT 'scheduled_task',
+        start_time TEXT NOT NULL,
+        end_time TEXT NOT NULL,
+        duration_minutes INTEGER NOT NULL DEFAULT 30,
+        priority TEXT NOT NULL DEFAULT 'normal',
+        status TEXT NOT NULL DEFAULT 'scheduled',
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS task_rescheduling_history (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        original_date TEXT,
+        new_date TEXT NOT NULL,
+        reason TEXT,
+        action_type TEXT NOT NULL DEFAULT 'rescheduled',
+        rescheduled_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS ai_planning_sessions (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        target_date TEXT NOT NULL,
+        conversation TEXT NOT NULL DEFAULT '[]',
+        extracted_state TEXT NOT NULL DEFAULT '{}',
+        proposed_plan TEXT,
+        status TEXT NOT NULL DEFAULT 'interviewing',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
 
       -- Finance domain
@@ -713,11 +771,20 @@ export function initSchema(db: Database.Database) {
       CREATE INDEX IF NOT EXISTS idx_tasks_tenant_status ON tasks(tenant_id, status);
       CREATE INDEX IF NOT EXISTS idx_tasks_tenant_due ON tasks(tenant_id, due_date);
       CREATE INDEX IF NOT EXISTS idx_tasks_tenant_space ON tasks(tenant_id, space_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_tenant_origin_plan_item ON tasks(tenant_id, origin_plan_item_id) WHERE origin_plan_item_id IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_tasks_tenant_status_created ON tasks(tenant_id, status, created_at);
       CREATE INDEX IF NOT EXISTS idx_habit_logs_tenant_date ON habit_logs(tenant_id, log_date);
+      CREATE INDEX IF NOT EXISTS idx_habit_logs_tenant_habit_date ON habit_logs(tenant_id, habit_id, log_date);
+      CREATE INDEX IF NOT EXISTS idx_calendar_events_tenant_time ON calendar_events(tenant_id, start_time, end_time);
+      CREATE INDEX IF NOT EXISTS idx_focus_sessions_tenant_started ON focus_sessions(tenant_id, started_at);
       CREATE INDEX IF NOT EXISTS idx_journal_tenant_date ON journal_transactions(tenant_id, date);
       CREATE INDEX IF NOT EXISTS idx_journal_tenant_account ON journal_transactions(tenant_id, account_id);
       CREATE INDEX IF NOT EXISTS idx_journal_lines_account ON journal_lines(tenant_id, account_id);
       CREATE INDEX IF NOT EXISTS idx_budget_lines_budget ON budget_lines(budget_id);
+      CREATE INDEX IF NOT EXISTS idx_daily_plans_date ON daily_plans(tenant_id, plan_date);
+      CREATE INDEX IF NOT EXISTS idx_daily_plan_items_plan ON daily_plan_items(plan_id);
+      CREATE INDEX IF NOT EXISTS idx_task_resched_task ON task_rescheduling_history(task_id);
+      CREATE INDEX IF NOT EXISTS idx_ai_planning_target ON ai_planning_sessions(tenant_id, target_date);
     `);
 
     // Seed default tenant and user if none exist
@@ -1043,6 +1110,89 @@ export type Migration = {
  */
 const MIGRATIONS: Migration[] = [
   { version: 1, name: "baseline", up: (db) => initSchema(db) },
+  {
+    version: 2,
+    name: "ai_planning_and_rescheduling",
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS daily_plans (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          plan_date TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'draft',
+          objective TEXT,
+          available_hours REAL NOT NULL DEFAULT 8,
+          estimated_workload_hours REAL NOT NULL DEFAULT 0,
+          summary TEXT,
+          revision INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE(tenant_id, plan_date, revision)
+        );
+
+        CREATE TABLE IF NOT EXISTS daily_plan_items (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          plan_id TEXT NOT NULL REFERENCES daily_plans(id) ON DELETE CASCADE,
+          task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+          title TEXT NOT NULL,
+          item_type TEXT NOT NULL DEFAULT 'scheduled_task',
+          start_time TEXT NOT NULL,
+          end_time TEXT NOT NULL,
+          duration_minutes INTEGER NOT NULL DEFAULT 30,
+          priority TEXT NOT NULL DEFAULT 'normal',
+          status TEXT NOT NULL DEFAULT 'scheduled',
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          notes TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS task_rescheduling_history (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          original_date TEXT,
+          new_date TEXT NOT NULL,
+          reason TEXT,
+          action_type TEXT NOT NULL DEFAULT 'rescheduled',
+          rescheduled_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS ai_planning_sessions (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          target_date TEXT NOT NULL,
+          conversation TEXT NOT NULL DEFAULT '[]',
+          extracted_state TEXT NOT NULL DEFAULT '{}',
+          proposed_plan TEXT,
+          status TEXT NOT NULL DEFAULT 'interviewing',
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_daily_plans_date ON daily_plans(tenant_id, plan_date);
+        CREATE INDEX IF NOT EXISTS idx_daily_plan_items_plan ON daily_plan_items(plan_id);
+        CREATE INDEX IF NOT EXISTS idx_task_resched_task ON task_rescheduling_history(task_id);
+        CREATE INDEX IF NOT EXISTS idx_ai_planning_target ON ai_planning_sessions(tenant_id, target_date);
+      `);
+    },
+  },
+  {
+    version: 3,
+    name: "planner_task_origin_identity",
+    up: (db) => {
+      const cols = db.pragma("table_info(tasks)") as Array<{ name: string }>;
+      if (!cols.some((c) => c.name === "origin_plan_item_id")) {
+        db.exec("ALTER TABLE tasks ADD COLUMN origin_plan_item_id TEXT;");
+      }
+      db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_tenant_origin_plan_item 
+        ON tasks(tenant_id, origin_plan_item_id) 
+        WHERE origin_plan_item_id IS NOT NULL;
+      `);
+    },
+  },
 ];
 
 export function schemaVersion(db: Database.Database): number {

@@ -73,44 +73,46 @@ export default function PersonalOperatingRulesPage() {
     <div className="w-full px-8 py-6 space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
-            <Sliders className="w-5 h-5 text-indigo-400" />
+          <h1 className="text-xl font-semibold text-zinc-100 tracking-tight flex items-center gap-2">
+            <Sliders className="w-4 h-4 text-zinc-400" />
             <span>Personal Operating Rules & Settings</span>
           </h1>
-          <p className="text-xs text-zinc-400">
+          <p className="text-xs text-zinc-400 mt-0.5">
             Explicit constraints for AI planning, daily time blocking, notification quiet hours, and financial buffers.
           </p>
         </div>
 
         <button
           onClick={handleSave}
-          className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition-colors shadow-sm"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-zinc-100 hover:bg-white text-zinc-950 rounded-md text-xs font-medium transition-all active:scale-[0.98] shadow-sm"
         >
-          <Save className="w-4 h-4" />
+          <Save className="w-3.5 h-3.5" />
           <span>{savedSuccess ? 'Rules Applied' : 'Save Rules'}</span>
         </button>
       </div>
 
       {savedSuccess && (
-        <div className="p-3 bg-emerald-950/60 border border-emerald-800/60 rounded-xl flex items-center gap-2 text-xs text-emerald-300">
+        <div className="p-3 bg-zinc-950/80 border border-emerald-500/30 rounded-lg flex items-center gap-2 text-xs text-emerald-400">
           <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>Operating rules saved. Future daily planning, schedule proposals, and safe-to-spend reservations will respect these bounds.</span>
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Productivity & Workload Rules */}
-        <div className="p-5 bg-zinc-900 border border-zinc-800 rounded-xl space-y-4">
-          <div className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
-            <Clock className="w-4 h-4 text-indigo-400" />
+        <div className="p-5 bg-zinc-950/60 border border-white/[0.06] rounded-lg space-y-4">
+          <div className="flex items-center gap-2 text-sm font-medium text-zinc-200">
+            <Clock className="w-4 h-4 text-zinc-400" />
             <span>Productivity & Workload Bounds</span>
           </div>
 
           <div className="space-y-3 text-xs">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-zinc-400 block mb-1">Standard Work Day Start</label>
+                <label htmlFor="work-day-start" className="text-zinc-400 block mb-1">Standard Work Day Start</label>
                 <input
+                  id="work-day-start"
+                  aria-label="Standard Work Day Start"
                   type="time"
                   value={workStart}
                   onChange={e => setWorkStart(e.target.value)}
@@ -118,8 +120,10 @@ export default function PersonalOperatingRulesPage() {
                 />
               </div>
               <div>
-                <label className="text-zinc-400 block mb-1">Standard Work Day End</label>
+                <label htmlFor="work-day-end" className="text-zinc-400 block mb-1">Standard Work Day End</label>
                 <input
+                  id="work-day-end"
+                  aria-label="Standard Work Day End"
                   type="time"
                   value={workEnd}
                   onChange={e => setWorkEnd(e.target.value)}
@@ -129,8 +133,10 @@ export default function PersonalOperatingRulesPage() {
             </div>
 
             <div>
-              <label className="text-zinc-400 block mb-1">Maximum Daily Focus Workload (Hours)</label>
+              <label htmlFor="max-daily-workload" className="text-zinc-400 block mb-1">Maximum Daily Focus Workload (Hours)</label>
               <input
+                id="max-daily-workload"
+                aria-label="Maximum Daily Focus Workload (Hours)"
                 type="number"
                 step="0.5"
                 value={maxDailyWorkloadHours}
@@ -144,8 +150,10 @@ export default function PersonalOperatingRulesPage() {
 
             <div className="grid grid-cols-2 gap-3 pt-1">
               <div>
-                <label className="text-zinc-400 block mb-1">Deep Work Focus Block (Mins)</label>
+                <label htmlFor="focus-block-mins" className="text-zinc-400 block mb-1">Deep Work Focus Block (Mins)</label>
                 <input
+                  id="focus-block-mins"
+                  aria-label="Deep Work Focus Block (Mins)"
                   type="number"
                   value={focusWindowMinutes}
                   onChange={e => setFocusWindowMinutes(e.target.value)}
@@ -153,8 +161,10 @@ export default function PersonalOperatingRulesPage() {
                 />
               </div>
               <div>
-                <label className="text-zinc-400 block mb-1">Break Duration (Mins)</label>
+                <label htmlFor="break-duration-mins" className="text-zinc-400 block mb-1">Break Duration (Mins)</label>
                 <input
+                  id="break-duration-mins"
+                  aria-label="Break Duration (Mins)"
                   type="number"
                   value={shortBreakMinutes}
                   onChange={e => setShortBreakMinutes(e.target.value)}
@@ -174,8 +184,10 @@ export default function PersonalOperatingRulesPage() {
 
           <div className="space-y-3 text-xs">
             <div>
-              <label className="text-zinc-400 block mb-1">Default Base Currency</label>
+              <label htmlFor="base-currency" className="text-zinc-400 block mb-1">Default Base Currency</label>
               <select
+                id="base-currency"
+                aria-label="Default Base Currency"
                 value={baseCurrency}
                 onChange={e => setBaseCurrency(e.target.value)}
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-zinc-200 focus:outline-none focus:border-indigo-500"
@@ -192,9 +204,11 @@ export default function PersonalOperatingRulesPage() {
             </div>
 
             <div>
-              <label className="text-zinc-400 block mb-1">Configured Liquid Safety Buffer</label>
+              <label htmlFor="safety-buffer-amount" className="text-zinc-400 block mb-1">Configured Liquid Safety Buffer</label>
               <div className="relative">
                 <input
+                  id="safety-buffer-amount"
+                  aria-label="Configured Liquid Safety Buffer"
                   type="text"
                   value={safetyBufferAmount}
                   onChange={e => setSafetyBufferAmount(e.target.value)}
@@ -207,8 +221,10 @@ export default function PersonalOperatingRulesPage() {
             </div>
 
             <div className="pt-2">
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label htmlFor="enable-financial-planning" className="flex items-center gap-2 cursor-pointer">
                 <input
+                  id="enable-financial-planning"
+                  aria-label="Surface bill payment reminders in Today view & Daily planner"
                   type="checkbox"
                   checked={enableFinancialInPlanning}
                   onChange={e => setEnableFinancialInPlanning(e.target.checked)}
@@ -236,8 +252,10 @@ export default function PersonalOperatingRulesPage() {
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-zinc-400 block mb-1">Quiet Hours Start</label>
+                <label htmlFor="quiet-hours-start" className="text-zinc-400 block mb-1">Quiet Hours Start</label>
                 <input
+                  id="quiet-hours-start"
+                  aria-label="Quiet Hours Start"
                   type="time"
                   value={quietHoursStart}
                   onChange={e => setQuietHoursStart(e.target.value)}
@@ -245,8 +263,10 @@ export default function PersonalOperatingRulesPage() {
                 />
               </div>
               <div>
-                <label className="text-zinc-400 block mb-1">Quiet Hours End</label>
+                <label htmlFor="quiet-hours-end" className="text-zinc-400 block mb-1">Quiet Hours End</label>
                 <input
+                  id="quiet-hours-end"
+                  aria-label="Quiet Hours End"
                   type="time"
                   value={quietHoursEnd}
                   onChange={e => setQuietHoursEnd(e.target.value)}

@@ -1,6 +1,7 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { getOfflineQueue, syncOfflineQueue } from '@/lib/offline/queue';
 
 export type Workspace = 'productivity' | 'finance' | 'overview';
@@ -8,6 +9,9 @@ export type Workspace = 'productivity' | 'finance' | 'overview';
 interface WorkspaceContextType {
   workspace: Workspace;
   setWorkspace: (ws: Workspace) => void;
+  switchWorkspace: (ws: 'productivity' | 'finance') => void;
+  lastProductivityRoute: string;
+  lastFinanceRoute: string;
   activeSpaceId: string;
   setActiveSpaceId: (spaceId: string) => void;
   isAiDrawerOpen: boolean;
@@ -20,31 +24,57 @@ interface WorkspaceContextType {
   setSelectedExplainer: (explainer: any | null) => void;
   offlinePendingCount: number;
   setOfflinePendingCount: (count: number) => void;
+  isMobileMenuOpen: boolean;
+  setIsMobileMenuOpen: (open: boolean) => void;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const router = useRouter();
   const [workspace, setWorkspaceState] = useState<Workspace>('productivity');
+  const [lastProductivityRoute, setLastProductivityRoute] = useState<string>('/');
+  const [lastFinanceRoute, setLastFinanceRoute] = useState<string>('/finance');
   const [activeSpaceId, setActiveSpaceId] = useState<string>('all');
   const [isAiDrawerOpen, setIsAiDrawerOpen] = useState<boolean>(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState<boolean>(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
   const [selectedExplainer, setSelectedExplainer] = useState<any | null>(null);
   const [offlinePendingCount, setOfflinePendingCount] = useState<number>(0);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
-  // Restore workspace from local storage
+  // Sync workspace strictly with active URL pathname (URL is the single source of truth)
   useEffect(() => {
-    const saved = localStorage.getItem('personal_os_workspace') as Workspace;
-    if (saved && (saved === 'productivity' || saved === 'finance' || saved === 'overview')) {
-      setWorkspaceState(saved);
+    if (!pathname) return;
+    if (pathname.startsWith('/finance')) {
+      setWorkspaceState('finance');
+      setLastFinanceRoute(pathname);
+      try { localStorage.setItem('personal_os_last_finance', pathname); } catch {}
+    } else if (pathname.startsWith('/overview') || pathname.startsWith('/settings')) {
+      setWorkspaceState('overview');
+    } else {
+      setWorkspaceState('productivity');
+      setLastProductivityRoute(pathname);
+      try { localStorage.setItem('personal_os_last_prod', pathname); } catch {}
     }
-  }, []);
+  }, [pathname]);
 
   const setWorkspace = (ws: Workspace) => {
     setWorkspaceState(ws);
-    localStorage.setItem('personal_os_workspace', ws);
+    try { localStorage.setItem('personal_os_workspace', ws); } catch {}
   };
+
+  const switchWorkspace = useCallback((targetWs: 'productivity' | 'finance') => {
+    setWorkspace(targetWs);
+    if (targetWs === 'finance') {
+      const destination = lastFinanceRoute || '/finance';
+      router.push(destination);
+    } else {
+      const destination = lastProductivityRoute || '/';
+      router.push(destination);
+    }
+  }, [lastFinanceRoute, lastProductivityRoute, router]);
 
   // Keyboard shortcuts (Cmd+K for command palette, Cmd+N for quick add)
   useEffect(() => {
@@ -85,6 +115,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       value={{
         workspace,
         setWorkspace,
+        switchWorkspace,
+        lastProductivityRoute,
+        lastFinanceRoute,
         activeSpaceId,
         setActiveSpaceId,
         isAiDrawerOpen,
@@ -97,6 +130,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setSelectedExplainer,
         offlinePendingCount,
         setOfflinePendingCount,
+        isMobileMenuOpen,
+        setIsMobileMenuOpen,
       }}
     >
       {children}

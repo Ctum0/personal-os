@@ -49,33 +49,33 @@ export default function OverviewPage() {
   return (
     <div className="w-full px-8 py-6 space-y-6">
       {/* Top Banner */}
-      <div className="p-5 bg-gradient-to-r from-zinc-900 via-zinc-900 to-amber-950/40 border border-zinc-800 rounded-xl space-y-1">
+      <div className="p-5 bg-zinc-950/60 border border-white/[0.06] rounded-lg space-y-1">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-amber-400">Overview Domain</span>
+          <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">Overview Domain</span>
           <span className="text-zinc-600">•</span>
-          <span className="text-xs text-zinc-400">Selective Cross-Module Synthesis</span>
+          <span className="text-xs text-zinc-400">Cross-Module Synthesis</span>
         </div>
-        <h1 className="text-xl font-bold text-zinc-100">Executive Summary Pulse</h1>
-        <p className="text-xs text-zinc-400">
+        <h1 className="text-xl font-semibold text-zinc-100 tracking-tight">Executive Summary Pulse</h1>
+        <p className="text-xs text-zinc-400 mt-0.5">
           A high-level cross-module overview connecting your priorities, daily habits, and financial capacity without cluttering individual workspaces.
         </p>
       </div>
 
       {/* Top Cross-Module Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Productivity Focus */}
-        <div className="p-5 bg-zinc-900 border border-zinc-800 rounded-xl space-y-3">
-          <div className="flex items-center justify-between text-xs font-bold text-indigo-400 uppercase tracking-wider">
+        <div className="p-4 bg-zinc-950/60 border border-white/[0.06] rounded-lg space-y-3">
+          <div className="flex items-center justify-between text-xs font-mono uppercase tracking-wider text-zinc-400">
             <span>Productivity Focus</span>
-            <CheckCircle2 className="w-4 h-4" />
+            <CheckCircle2 className="w-4 h-4 text-zinc-400" />
           </div>
           <div>
-            <p className="text-2xl font-bold text-zinc-100">{tasks.length} Priority Tasks</p>
+            <p className="text-2xl font-light text-zinc-100 tracking-tight">{tasks.length} Priority Tasks</p>
             <p className="text-xs text-zinc-400 mt-1">Ready for immediate execution</p>
           </div>
           <Link
             href="/productivity/today"
-            className="text-xs text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1 pt-1"
+            className="text-xs text-zinc-300 hover:text-white font-medium flex items-center gap-1 pt-1 transition-colors"
           >
             <span>Open Today's Plan</span>
             <ArrowRight className="w-3.5 h-3.5" />
@@ -83,13 +83,13 @@ export default function OverviewPage() {
         </div>
 
         {/* Habit Consistency */}
-        <div className="p-5 bg-zinc-900 border border-zinc-800 rounded-xl space-y-3">
-          <div className="flex items-center justify-between text-xs font-bold text-amber-400 uppercase tracking-wider">
+        <div className="p-4 bg-zinc-950/60 border border-white/[0.06] rounded-lg space-y-3">
+          <div className="flex items-center justify-between text-xs font-mono uppercase tracking-wider text-zinc-400">
             <span>Habit Attainment</span>
-            <Flame className="w-4 h-4" />
+            <Flame className="w-4 h-4 text-zinc-400" />
           </div>
           <div>
-            <p className="text-2xl font-bold text-zinc-100">
+            <p className="text-2xl font-light text-zinc-100 tracking-tight">
               {completedHabits} / {habits.length} Done Today
             </p>
             <p className="text-xs text-zinc-400 mt-1">
@@ -98,7 +98,7 @@ export default function OverviewPage() {
           </div>
           <Link
             href="/productivity/habits"
-            className="text-xs text-amber-400 hover:text-amber-300 font-medium flex items-center gap-1 pt-1"
+            className="text-xs text-zinc-300 hover:text-white font-medium flex items-center gap-1 pt-1 transition-colors"
           >
             <span>View Habit Tracker</span>
             <ArrowRight className="w-3.5 h-3.5" />

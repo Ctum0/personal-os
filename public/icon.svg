@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0c0d14"/>
+      <stop offset="50%" stop-color="#090a0f"/>
+      <stop offset="100%" stop-color="#050608"/>
+    </linearGradient>
+
+    <!-- Cyber Neon Primary Gradient -->
+    <linearGradient id="cyberIndigoCyan" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="45%" stop-color="#6366f1"/>
+      <stop offset="80%" stop-color="#06b6d4"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+
+    <!-- Accent Emerald/Cyan -->
+    <linearGradient id="accentGlow" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="50%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#a855f7"/>
+    </linearGradient>
+
+    <!-- Core Radiant Gradient -->
+    <radialGradient id="coreGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.8"/>
+      <stop offset="40%" stop-color="#6366f1" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Drop Shadow & Neon Bloom Filters -->
+    <filter id="neonBloom" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="10" result="blur1"/>
+      <feGaussianBlur stdDeviation="24" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="subtleShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.7"/>
+    </filter>
+  </defs>
+
+  <!-- Background Base Container -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+  
+  <!-- Outer Tech Border with Subtle Inner Highlight -->
+  <rect width="504" height="504" x="4" y="4" rx="108" fill="none" stroke="url(#cyberIndigoCyan)" stroke-width="2" stroke-opacity="0.35"/>
+  <rect width="496" height="496" x="8" y="8" rx="104" fill="none" stroke="#ffffff" stroke-width="1" stroke-opacity="0.05"/>
+
+  <!-- Ambient Glow Behind Core -->
+  <circle cx="256" cy="256" r="180" fill="url(#coreGlow)"/>
+
+  <!-- Orbital Cybernetic Ring (Segmented) -->
+  <g filter="url(#subtleShadow)">
+    <circle cx="256" cy="256" r="168" fill="none" stroke="#27272a" stroke-width="2" stroke-dasharray="16 12"/>
+    <circle cx="256" cy="256" r="168" fill="none" stroke="url(#cyberIndigoCyan)" stroke-width="3" stroke-dasharray="40 180" stroke-linecap="round"/>
+    <circle cx="256" cy="256" r="168" fill="none" stroke="#06b6d4" stroke-width="3" stroke-dasharray="25 220" stroke-dashoffset="120" stroke-linecap="round"/>
+  </g>
+
+  <!-- Outer Hexagonal Frame -->
+  <g filter="url(#neonBloom)">
+    <!-- Hexagon Outer Shell -->
+    <polygon points="256,92 396,173 396,339 256,420 116,339 116,173" 
+             fill="none" 
+             stroke="url(#cyberIndigoCyan)" 
+             stroke-width="7" 
+             stroke-linejoin="round" 
+             stroke-linecap="round"/>
+
+    <!-- Corner Node Accents -->
+    <circle cx="256" cy="92" r="5" fill="#38bdf8"/>
+    <circle cx="396" cy="173" r="5" fill="#6366f1"/>
+    <circle cx="396" cy="339" r="5" fill="#06b6d4"/>
+    <circle cx="256" cy="420" r="5" fill="#10b981"/>
+    <circle cx="116" cy="339" r="5" fill="#6366f1"/>
+    <circle cx="116" cy="173" r="5" fill="#818cf8"/>
+  </g>
+
+  <!-- Dynamic Interlocking Möbius / Hyper-Infinity Symbol (Productivity + Deterministic Finance) -->
+  <g filter="url(#neonBloom)">
+    <!-- Left Loop (Productivity / Time / Tasks) -->
+    <path d="M 256,256 C 220,200 170,190 144,216 C 114,246 114,296 150,326 C 185,355 230,310 256,256 Z" 
+          fill="none" 
+          stroke="url(#accentGlow)" 
+          stroke-width="12" 
+          stroke-linecap="round" 
+          stroke-linejoin="round"/>
+
+    <!-- Right Loop (Finance / Ledger / Wealth) -->
+    <path d="M 256,256 C 292,312 342,322 368,296 C 398,266 398,216 362,186 C 327,157 282,202 256,256 Z" 
+          fill="none" 
+          stroke="url(#cyberIndigoCyan)" 
+          stroke-width="12" 
+          stroke-linecap="round" 
+          stroke-linejoin="round"/>
+  </g>
+
+  <!-- Central Quantum Nexus (Geometric Monogram Core) -->
+  <g filter="url(#neonBloom)">
+    <!-- Central Luminous Diamond -->
+    <polygon points="256,218 294,256 256,294 218,256" 
+             fill="#090a0f" 
+             stroke="url(#cyberIndigoCyan)" 
+             stroke-width="4"/>
+    
+    <!-- Core Bright Dot -->
+    <circle cx="256" cy="256" r="6" fill="#ffffff"/>
+    <circle cx="256" cy="256" r="14" fill="none" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.8"/>
+  </g>
+
+  <!-- Stylized OS Micro Tick Marks (Top & Bottom Data Bus) -->
+  <g stroke="url(#cyberIndigoCyan)" stroke-width="2" stroke-linecap="round" opacity="0.75">
+    <line x1="236" y1="52" x2="276" y2="52"/>
+    <line x1="246" y1="44" x2="266" y2="44"/>
+    <line x1="236" y1="460" x2="276" y2="460"/>
+    <line x1="246" y1="468" x2="266" y2="468"/>
+  </g>
+</svg>

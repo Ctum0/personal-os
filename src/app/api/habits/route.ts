@@ -91,7 +91,7 @@ export async function POST(request: Request) {
       icon
     );
 
-    const habit = db.prepare('SELECT * FROM habits WHERE id = ?').get(habitId);
+    const habit = db.prepare('SELECT * FROM habits WHERE id = ? AND tenant_id = ?').get(habitId, session.tenantId);
     return NextResponse.json({ habit }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

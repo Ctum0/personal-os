@@ -7,11 +7,31 @@ import { X, Info, HelpCircle, CheckCircle, AlertTriangle, Layers, Calendar } fro
 export function ExplainerDrawer() {
   const { selectedExplainer, setSelectedExplainer } = useWorkspace();
 
+  React.useEffect(() => {
+    if (!selectedExplainer) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedExplainer(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedExplainer, setSelectedExplainer]);
+
   if (!selectedExplainer) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex justify-end">
-      <div className="w-full max-w-md bg-zinc-900 border-l border-zinc-800 h-full overflow-y-auto p-6 shadow-2xl flex flex-col justify-between animate-in slide-in-from-right duration-200">
+    <div
+      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex justify-end"
+      onClick={() => setSelectedExplainer(null)}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Calculation Transparency Explainer"
+    >
+      <div
+        className="w-full max-w-md bg-zinc-950 border-l border-zinc-800 h-full overflow-y-auto p-6 shadow-2xl flex flex-col justify-between animate-in slide-in-from-right duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div>
           {/* Header */}
           <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
@@ -26,7 +46,8 @@ export function ExplainerDrawer() {
             </div>
             <button
               onClick={() => setSelectedExplainer(null)}
-              className="text-zinc-400 hover:text-zinc-200 p-1 rounded-md hover:bg-zinc-800"
+              className="text-zinc-400 hover:text-zinc-200 p-1.5 rounded-lg hover:bg-zinc-850"
+              aria-label="Close explainer drawer"
             >
               <X className="w-4 h-4" />
             </button>

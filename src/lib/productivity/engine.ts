@@ -379,8 +379,19 @@ export function generateDailyPlanProposal(
   const topPriorities = tasks.slice(0, 5);
   const deferrals = tasks.slice(5, 10);
 
-  // Propose time blocks starting from 09:00 AM
-  let startHour = 9;
+  // Load preferences for authoritative operating rules
+  const user = db.prepare('SELECT preferences FROM users WHERE tenant_id = ? LIMIT 1').get(tenantId) as { preferences?: string } | undefined;
+  let prefs: any = {};
+  try {
+    prefs = JSON.parse(user?.preferences || '{}');
+  } catch {}
+
+  const workStart = prefs.workStart || prefs.workHoursStart || '09:00';
+  const workEnd = prefs.workEnd || prefs.workHoursEnd || '18:00';
+  const maxDailyWorkloadHours = parseFloat(prefs.maxDailyWorkloadHours || '6.5');
+  const [startHourNum] = workStart.split(':').map(Number);
+  let startHour = isNaN(startHourNum) ? 9 : startHourNum;
+
   const proposedTimeBlocks = topPriorities.map(t => {
     const duration = t.estimated_duration || 45;
     const blockStart = `${targetDate}T${String(startHour).padStart(2, '0')}:00:00`;
@@ -402,13 +413,15 @@ export function generateDailyPlanProposal(
 
   return {
     targetDate,
-    availableHours: 8,
+    availableHours: maxDailyWorkloadHours,
+    workStart,
+    workEnd,
     estimatedWorkloadHours: (topPriorities.reduce((s, t) => s + (t.estimated_duration || 45), 0) / 60).toFixed(1),
     topPriorities,
     suggestedDeferrals: deferrals,
     proposedTimeBlocks,
     fixedEventsCount: events.length,
     scheduledHabitsCount: habits.length,
-    reasoning: `Selected ${topPriorities.length} key tasks aligned with your available working hours, leaving a buffer for unexpected interruptions.`,
+    reasoning: `Selected ${topPriorities.length} key tasks aligned with your available working hours (${workStart} – ${workEnd}), leaving a buffer for unexpected interruptions.`,
   };
 }

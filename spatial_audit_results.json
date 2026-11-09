@@ -1,0 +1,1400 @@
+{
+  "1440x900": {
+    "/": {
+      "slug": "dashboard_today",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/dashboard_today_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/dashboard_today_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/today": {
+      "slug": "productivity_today",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_today_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_today_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/plan": {
+      "slug": "productivity_ai_plan",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_ai_plan_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_ai_plan_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/tasks": {
+      "slug": "productivity_tasks",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_tasks_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_tasks_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/projects": {
+      "slug": "productivity_projects",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_projects_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_projects_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/calendar": {
+      "slug": "productivity_calendar",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_calendar_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_calendar_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/inbox": {
+      "slug": "productivity_inbox",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_inbox_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_inbox_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/habits": {
+      "slug": "productivity_habits",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_habits_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_habits_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/focus": {
+      "slug": "productivity_focus",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_focus_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_focus_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/goals": {
+      "slug": "productivity_goals",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_goals_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_goals_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/analytics": {
+      "slug": "productivity_analytics",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_analytics_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_analytics_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/insights": {
+      "slug": "productivity_insights",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_insights_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_insights_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/weekly-review": {
+      "slug": "productivity_weekly_review",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_weekly_review_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_weekly_review_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance": {
+      "slug": "finance_overview",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_overview_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_overview_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/accounts": {
+      "slug": "finance_accounts",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_accounts_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_accounts_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/transactions": {
+      "slug": "finance_transactions",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_transactions_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_transactions_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/budgets": {
+      "slug": "finance_budgets",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_budgets_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_budgets_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/savings": {
+      "slug": "finance_savings",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_savings_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_savings_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/debts": {
+      "slug": "finance_debts",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_debts_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_debts_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/recurring": {
+      "slug": "finance_recurring",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_recurring_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_recurring_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/reports": {
+      "slug": "finance_reports",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_reports_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_reports_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/net-worth": {
+      "slug": "finance_net_worth",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_net_worth_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_net_worth_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/import": {
+      "slug": "finance_import",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_import_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_import_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/overview": {
+      "slug": "overview_home",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_home_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_home_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/overview/metrics": {
+      "slug": "overview_metrics",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_metrics_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_metrics_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/overview/settings": {
+      "slug": "overview_settings",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_settings_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_settings_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/overview/ai-governance": {
+      "slug": "overview_ai_governance",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_ai_governance_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_ai_governance_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/overview/backup": {
+      "slug": "overview_backup",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_backup_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_backup_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/overview/formulas": {
+      "slug": "overview_formulas",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_formulas_1440x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_formulas_1440x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1440,
+        "docClientWidth": 1440,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1200,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    }
+  },
+  "1600x900": {
+    "/": {
+      "slug": "dashboard_today",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/dashboard_today_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/dashboard_today_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/today": {
+      "slug": "productivity_today",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_today_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_today_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/plan": {
+      "slug": "productivity_ai_plan",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_ai_plan_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_ai_plan_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/tasks": {
+      "slug": "productivity_tasks",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_tasks_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_tasks_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/projects": {
+      "slug": "productivity_projects",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_projects_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_projects_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/calendar": {
+      "slug": "productivity_calendar",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_calendar_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_calendar_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/inbox": {
+      "slug": "productivity_inbox",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_inbox_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_inbox_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/habits": {
+      "slug": "productivity_habits",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_habits_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_habits_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/focus": {
+      "slug": "productivity_focus",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_focus_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_focus_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/goals": {
+      "slug": "productivity_goals",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_goals_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_goals_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/analytics": {
+      "slug": "productivity_analytics",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_analytics_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_analytics_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/insights": {
+      "slug": "productivity_insights",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_insights_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_insights_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/weekly-review": {
+      "slug": "productivity_weekly_review",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_weekly_review_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_weekly_review_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance": {
+      "slug": "finance_overview",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_overview_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_overview_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/accounts": {
+      "slug": "finance_accounts",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_accounts_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_accounts_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/transactions": {
+      "slug": "finance_transactions",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_transactions_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_transactions_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/budgets": {
+      "slug": "finance_budgets",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_budgets_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_budgets_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/savings": {
+      "slug": "finance_savings",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_savings_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_savings_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/debts": {
+      "slug": "finance_debts",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_debts_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_debts_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/recurring": {
+      "slug": "finance_recurring",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_recurring_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_recurring_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/reports": {
+      "slug": "finance_reports",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_reports_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_reports_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/net-worth": {
+      "slug": "finance_net_worth",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_net_worth_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_net_worth_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/import": {
+      "slug": "finance_import",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_import_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_import_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/overview": {
+      "slug": "overview_home",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_home_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_home_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/overview/metrics": {
+      "slug": "overview_metrics",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_metrics_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_metrics_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/overview/settings": {
+      "slug": "overview_settings",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_settings_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_settings_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/overview/ai-governance": {
+      "slug": "overview_ai_governance",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_ai_governance_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_ai_governance_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/overview/backup": {
+      "slug": "overview_backup",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_backup_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_backup_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/overview/formulas": {
+      "slug": "overview_formulas",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_formulas_1600x900_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_formulas_1600x900_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1600,
+        "docClientWidth": 1600,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1360,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    }
+  },
+  "1920x1080": {
+    "/": {
+      "slug": "dashboard_today",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/dashboard_today_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/dashboard_today_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/today": {
+      "slug": "productivity_today",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_today_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_today_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/plan": {
+      "slug": "productivity_ai_plan",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_ai_plan_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_ai_plan_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/tasks": {
+      "slug": "productivity_tasks",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_tasks_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_tasks_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/projects": {
+      "slug": "productivity_projects",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_projects_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_projects_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/calendar": {
+      "slug": "productivity_calendar",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_calendar_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_calendar_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/inbox": {
+      "slug": "productivity_inbox",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_inbox_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_inbox_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/habits": {
+      "slug": "productivity_habits",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_habits_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_habits_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/focus": {
+      "slug": "productivity_focus",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_focus_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_focus_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/goals": {
+      "slug": "productivity_goals",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_goals_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_goals_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/analytics": {
+      "slug": "productivity_analytics",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_analytics_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_analytics_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/insights": {
+      "slug": "productivity_insights",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_insights_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_insights_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/productivity/weekly-review": {
+      "slug": "productivity_weekly_review",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_weekly_review_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/productivity_weekly_review_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance": {
+      "slug": "finance_overview",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_overview_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_overview_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/accounts": {
+      "slug": "finance_accounts",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_accounts_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_accounts_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/transactions": {
+      "slug": "finance_transactions",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_transactions_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_transactions_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/budgets": {
+      "slug": "finance_budgets",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_budgets_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_budgets_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/savings": {
+      "slug": "finance_savings",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_savings_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_savings_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/debts": {
+      "slug": "finance_debts",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_debts_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_debts_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/recurring": {
+      "slug": "finance_recurring",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_recurring_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_recurring_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/reports": {
+      "slug": "finance_reports",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_reports_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_reports_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/net-worth": {
+      "slug": "finance_net_worth",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_net_worth_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_net_worth_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/finance/import": {
+      "slug": "finance_import",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_import_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/finance_import_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/overview": {
+      "slug": "overview_home",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_home_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_home_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/overview/metrics": {
+      "slug": "overview_metrics",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_metrics_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_metrics_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/overview/settings": {
+      "slug": "overview_settings",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_settings_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_settings_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/overview/ai-governance": {
+      "slug": "overview_ai_governance",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_ai_governance_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_ai_governance_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/overview/backup": {
+      "slug": "overview_backup",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_backup_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_backup_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    },
+    "/overview/formulas": {
+      "slug": "overview_formulas",
+      "viewportScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_formulas_1920x1080_viewport.png",
+      "fullpageScreenshot": "/home/ctum/Documents/Projects/personal-os/.artifacts/browser/phase4/overview_formulas_1920x1080_fullpage.png",
+      "metrics": {
+        "docScrollWidth": 1920,
+        "docClientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "mainWidth": 1680,
+        "mainMaxAllowedWidth": 1720,
+        "overflowingElementsCount": 0,
+        "overflowingElements": [],
+        "smallScrollbarsCount": 0,
+        "smallScrollbars": []
+      }
+    }
+  }
+}

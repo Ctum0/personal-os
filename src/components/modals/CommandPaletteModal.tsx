@@ -17,6 +17,8 @@ import {
   ArrowRight,
   BookOpen,
   Sliders,
+  Sparkles,
+  Compass,
 } from 'lucide-react';
 
 export function CommandPaletteModal() {
@@ -24,6 +26,7 @@ export function CommandPaletteModal() {
     isCommandPaletteOpen,
     setIsCommandPaletteOpen,
     workspace,
+    switchWorkspace,
     setIsQuickAddOpen,
     setIsAiDrawerOpen,
   } = useWorkspace();
@@ -54,17 +57,59 @@ export function CommandPaletteModal() {
     return () => clearTimeout(timer);
   }, [query, scope, workspace]);
 
+  // Escape key handler
+  useEffect(() => {
+    if (!isCommandPaletteOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsCommandPaletteOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isCommandPaletteOpen, setIsCommandPaletteOpen]);
+
   if (!isCommandPaletteOpen) return null;
 
   const quickActions = [
     {
-      id: 'act_plan',
-      title: "Open Today's Daily Plan",
-      subtitle: 'View today schedule and AI prioritized tasks',
+      id: 'act_plan_ai',
+      title: 'Plan My Day (AI Conversational Planner)',
+      subtitle: 'Interview-driven scheduling, uncertainty resolution & visual timeline',
+      icon: Sparkles,
+      action: () => {
+        setIsCommandPaletteOpen(false);
+        router.push('/productivity/plan');
+      },
+    },
+    {
+      id: 'act_switch_prod',
+      title: 'Switch to Productivity OS',
+      subtitle: 'Open daily execution dashboard, tasks, projects, calendar & habits',
+      icon: Compass,
+      action: () => {
+        setIsCommandPaletteOpen(false);
+        switchWorkspace('productivity');
+      },
+    },
+    {
+      id: 'act_switch_fin',
+      title: 'Switch to Finance OS',
+      subtitle: 'Open accounts, double-entry ledger, budgets & safe-to-spend reality',
+      icon: Landmark,
+      action: () => {
+        setIsCommandPaletteOpen(false);
+        switchWorkspace('finance');
+      },
+    },
+    {
+      id: 'act_today',
+      title: "Open Today's Execution Cockpit",
+      subtitle: 'View today schedule, priorities, and incomplete tasks review',
       icon: CalendarCheck,
       action: () => {
         setIsCommandPaletteOpen(false);
-        router.push('/productivity/today');
+        router.push('/');
       },
     },
     {

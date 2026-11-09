@@ -91,6 +91,9 @@ export interface BudgetCalculationResult {
 
 export interface SafeToSpendResult {
   safeToSpendAmount: string;
+  rawSafeToSpendAmount: string;
+  fundingDeficit: string;
+  isDeficit: boolean;
   currency: string;
   liquidFunds: string;
   upcomingObligations: string;
@@ -173,15 +176,53 @@ export function calculateAccountBalances(db: Database.Database, tenantId: string
     `).all(tenantId, acc.id) as Array<{ amount: string }>;
     const refunds = sumDecimalAmounts(refundsRows);
 
+    // Pending transactions for this account (affect available balance without altering posted ledger)
+    const pendingIncomeRows = db.prepare(`
+      SELECT amount
+      FROM journal_transactions
+      WHERE tenant_id = ? AND account_id = ? AND transaction_type = 'income' AND status = 'pending'
+    `).all(tenantId, acc.id) as Array<{ amount: string }>;
+    const pendingIncome = sumDecimalAmounts(pendingIncomeRows);
+
+    const pendingExpenseRows = db.prepare(`
+      SELECT amount
+      FROM journal_transactions
+      WHERE tenant_id = ? AND account_id = ? AND transaction_type = 'expense' AND status = 'pending'
+    `).all(tenantId, acc.id) as Array<{ amount: string }>;
+    const pendingExpenses = sumDecimalAmounts(pendingExpenseRows);
+
+    const pendingTransfersInRows = db.prepare(`
+      SELECT amount
+      FROM journal_transactions
+      WHERE tenant_id = ? AND to_account_id = ? AND transaction_type = 'transfer' AND status = 'pending'
+    `).all(tenantId, acc.id) as Array<{ amount: string }>;
+    const pendingTransfersIn = sumDecimalAmounts(pendingTransfersInRows);
+
+    const pendingTransfersOutRows = db.prepare(`
+      SELECT amount
+      FROM journal_transactions
+      WHERE tenant_id = ? AND account_id = ? AND transaction_type = 'transfer' AND status = 'pending'
+    `).all(tenantId, acc.id) as Array<{ amount: string }>;
+    const pendingTransfersOut = sumDecimalAmounts(pendingTransfersOutRows);
+
+    const pendingRefundsRows = db.prepare(`
+      SELECT amount
+      FROM journal_transactions
+      WHERE tenant_id = ? AND account_id = ? AND transaction_type = 'refund' AND status = 'pending'
+    `).all(tenantId, acc.id) as Array<{ amount: string }>;
+    const pendingRefunds = sumDecimalAmounts(pendingRefundsRows);
+
     // Balance calculation based on account type
     let current: Decimal;
+    let pending: Decimal;
     if (acc.type === 'credit_card' || acc.type === 'loan' || acc.type === 'liability') {
       // For credit cards / loans, opening is debt; expenses increase debt, payments/transfers-in decrease debt
-      // E.g. starting balance -620.50, + 142.85 expense -> -763.35 balance
       current = opening.minus(expenses).plus(transfersIn).plus(refunds).minus(transfersOut);
+      pending = current.minus(pendingExpenses).plus(pendingTransfersIn).plus(pendingRefunds).minus(pendingTransfersOut);
     } else {
       // Standard asset accounts
       current = opening.plus(income).minus(expenses).plus(transfersIn).minus(transfersOut).plus(refunds);
+      pending = current.plus(pendingIncome).minus(pendingExpenses).plus(pendingTransfersIn).minus(pendingTransfersOut).plus(pendingRefunds);
     }
 
     return {
@@ -191,7 +232,7 @@ export function calculateAccountBalances(db: Database.Database, tenantId: string
       currency: acc.currency,
       openingBalance: opening.toFixed(2),
       currentBalance: current.toFixed(2),
-      pendingBalance: current.toFixed(2),
+      pendingBalance: pending.toFixed(2),
       displayColor: acc.display_color,
       explainer: {
         metricName: `${acc.name} Balance`,
@@ -211,6 +252,8 @@ export function calculateAccountBalances(db: Database.Database, tenantId: string
           transfersIn: transfersIn.toFixed(2),
           transfersOut: transfersOut.toFixed(2),
           refunds: refunds.toFixed(2),
+          pendingExpenses: pendingExpenses.toFixed(2),
+          availablePendingBalance: pending.toFixed(2),
         },
         lastCalculatedAt: new Date().toISOString(),
       },
@@ -485,7 +528,14 @@ export function calculateBudget(
  * Calculates Safe-To-Spend according to spec Section 7.7:
  * Safe-to-spend = eligible liquid account balances - reserved upcoming obligations - earmarked funds - safety buffer
  */
-export function calculateSafeToSpend(db: Database.Database, tenantId: string): SafeToSpendResult {
+export function calculateSafeToSpend(
+  db: Database.Database,
+  tenantId: string,
+  options?: {
+    includeBudgetEnvelopes?: boolean;
+    daysHorizon?: number;
+  }
+): SafeToSpendResult {
   const settings = db.prepare('SELECT * FROM safe_to_spend_settings WHERE tenant_id = ?').get(tenantId) as {
     safety_buffer: string;
     include_credit_lines: number;
@@ -493,13 +543,16 @@ export function calculateSafeToSpend(db: Database.Database, tenantId: string): S
   } || { safety_buffer: '500.00', include_credit_lines: 0, days_horizon: 30 };
 
   const buffer = new Decimal(settings.safety_buffer || '500.00');
-  const horizonDays = settings.days_horizon || 30;
+  const horizonDays = options?.daysHorizon ?? (settings.days_horizon || 30);
 
   // 1. Calculate liquid funds (cash, checking, and savings accounts)
   const balances = calculateAccountBalances(db, tenantId);
   let liquidFunds = new Decimal(0);
+  const liquidAccountIds = new Set<string>();
+
   for (const acc of balances) {
     if (acc.accountType === 'checking' || acc.accountType === 'cash' || acc.accountType === 'savings') {
+      liquidAccountIds.add(acc.accountId);
       const b = new Decimal(acc.currentBalance);
       if (b.greaterThan(0)) {
         liquidFunds = liquidFunds.plus(b);
@@ -507,45 +560,122 @@ export function calculateSafeToSpend(db: Database.Database, tenantId: string): S
     }
   }
 
-  // 2. Reserved upcoming obligations (recurring bills due in horizon)
+  // 2. Pending transactions on liquid accounts (reduce available liquid capital)
+  const pendingRows = db.prepare(`
+    SELECT amount
+    FROM journal_transactions
+    WHERE tenant_id = ? AND status = 'pending' AND transaction_type = 'expense'
+      AND account_id IN (SELECT id FROM finance_accounts WHERE tenant_id = ? AND type IN ('checking', 'cash', 'savings'))
+  `).all(tenantId, tenantId) as Array<{ amount: string }>;
+  const pendingDeductions = sumDecimalAmounts(pendingRows);
+
+  // 3. Reserved upcoming obligations (recurring bills due in horizon)
   const today = todayISO();
   const futureDate = new Date();
   futureDate.setDate(futureDate.getDate() + horizonDays);
   const horizonEndDate = toISODate(futureDate);
 
   const upcomingBills = db.prepare(`
-    SELECT expected_amount as amount
+    SELECT id, name, expected_amount as amount, category_id
     FROM recurring_financial_rules
     WHERE tenant_id = ? AND is_active = 1 AND rule_type IN ('bill', 'subscription', 'loan_payment')
       AND next_due_date >= ? AND next_due_date <= ?
-  `).all(tenantId, today, horizonEndDate) as Array<{ amount: string }>;
-  const upcomingObligations = sumDecimalAmounts(upcomingBills);
+  `).all(tenantId, today, horizonEndDate) as Array<{ id: string; name: string; amount: string; category_id?: string }>;
 
-  // 3. Earmarked funds from active savings goals not already counted
+  // Check active budget to avoid double-counting between category budget envelopes and recurring obligations
+  const activeBudget = calculateBudget(db, tenantId);
+  const budgetedCategoryIds = new Set(activeBudget ? activeBudget.items.map(it => it.categoryId) : []);
+
+  let unbudgetedObligations = new Decimal(0);
+  let budgetedObligationsSum = new Decimal(0);
+
+  // Group recurring bills by category to prevent duplicate reservations
+  const billsByCategory = new Map<string, Decimal>();
+  for (const bill of upcomingBills) {
+    const billAmt = new Decimal(bill.amount || '0.00');
+    if (bill.category_id && budgetedCategoryIds.has(bill.category_id)) {
+      budgetedObligationsSum = budgetedObligationsSum.plus(billAmt);
+      const prev = billsByCategory.get(bill.category_id) || new Decimal(0);
+      billsByCategory.set(bill.category_id, prev.plus(billAmt));
+    } else {
+      unbudgetedObligations = unbudgetedObligations.plus(billAmt);
+    }
+  }
+
+  let totalUpcomingObligations = unbudgetedObligations.plus(budgetedObligationsSum);
+
+  // If includeBudgetEnvelopes is requested, add non-recurring budget envelope remaining balances without double-counting
+  if (options?.includeBudgetEnvelopes && activeBudget) {
+    let envelopeAdditions = new Decimal(0);
+    for (const item of activeBudget.items) {
+      const remaining = new Decimal(item.remainingAmount);
+      if (remaining.greaterThan(0)) {
+        const recurringForCat = billsByCategory.get(item.categoryId) || new Decimal(0);
+        // Reserve only the excess of budget envelope over already reserved recurring bills
+        if (remaining.greaterThan(recurringForCat)) {
+          envelopeAdditions = envelopeAdditions.plus(remaining.minus(recurringForCat));
+        }
+      }
+    }
+    totalUpcomingObligations = totalUpcomingObligations.plus(envelopeAdditions);
+  }
+
+  // 4. Earmarked funds from active savings goals (only linked to liquid accounts or general savings)
   const savingsGoalsRows = db.prepare(`
-    SELECT current_amount as amount
+    SELECT id, name, current_amount as amount, target_amount, linked_account_id
     FROM savings_goals
     WHERE tenant_id = ? AND status = 'active'
-  `).all(tenantId) as Array<{ amount: string }>;
-  const earmarkedSavings = sumDecimalAmounts(savingsGoalsRows);
+  `).all(tenantId) as Array<{ id: string; name: string; amount: string; target_amount: string; linked_account_id?: string }>;
+
+  let earmarkedSavings = new Decimal(0);
+  for (const sg of savingsGoalsRows) {
+    // Only earmark if the goal is backed by liquid funds
+    if (!sg.linked_account_id || liquidAccountIds.has(sg.linked_account_id)) {
+      earmarkedSavings = earmarkedSavings.plus(new Decimal(sg.amount || '0.00'));
+    }
+  }
 
   // Safe-to-spend calculation:
-  // Liquid funds - obligations - earmarked savings - buffer
-  const rawSafeToSpend = liquidFunds.minus(upcomingObligations).minus(earmarkedSavings).minus(buffer);
-  const safeToSpend = rawSafeToSpend.greaterThan(0) ? rawSafeToSpend : new Decimal(0);
+  // Liquid funds - pending deductions - upcoming obligations - earmarked savings - safety buffer
+  const rawSafeToSpend = liquidFunds
+    .minus(pendingDeductions)
+    .minus(totalUpcomingObligations)
+    .minus(earmarkedSavings)
+    .minus(buffer);
+
+  const isDeficit = rawSafeToSpend.isNegative();
+  const safeToSpend = isDeficit ? new Decimal(0) : rawSafeToSpend;
+  const fundingDeficit = isDeficit ? rawSafeToSpend.abs().toFixed(2) : '0.00';
+
+  // Read configured currency
+  const user = db.prepare('SELECT preferences FROM users WHERE tenant_id = ? LIMIT 1').get(tenantId) as { preferences?: string } | undefined;
+  let currency = 'USD';
+  try {
+    const p = JSON.parse(user?.preferences || '{}');
+    if (p.currency || p.baseCurrency) currency = p.currency || p.baseCurrency;
+  } catch {}
 
   const breakdown: SafeToSpendResult['breakdown'] = [
-    { label: 'Liquid Account Balances', amount: liquidFunds.toFixed(2), operation: 'add', details: 'Checking, Savings, and Cash positive balances' },
-    { label: 'Upcoming Obligations (Next 30 Days)', amount: upcomingObligations.toFixed(2), operation: 'subtract', details: 'Active recurring bills and subscriptions' },
-    { label: 'Earmarked Savings Goals', amount: earmarkedSavings.toFixed(2), operation: 'subtract', details: 'Funds committed to active savings milestones' },
-    { label: 'Safety Buffer', amount: buffer.toFixed(2), operation: 'subtract', details: 'Configurable emergency cushion' },
+    { label: 'Liquid Cash', amount: liquidFunds.toFixed(2), operation: 'add', details: 'Positive checking, savings, and cash ledger balances' },
+    ...(pendingDeductions.greaterThan(0) ? [
+      { label: 'Pending Deductions', amount: pendingDeductions.toFixed(2), operation: 'subtract' as const, details: 'Authorized transactions pending ledger settlement' }
+    ] : []),
+    { label: 'Upcoming Recurring', amount: totalUpcomingObligations.toFixed(2), operation: 'subtract', details: `${upcomingBills.length} active recurring commitments due before horizon` },
+    { label: 'Earmarked Savings', amount: earmarkedSavings.toFixed(2), operation: 'subtract', details: 'Liquid funds dedicated to active savings milestones' },
+    { label: 'Safety Buffer', amount: buffer.toFixed(2), operation: 'subtract', details: 'Configurable emergency reserve' },
+    ...(isDeficit ? [
+      { label: 'Funding Deficit', amount: fundingDeficit, operation: 'subtract' as const, details: 'Obligations exceed liquid capital; safe-to-spend is zero-floored' }
+    ] : []),
   ];
 
   return {
     safeToSpendAmount: safeToSpend.toFixed(2),
-    currency: 'USD',
+    rawSafeToSpendAmount: rawSafeToSpend.toFixed(2),
+    fundingDeficit,
+    isDeficit,
+    currency,
     liquidFunds: liquidFunds.toFixed(2),
-    upcomingObligations: upcomingObligations.toFixed(2),
+    upcomingObligations: totalUpcomingObligations.toFixed(2),
     earmarkedSavings: earmarkedSavings.toFixed(2),
     safetyBuffer: buffer.toFixed(2),
     daysHorizon: horizonDays,
@@ -553,18 +683,31 @@ export function calculateSafeToSpend(db: Database.Database, tenantId: string): S
     breakdown,
     explainer: {
       metricName: 'Safe-To-Spend Projection',
-      definition: 'Estimate of uncommitted funds available for discretionary spending without jeopardizing bills or savings goals.',
-      formula: 'Safe-to-Spend = Liquid Balances - Upcoming Obligations - Earmarked Savings - Safety Buffer',
+      definition: 'Deterministic uncommitted liquid funds available for discretionary spending without jeopardizing obligations or reserves.',
+      formula: 'Safe-to-Spend = Liquid Balances - Pending Expenses - Upcoming Obligations - Earmarked Savings - Safety Buffer',
       dateRange: { start: today, end: horizonEndDate, label: `Next ${horizonDays} Days` },
-      currency: 'USD',
-      includedEntities: ['Liquid checking & cash accounts', 'Upcoming recurring bills', 'Earmarked savings balances', 'Emergency buffer'],
-      excludedEntities: ['Available credit lines', 'Illiquid investments', 'Discretionary budget limits'],
-      assumptions: ['No unexpected income or unrecorded liabilities occur during the planning horizon'],
+      currency,
+      includedEntities: ['Liquid checking & cash accounts', 'Pending expenses', 'Upcoming recurring bills', 'Earmarked liquid savings', 'Safety buffer'],
+      excludedEntities: ['Available credit lines', 'Illiquid investments', 'Duplicate budgeted obligations'],
+      assumptions: [
+        'Recurring obligations are deduced once with zero duplicate reservations against envelope budgets',
+        'Multi-currency limitation: All multi-currency operations use configured base currency without live external FX feeds',
+      ],
       inputs: {
+        'Liquid Cash': `$${liquidFunds.toFixed(2)}`,
+        'Pending Deductions': `-$${pendingDeductions.toFixed(2)}`,
+        'Upcoming Recurring': `-$${totalUpcomingObligations.toFixed(2)}`,
+        'Earmarked Savings': `-$${earmarkedSavings.toFixed(2)}`,
+        'Safety Buffer': `-$${buffer.toFixed(2)}`,
+        'Funding Deficit': isDeficit ? `-$${fundingDeficit}` : '$0.00',
+        'Raw Safe-to-Spend': `$${rawSafeToSpend.toFixed(2)}`,
+        'Safe-to-Spend (Effective)': `$${safeToSpend.toFixed(2)}`,
         liquidFunds: liquidFunds.toFixed(2),
-        upcomingObligations: upcomingObligations.toFixed(2),
+        pendingExpenses: pendingDeductions.toFixed(2),
+        upcomingObligations: totalUpcomingObligations.toFixed(2),
         earmarkedSavings: earmarkedSavings.toFixed(2),
         safetyBuffer: buffer.toFixed(2),
+        fundingDeficit,
       },
       lastCalculatedAt: new Date().toISOString(),
     },
@@ -573,6 +716,8 @@ export function calculateSafeToSpend(db: Database.Database, tenantId: string): S
 
 /**
  * Calculates Net Worth: Sum of Assets - Sum of Liabilities
+ * - Accurately incorporates negative balances on asset accounts as overdraft liabilities.
+ * - Incorporates standalone debts from debts table while preventing double-counting with linked accounts.
  */
 export function calculateNetWorth(db: Database.Database, tenantId: string): NetWorthResult {
   const balances = calculateAccountBalances(db, tenantId);
@@ -582,9 +727,12 @@ export function calculateNetWorth(db: Database.Database, tenantId: string): NetW
 
   const assetsList: NetWorthResult['assetsList'] = [];
   const liabilitiesList: NetWorthResult['liabilitiesList'] = [];
+  const processedAccountIds = new Set<string>();
 
   for (const acc of balances) {
+    processedAccountIds.add(acc.accountId);
     const bal = new Decimal(acc.currentBalance);
+
     if (acc.accountType === 'credit_card' || acc.accountType === 'loan' || acc.accountType === 'liability') {
       // Outstanding liability is positive number in calculation
       const liabilityAmount = bal.isNegative() ? bal.abs() : bal;
@@ -596,8 +744,18 @@ export function calculateNetWorth(db: Database.Database, tenantId: string): NetW
         color: acc.displayColor,
       });
     } else {
-      // Asset account
-      if (bal.greaterThan(0)) {
+      // Asset account (checking, savings, cash, investment)
+      if (bal.isNegative()) {
+        // Negative balance on an asset account represents an overdraft liability
+        const overdraftAmount = bal.abs();
+        totalLiabilities = totalLiabilities.plus(overdraftAmount);
+        liabilitiesList.push({
+          name: `${acc.accountName} (Overdraft)`,
+          type: 'overdraft',
+          balance: overdraftAmount.toFixed(2),
+          color: '#ef4444',
+        });
+      } else {
         totalAssets = totalAssets.plus(bal);
         assetsList.push({
           name: acc.accountName,
@@ -609,26 +767,58 @@ export function calculateNetWorth(db: Database.Database, tenantId: string): NetW
     }
   }
 
+  // Incorporate standalone debts from debts table that are NOT linked to a ledger account already processed
+  const standaloneDebts = db.prepare(`
+    SELECT id, name, liability_type, principal_balance, linked_account_id
+    FROM debts
+    WHERE tenant_id = ?
+  `).all(tenantId) as Array<{ id: string; name: string; liability_type: string; principal_balance: string; linked_account_id: string | null }>;
+
+  for (const d of standaloneDebts) {
+    if (d.linked_account_id && processedAccountIds.has(d.linked_account_id)) {
+      // Already counted through the linked liability account balance; skip to prevent double counting!
+      continue;
+    }
+    const debtBalance = new Decimal(d.principal_balance || '0.00');
+    if (debtBalance.greaterThan(0)) {
+      totalLiabilities = totalLiabilities.plus(debtBalance);
+      liabilitiesList.push({
+        name: d.name,
+        type: d.liability_type || 'debt',
+        balance: debtBalance.toFixed(2),
+        color: '#f59e0b',
+      });
+    }
+  }
+
   const netWorth = totalAssets.minus(totalLiabilities);
   const today = todayISO();
+
+  // Read configured currency
+  const user = db.prepare('SELECT preferences FROM users WHERE tenant_id = ? LIMIT 1').get(tenantId) as { preferences?: string } | undefined;
+  let currency = 'USD';
+  try {
+    const p = JSON.parse(user?.preferences || '{}');
+    if (p.currency || p.baseCurrency) currency = p.currency || p.baseCurrency;
+  } catch {}
 
   return {
     totalAssets: totalAssets.toFixed(2),
     totalLiabilities: totalLiabilities.toFixed(2),
     netWorth: netWorth.toFixed(2),
-    currency: 'USD',
+    currency,
     asOfDate: today,
     assetsList,
     liabilitiesList,
     explainer: {
       metricName: 'Net Worth Valuation',
-      definition: 'Total value of all financial assets minus all outstanding liabilities.',
-      formula: 'Net Worth = Total Valued Assets - Total Outstanding Liabilities',
+      definition: 'Total value of all verified financial assets minus all outstanding liabilities and debt obligations.',
+      formula: 'Net Worth = Total Valued Assets - Total Outstanding Liabilities (including overdrafts and non-double-counted debts)',
       dateRange: { label: `Snapshot as of ${today}` },
-      currency: 'USD',
-      includedEntities: ['Cash & Bank balances', 'Savings accounts', 'Credit card balances', 'Loan balances'],
-      excludedEntities: ['Physical property without appraisal', 'Off-ledger assets'],
-      assumptions: ['All account balances reflect confirmed ledger postings'],
+      currency,
+      includedEntities: ['Liquid cash & bank balances', 'Investments', 'Credit card balances', 'Loan balances', 'Overdrafts', 'Unlinked debts'],
+      excludedEntities: ['Physical property without appraisal', 'Off-ledger assets', 'Double-counted linked debts'],
+      assumptions: ['All balances reflect confirmed ledger postings and reconciled standalone debt records'],
       inputs: {
         totalAssets: totalAssets.toFixed(2),
         totalLiabilities: totalLiabilities.toFixed(2),
@@ -716,5 +906,150 @@ function simulatePayoff(
     monthsToDebtFree: months,
     totalInterestPaid: totalInterest.toFixed(2),
     totalPaid: totalBalance.plus(totalInterest).toFixed(2),
+  };
+}
+
+export interface BudgetRolloverResult {
+  previousBudgetId: string;
+  newBudgetId: string;
+  rolloverMode: 'carry_unused' | 'reset';
+  rolledLines: Array<{
+    categoryId: string;
+    categoryName: string;
+    previousAllocated: string;
+    previousSpent: string;
+    previousRemaining: string;
+    rolloverAmount: string;
+    newAllocated: string;
+    newTotalBudgeted: string;
+  }>;
+}
+
+/**
+ * Rolls over an expired budget into a new consecutive monthly cycle.
+ * - carry_unused: unspent remaining balances roll over as positive envelope additions.
+ * - reset: category balances reset to base allocated targets with zero rollover.
+ */
+export function rolloverBudgetPeriod(
+  db: Database.Database,
+  tenantId: string,
+  sourceBudgetId: string,
+  newBudgetId: string,
+  newPeriodStart: string,
+  newPeriodEnd: string,
+  newBudgetName?: string,
+  options?: {
+    rolloverModeOverride?: 'carry_unused' | 'reset';
+    categoryAllocations?: Record<string, string>;
+  }
+): BudgetRolloverResult {
+  const sourceBudget = calculateBudget(db, tenantId, sourceBudgetId);
+  if (!sourceBudget) {
+    throw new Error(`Source budget ${sourceBudgetId} not found`);
+  }
+
+  const rolloverMode = options?.rolloverModeOverride || (sourceBudget.rolloverMode as 'carry_unused' | 'reset') || 'carry_unused';
+  const name = newBudgetName || `${sourceBudget.budgetName} (Next Cycle)`;
+
+  db.prepare(`
+    INSERT INTO budgets (
+      id, tenant_id, name, budget_type, period_type, start_date, end_date, currency, rollover_mode, is_active
+    ) VALUES (?, ?, ?, ?, 'monthly', ?, ?, ?, ?, 1)
+  `).run(
+    newBudgetId,
+    tenantId,
+    name,
+    sourceBudget.budgetType,
+    newPeriodStart,
+    newPeriodEnd,
+    sourceBudget.currency,
+    rolloverMode
+  );
+
+  const rolledLines: BudgetRolloverResult['rolledLines'] = [];
+
+  for (const item of sourceBudget.items) {
+    let rolloverAmt = new Decimal(0);
+    if (rolloverMode === 'carry_unused') {
+      const remaining = new Decimal(item.remainingAmount);
+      // Unused positive balance rolls over as additional budget
+      if (remaining.greaterThan(0)) {
+        rolloverAmt = remaining;
+      }
+    }
+
+    const newAllocatedStr = options?.categoryAllocations?.[item.categoryId] ?? item.allocatedAmount;
+    const newAllocated = new Decimal(newAllocatedStr);
+    const newTotal = newAllocated.plus(rolloverAmt);
+
+    db.prepare(`
+      INSERT INTO budget_lines (id, tenant_id, budget_id, category_id, allocated_amount, rollover_amount)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      `bl_${newBudgetId}_${item.categoryId}`,
+      tenantId,
+      newBudgetId,
+      item.categoryId,
+      newAllocated.toFixed(2),
+      rolloverAmt.toFixed(2)
+    );
+
+    rolledLines.push({
+      categoryId: item.categoryId,
+      categoryName: item.categoryName,
+      previousAllocated: item.allocatedAmount,
+      previousSpent: item.spentAmount,
+      previousRemaining: item.remainingAmount,
+      rolloverAmount: rolloverAmt.toFixed(2),
+      newAllocated: newAllocated.toFixed(2),
+      newTotalBudgeted: newTotal.toFixed(2),
+    });
+  }
+
+  return {
+    previousBudgetId: sourceBudgetId,
+    newBudgetId,
+    rolloverMode,
+    rolledLines,
+  };
+}
+
+export interface DebtPaymentSplitResult {
+  totalPayment: string;
+  interestPortion: string;
+  principalPortion: string;
+  previousPrincipal: string;
+  remainingPrincipal: string;
+  effectiveMonthlyRate: string;
+}
+
+/**
+ * Deterministically splits a debt payment between financing interest cost and principal reduction.
+ */
+export function calculateDebtPaymentSplit(
+  principalBalance: string | Decimal,
+  annualInterestRatePercent: string | Decimal,
+  totalPaymentAmount: string | Decimal
+): DebtPaymentSplitResult {
+  const principal = new Decimal(principalBalance || '0.00');
+  const annualRate = new Decimal(annualInterestRatePercent || '0.00');
+  const totalPay = new Decimal(totalPaymentAmount || '0.00');
+
+  // Monthly interest rate = (APR % / 100) / 12
+  const monthlyRate = annualRate.dividedBy(100).dividedBy(12);
+  const interest = principal.times(monthlyRate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+
+  // Principal reduction = payment - interest (capped at principal)
+  const availableForPrincipal = Decimal.max(new Decimal(0), totalPay.minus(interest));
+  const principalReduction = Decimal.min(principal, availableForPrincipal);
+  const remaining = principal.minus(principalReduction);
+
+  return {
+    totalPayment: totalPay.toFixed(2),
+    interestPortion: interest.toFixed(2),
+    principalPortion: principalReduction.toFixed(2),
+    previousPrincipal: principal.toFixed(2),
+    remainingPrincipal: remaining.toFixed(2),
+    effectiveMonthlyRate: monthlyRate.toFixed(6),
   };
 }

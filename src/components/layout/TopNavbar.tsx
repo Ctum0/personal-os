@@ -1,17 +1,15 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useWorkspace, Workspace } from './WorkspaceContext';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useWorkspace } from './WorkspaceContext';
 import {
-  CheckSquare,
-  DollarSign,
-  Layers,
   Search,
   Plus,
-  Sparkles,
+  Terminal,
   Wifi,
   WifiOff,
-  Bell,
   Sun,
   Moon,
   Folder,
@@ -20,12 +18,15 @@ import {
   BookOpen,
   Activity,
   ChevronDown,
+  Menu,
+  Compass,
+  Landmark,
 } from 'lucide-react';
 
 export function TopNavbar() {
   const {
     workspace,
-    setWorkspace,
+    switchWorkspace,
     activeSpaceId,
     setActiveSpaceId,
     isAiDrawerOpen,
@@ -33,14 +34,19 @@ export function TopNavbar() {
     setIsQuickAddOpen,
     setIsCommandPaletteOpen,
     offlinePendingCount,
+    isMobileMenuOpen,
+    setIsMobileMenuOpen,
   } = useWorkspace();
 
+  const pathname = usePathname() || '/';
   const [spaces, setSpaces] = useState<any[]>([]);
   const [isSpaceMenuOpen, setIsSpaceMenuOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   useEffect(() => {
+    setIsMounted(true);
     fetch('/api/spaces')
       .then(res => res.json())
       .then(data => {
@@ -48,13 +54,14 @@ export function TopNavbar() {
       })
       .catch(() => {});
 
-    setIsOnline(navigator.onLine);
+    if (typeof navigator !== 'undefined') {
+      setIsOnline(navigator.onLine ?? true);
+    }
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Initial theme check
     if (document.documentElement.classList.contains('light')) {
       setTheme('light');
     }
@@ -88,175 +95,236 @@ export function TopNavbar() {
 
   const currentSpace = spaces.find(s => s.id === activeSpaceId);
 
+  // Derive current section label for clean breadcrumb orientation
+  const getSectionLabel = () => {
+    if (pathname === '/') return 'Today';
+    if (pathname.startsWith('/productivity/tasks')) return 'Tasks & Planning';
+    if (pathname.startsWith('/productivity/calendar')) return 'Calendar';
+    if (pathname.startsWith('/productivity/projects')) return 'Projects';
+    if (pathname.startsWith('/productivity/focus')) return 'Focus';
+    if (pathname.startsWith('/finance/transactions')) return 'Transactions Ledger';
+    if (pathname.startsWith('/finance/budgets')) return 'Budgets';
+    if (pathname.startsWith('/finance/accounts')) return 'Accounts';
+    if (pathname.startsWith('/finance/net-worth')) return 'Net Worth';
+    if (pathname.startsWith('/finance')) return 'Financial Reality';
+    if (pathname.startsWith('/productivity/habits')) return 'Habits & Rituals';
+    if (pathname.startsWith('/productivity/goals')) return 'Goals';
+    if (pathname.startsWith('/overview/settings')) return 'Operating Rules';
+    if (pathname.startsWith('/overview/metrics')) return 'Metric Dictionary';
+    if (pathname.startsWith('/overview')) return 'Settings & Governance';
+    return 'Workstation';
+  };
+
+  // Only show the Space context filter on productivity surfaces where spaceId actually filters tasks
+  const isProductivitySurface = pathname === '/' || pathname.startsWith('/productivity');
+
   return (
-    <header className="h-14 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md px-4 flex items-center justify-between sticky top-0 z-40 select-none">
-      {/* Left: Brand & Workspace Switcher */}
-      <div className="flex items-center gap-6">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-xs text-white shadow-sm shadow-indigo-500/20">
-            OS
+    <header className="h-14 border-b border-zinc-800/60 bg-zinc-950/95 backdrop-blur-md px-3 sm:px-4 flex items-center justify-between sticky top-0 z-40 select-none">
+      {/* Left: Mobile Toggle & Brand Link & Breadcrumb */}
+      <div className="flex items-center gap-3 sm:gap-5">
+        {/* Mobile menu trigger */}
+        <button
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className="lg:hidden p-1.5 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-850 transition-colors"
+          aria-label="Toggle navigation menu"
+          aria-expanded={isMobileMenuOpen}
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+
+        {/* Global Home Brand Anchor */}
+        <Link href="/" className="flex items-center gap-2.5 group">
+          <div className="w-7 h-7 rounded-lg bg-zinc-900 border border-zinc-700/80 flex items-center justify-center text-zinc-100 group-hover:border-zinc-500 transition-colors shadow-xs">
+            {/* Clean, architectural SVG monogram */}
+            <svg
+              className="w-4 h-4 text-zinc-100"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect width="18" height="18" x="3" y="3" rx="4" />
+              <path d="M9 9h6" />
+              <path d="M9 15h6" />
+              <path d="M12 9v6" />
+            </svg>
           </div>
-          <span className="font-semibold text-sm tracking-tight text-zinc-100 hidden sm:inline">
+          <span className="font-semibold text-sm tracking-tight text-zinc-100 group-hover:text-white transition-colors hidden sm:inline">
             Personal OS
           </span>
+        </Link>
+
+        {/* Subtle Breadcrumb Divider & Section Name */}
+        <div className="hidden sm:flex items-center gap-2 text-xs text-zinc-500 font-medium pl-2 border-l border-zinc-800">
+          <span className="text-zinc-300">{getSectionLabel()}</span>
         </div>
 
-        {/* Primary Workspace Switcher */}
-        <nav className="flex items-center bg-zinc-900 border border-zinc-800/80 rounded-lg p-0.5" aria-label="Workspaces">
+        {/* Primary Workspace Segment Switcher */}
+        <div className="flex items-center bg-zinc-950/90 border border-white/[0.08] rounded-md p-0.5 text-xs font-medium">
           <button
-            onClick={() => setWorkspace('productivity')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-              workspace === 'productivity'
-                ? 'bg-zinc-800 text-white shadow-sm'
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
+            onClick={() => switchWorkspace('productivity')}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded transition-colors ${
+              workspace !== 'finance'
+                ? 'bg-zinc-800 text-zinc-100 shadow-sm'
+                : 'text-zinc-400 hover:text-zinc-200'
             }`}
+            title="Switch to Productivity OS"
           >
-            <CheckSquare className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Productivity</span>
+            <Compass className="w-3.5 h-3.5" />
+            <span className="font-medium text-xs">Productivity</span>
           </button>
-
           <button
-            onClick={() => setWorkspace('finance')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+            onClick={() => switchWorkspace('finance')}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded transition-colors ${
               workspace === 'finance'
-                ? 'bg-zinc-800 text-white shadow-sm'
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
+                ? 'bg-zinc-800 text-zinc-100 shadow-sm'
+                : 'text-zinc-400 hover:text-zinc-200'
             }`}
+            title="Switch to Finance OS"
           >
-            <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Finance</span>
+            <Landmark className="w-3.5 h-3.5" />
+            <span className="font-medium text-xs">Finance</span>
           </button>
+        </div>
 
-          <button
-            onClick={() => setWorkspace('overview')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-              workspace === 'overview'
-                ? 'bg-zinc-800 text-white shadow-sm'
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5 text-amber-400" />
-            <span>Overview</span>
-          </button>
-        </nav>
+        {/* Space Context Selector (Contextually visible on Productivity views) */}
+        {isProductivitySurface && (
+          <div className="relative hidden md:block">
+            <button
+              onClick={() => setIsSpaceMenuOpen(!isSpaceMenuOpen)}
+              aria-expanded={isSpaceMenuOpen}
+              className="flex items-center gap-2 px-2.5 py-1 text-xs text-zinc-300 bg-zinc-900/60 hover:bg-zinc-850 border border-zinc-800/80 rounded-md transition-colors"
+            >
+              <span className="text-zinc-500 text-[11px]">Space:</span>
+              <span className="font-medium text-zinc-200">
+                {activeSpaceId === 'all' ? 'All' : currentSpace?.name || 'Space'}
+              </span>
+              <ChevronDown className="w-3 h-3 text-zinc-500" />
+            </button>
 
-        {/* Space Context Selector */}
-        <div className="relative">
-          <button
-            onClick={() => setIsSpaceMenuOpen(!isSpaceMenuOpen)}
-            className="flex items-center gap-2 px-2.5 py-1 text-xs text-zinc-300 bg-zinc-900/60 hover:bg-zinc-800 border border-zinc-800 rounded-md transition-colors"
-          >
-            <span className="text-zinc-500">Space:</span>
-            <span className="font-medium text-zinc-200">
-              {activeSpaceId === 'all' ? 'All Spaces' : currentSpace?.name || 'Space'}
-            </span>
-            <ChevronDown className="w-3 h-3 text-zinc-400" />
-          </button>
-
-          {isSpaceMenuOpen && (
-            <div className="absolute left-0 mt-1 w-44 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
-              <button
-                onClick={() => {
-                  setActiveSpaceId('all');
-                  setIsSpaceMenuOpen(false);
-                }}
-                className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left ${
-                  activeSpaceId === 'all' ? 'bg-indigo-600/20 text-indigo-300' : 'text-zinc-300 hover:bg-zinc-800'
-                }`}
-              >
-                <Folder className="w-3.5 h-3.5 text-zinc-400" />
-                <span>All Spaces</span>
-              </button>
-              {spaces.map(s => (
+            {isSpaceMenuOpen && (
+              <div className="absolute left-0 mt-1.5 w-44 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl py-1 z-50">
                 <button
-                  key={s.id}
                   onClick={() => {
-                    setActiveSpaceId(s.id);
+                    setActiveSpaceId('all');
                     setIsSpaceMenuOpen(false);
                   }}
                   className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left ${
-                    activeSpaceId === s.id ? 'bg-indigo-600/20 text-indigo-300' : 'text-zinc-300 hover:bg-zinc-800'
+                    activeSpaceId === 'all'
+                      ? 'bg-zinc-800 text-white font-medium'
+                      : 'text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200'
                   }`}
                 >
-                  <span style={{ color: s.color }}>{getSpaceIcon(s.icon)}</span>
-                  <span>{s.name}</span>
+                  <Folder className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>All Spaces</span>
                 </button>
-              ))}
-            </div>
-          )}
-        </div>
+                {spaces.map(s => (
+                  <button
+                    key={s.id}
+                    onClick={() => {
+                      setActiveSpaceId(s.id);
+                      setIsSpaceMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left ${
+                      activeSpaceId === s.id
+                        ? 'bg-zinc-800 text-white font-medium'
+                        : 'text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200'
+                    }`}
+                  >
+                    <span style={{ color: s.color }}>{getSpaceIcon(s.icon)}</span>
+                    <span>{s.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Center/Right: Global Search, Quick-Add, AI Drawer, Sync, Notifications */}
+      {/* Right: Search, Quick-Add, Assistant Console, Status, Profile */}
       <div className="flex items-center gap-2">
         {/* Command Palette Button */}
         <button
           onClick={() => setIsCommandPaletteOpen(true)}
-          className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-md text-xs text-zinc-400 transition-colors w-44 justify-between"
+          className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-zinc-900/80 hover:bg-zinc-850 border border-zinc-800/80 rounded-lg text-xs text-zinc-400 transition-colors w-40 lg:w-48 justify-between"
           aria-label="Open command palette"
         >
-          <div className="flex items-center gap-1.5">
-            <Search className="w-3.5 h-3.5 text-zinc-500" />
-            <span className="truncate">Search {workspace}...</span>
+          <div className="flex items-center gap-1.5 truncate">
+            <Search className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+            <span className="truncate">Search system...</span>
           </div>
-          <kbd className="px-1 py-0.5 text-[10px] bg-zinc-800 text-zinc-400 rounded border border-zinc-700">⌘K</kbd>
+          <kbd className="px-1.5 py-0.5 text-[10px] bg-zinc-800 text-zinc-400 rounded border border-zinc-700 font-mono">
+            ⌘K
+          </kbd>
         </button>
 
         {/* Universal Quick Add Button */}
         <button
           onClick={() => setIsQuickAddOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md text-xs font-medium shadow-sm transition-all shadow-indigo-600/20 active:scale-95"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 hover:bg-white text-zinc-950 rounded-lg text-xs font-semibold shadow-xs transition-all active:scale-98"
           aria-label="Universal quick add"
         >
           <Plus className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">Quick Add</span>
-          <kbd className="hidden sm:inline px-1 py-0.2 text-[9px] bg-indigo-700 text-indigo-200 rounded">⌘N</kbd>
+          <kbd className="hidden sm:inline px-1 py-0.5 text-[9px] bg-zinc-200 text-zinc-800 rounded font-mono">
+            ⌘N
+          </kbd>
         </button>
 
-        {/* AI Assistant Button */}
+        {/* Assistant Console Drawer Trigger */}
         <button
           onClick={() => setIsAiDrawerOpen(!isAiDrawerOpen)}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 border rounded-md text-xs font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 border rounded-lg text-xs font-medium transition-all ${
             isAiDrawerOpen
-              ? 'bg-purple-600/20 border-purple-500 text-purple-300'
-              : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+              ? 'bg-zinc-800 border-zinc-600 text-zinc-100'
+              : 'bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200'
           }`}
-          aria-label="Open AI Assistant"
+          aria-label="Open Assistant Console"
         >
-          <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-          <span className="hidden md:inline">Assistant</span>
+          <Terminal className="w-3.5 h-3.5 text-zinc-300" />
+          <span className="hidden md:inline">Console</span>
         </button>
 
-        {/* Sync / Offline status indicator */}
+        {/* Sync / Network status indicator */}
         <div
-          className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium ${
-            isOnline
-              ? offlinePendingCount > 0
-                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                : 'text-zinc-500'
-              : 'bg-red-500/10 text-red-400 border border-red-500/20'
+          className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-mono transition-colors ${
+            !isMounted || (isOnline && offlinePendingCount === 0)
+              ? 'text-zinc-500 hover:text-zinc-300'
+              : offlinePendingCount > 0
+              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+              : 'bg-zinc-900 text-zinc-400 border border-zinc-700'
           }`}
-          title={isOnline ? `${offlinePendingCount} pending offline sync mutations` : 'Offline Mode active'}
+          title={
+            !isMounted
+              ? 'Connecting...'
+              : isOnline
+              ? offlinePendingCount > 0
+                ? `${offlinePendingCount} pending offline sync mutations`
+                : 'Connected & synced'
+              : 'Local offline storage active'
+          }
         >
-          {isOnline ? (
-            <Wifi className={`w-3 h-3 ${offlinePendingCount > 0 ? 'text-amber-400 animate-pulse' : 'text-emerald-500'}`} />
+          {!isMounted || isOnline ? (
+            <Wifi className={`w-3.5 h-3.5 ${offlinePendingCount > 0 ? 'text-amber-400 animate-pulse' : 'text-zinc-400'}`} />
           ) : (
-            <WifiOff className="w-3 h-3 text-red-400" />
+            <WifiOff className="w-3.5 h-3.5 text-zinc-400" />
           )}
-          {offlinePendingCount > 0 && <span className="text-[10px]">{offlinePendingCount}</span>}
+          {offlinePendingCount > 0 && <span className="text-[10px] tabular-nums">{offlinePendingCount}</span>}
         </div>
 
         {/* Theme Toggle */}
         <button
           onClick={toggleTheme}
-          className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-md transition-colors"
+          className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850 rounded-lg transition-colors"
           aria-label="Toggle color theme"
         >
           {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </button>
 
         {/* User profile avatar */}
-        <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-xs font-semibold text-white ml-1">
+        <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-semibold text-zinc-300 ml-0.5">
           AM
         </div>
       </div>

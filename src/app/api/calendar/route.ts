@@ -38,7 +38,11 @@ export async function POST(request: Request) {
 
     const eventId = `ev_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const eventType = body.eventType || 'time_block';
-    const color = body.color || '#3b82f6';
+    const defaultColor =
+      eventType === 'daily_plan_block' ? '#10b981' :
+      eventType === 'habit' ? '#a855f7' :
+      eventType === 'meeting' ? '#f59e0b' : '#3b82f6';
+    const color = body.color || defaultColor;
 
     db.prepare(`
       INSERT INTO calendar_events (
@@ -59,7 +63,7 @@ export async function POST(request: Request) {
       color
     );
 
-    const event = db.prepare('SELECT * FROM calendar_events WHERE id = ?').get(eventId);
+    const event = db.prepare('SELECT * FROM calendar_events WHERE id = ? AND tenant_id = ?').get(eventId, session.tenantId);
     return NextResponse.json({ event }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -76,6 +80,11 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Event ID is required' }, { status: 400 });
     }
 
+    const existing = db.prepare('SELECT * FROM calendar_events WHERE id = ? AND tenant_id = ?').get(body.id, session.tenantId);
+    if (!existing) {
+      return NextResponse.json({ error: 'Event not found' }, { status: 404 });
+    }
+
     db.prepare(`
       UPDATE calendar_events
       SET 
@@ -83,12 +92,24 @@ export async function PUT(request: Request) {
         start_time = coalesce(?, start_time),
         end_time = coalesce(?, end_time),
         event_type = coalesce(?, event_type),
+        task_id = coalesce(?, task_id),
+        project_id = coalesce(?, project_id),
         color = coalesce(?, color),
         updated_at = datetime('now')
       WHERE id = ? AND tenant_id = ?
-    `).run(body.title, body.startTime, body.endTime, body.eventType, body.color, body.id, session.tenantId);
+    `).run(
+      body.title,
+      body.startTime,
+      body.endTime,
+      body.eventType,
+      body.taskId,
+      body.projectId,
+      body.color,
+      body.id,
+      session.tenantId
+    );
 
-    const updated = db.prepare('SELECT * FROM calendar_events WHERE id = ?').get(body.id);
+    const updated = db.prepare('SELECT * FROM calendar_events WHERE id = ? AND tenant_id = ?').get(body.id, session.tenantId);
     return NextResponse.json({ event: updated });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

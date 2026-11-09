@@ -77,27 +77,68 @@ export async function POST(request: Request) {
       payeeName,
       description,
       notes,
+      tags,
+      status: reqStatus,
+      recurringConfig,
     } = body;
 
-    if (!accountId || !amount || !description) {
+    if (!accountId || amount === undefined || amount === null || !description || !String(description).trim()) {
       return NextResponse.json({ error: 'Account, amount, and description are required' }, { status: 400 });
     }
 
+    let parsedDecimal: Decimal;
+    try {
+      parsedDecimal = new Decimal(amount);
+      if (!parsedDecimal.isFinite() || parsedDecimal.isNaN() || parsedDecimal.isZero() || parsedDecimal.isNegative()) {
+        return NextResponse.json({ error: 'Amount must be a positive number' }, { status: 400 });
+      }
+    } catch {
+      return NextResponse.json({ error: 'Amount must be a valid numeric value' }, { status: 400 });
+    }
+    const decAmount = parsedDecimal.toFixed(2);
+
+    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return NextResponse.json({ error: 'Date must be in YYYY-MM-DD format' }, { status: 400 });
+    }
+
+    const validTxTypes = ['income', 'expense', 'transfer', 'refund'];
     const txType = transactionType || 'expense';
+    if (!validTxTypes.includes(txType)) {
+      return NextResponse.json({ error: `Invalid transactionType. Must be one of: ${validTxTypes.join(', ')}` }, { status: 400 });
+    }
+
+    // Verify account exists and belongs to current tenant
+    const acc = db.prepare('SELECT id, currency FROM finance_accounts WHERE id = ? AND tenant_id = ?').get(accountId, session.tenantId) as { id: string; currency: string } | undefined;
+    if (!acc) {
+      return NextResponse.json({ error: 'Source account not found' }, { status: 404 });
+    }
+
+    // For transfers, verify destination account exists and belongs to current tenant
+    if (txType === 'transfer') {
+      if (!toAccountId) {
+        return NextResponse.json({ error: 'Destination account is required for transfer' }, { status: 400 });
+      }
+      if (toAccountId === accountId) {
+        return NextResponse.json({ error: 'Destination account must be different from source account' }, { status: 400 });
+      }
+      const toAcc = db.prepare('SELECT id FROM finance_accounts WHERE id = ? AND tenant_id = ?').get(toAccountId, session.tenantId);
+      if (!toAcc) {
+        return NextResponse.json({ error: 'Destination account not found' }, { status: 404 });
+      }
+    }
+
     const txId = `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const txDate = date || todayISO();
-    const decAmount = new Decimal(amount).abs().toFixed(2);
-
-    // Get account currency
-    const acc = db.prepare('SELECT currency FROM finance_accounts WHERE id = ? AND tenant_id = ?').get(accountId, session.tenantId) as { currency: string };
-    const currency = acc?.currency || 'USD';
+    const txStatus = reqStatus === 'pending' ? 'pending' : 'posted';
+    const tagsJson = Array.isArray(tags) ? JSON.stringify(tags) : (typeof tags === 'string' && tags.trim().startsWith('[') ? tags : JSON.stringify(tags ? [tags] : []));
+    const currency = acc.currency || 'USD';
 
     db.transaction(() => {
       // 1. Insert master transaction
       db.prepare(`
         INSERT INTO journal_transactions (
-          id, tenant_id, transaction_type, date, account_id, to_account_id, amount, currency, base_amount, payee_name, category_id, description, notes, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'posted')
+          id, tenant_id, transaction_type, date, account_id, to_account_id, amount, currency, base_amount, payee_name, category_id, description, notes, tags, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         txId,
         session.tenantId,
@@ -111,41 +152,68 @@ export async function POST(request: Request) {
         payeeName || null,
         categoryId || null,
         description.trim(),
-        notes || null
+        notes || null,
+        tagsJson,
+        txStatus
       );
 
-      // 2. Insert balanced ledger lines (debit / credit)
-      if (txType === 'income') {
-        db.prepare(`
-          INSERT INTO journal_lines (id, tenant_id, transaction_id, account_id, entry_type, amount, currency, base_amount, description)
-          VALUES (?, ?, ?, ?, 'debit', ?, ?, ?, ?)
-        `).run(`jl_${txId}_1`, session.tenantId, txId, accountId, decAmount, currency, decAmount, description);
-      } else if (txType === 'expense') {
-        db.prepare(`
-          INSERT INTO journal_lines (id, tenant_id, transaction_id, account_id, entry_type, amount, currency, base_amount, description)
-          VALUES (?, ?, ?, ?, 'credit', ?, ?, ?, ?)
-        `).run(`jl_${txId}_1`, session.tenantId, txId, accountId, decAmount, currency, decAmount, description);
-      } else if (txType === 'transfer') {
-        if (!toAccountId) {
-          throw new Error('Destination account is required for transfer');
-        }
-        // Credit source account (money out)
-        db.prepare(`
-          INSERT INTO journal_lines (id, tenant_id, transaction_id, account_id, entry_type, amount, currency, base_amount, description)
-          VALUES (?, ?, ?, ?, 'credit', ?, ?, ?, ?)
-        `).run(`jl_${txId}_1`, session.tenantId, txId, accountId, decAmount, currency, decAmount, `Transfer to ${toAccountId}`);
+      // 2. Insert balanced ledger lines (debit / credit) when status is posted
+      if (txStatus === 'posted') {
+        if (txType === 'income') {
+          db.prepare(`
+            INSERT INTO journal_lines (id, tenant_id, transaction_id, account_id, entry_type, amount, currency, base_amount, description)
+            VALUES (?, ?, ?, ?, 'debit', ?, ?, ?, ?)
+          `).run(`jl_${txId}_1`, session.tenantId, txId, accountId, decAmount, currency, decAmount, description);
+        } else if (txType === 'expense') {
+          db.prepare(`
+            INSERT INTO journal_lines (id, tenant_id, transaction_id, account_id, entry_type, amount, currency, base_amount, description)
+            VALUES (?, ?, ?, ?, 'credit', ?, ?, ?, ?)
+          `).run(`jl_${txId}_1`, session.tenantId, txId, accountId, decAmount, currency, decAmount, description);
+        } else if (txType === 'transfer') {
+          if (!toAccountId) {
+            throw new Error('Destination account is required for transfer');
+          }
+          // Credit source account (money out)
+          db.prepare(`
+            INSERT INTO journal_lines (id, tenant_id, transaction_id, account_id, entry_type, amount, currency, base_amount, description)
+            VALUES (?, ?, ?, ?, 'credit', ?, ?, ?, ?)
+          `).run(`jl_${txId}_1`, session.tenantId, txId, accountId, decAmount, currency, decAmount, `Transfer to ${toAccountId}`);
 
-        // Debit destination account (money in)
+          // Debit destination account (money in)
+          db.prepare(`
+            INSERT INTO journal_lines (id, tenant_id, transaction_id, account_id, entry_type, amount, currency, base_amount, description)
+            VALUES (?, ?, ?, ?, 'debit', ?, ?, ?, ?)
+          `).run(`jl_${txId}_2`, session.tenantId, txId, toAccountId, decAmount, currency, decAmount, `Transfer from ${accountId}`);
+        } else if (txType === 'refund') {
+          // Refund is debit into asset account
+          db.prepare(`
+            INSERT INTO journal_lines (id, tenant_id, transaction_id, account_id, entry_type, amount, currency, base_amount, description)
+            VALUES (?, ?, ?, ?, 'debit', ?, ?, ?, ?)
+          `).run(`jl_${txId}_1`, session.tenantId, txId, accountId, decAmount, currency, decAmount, `Refund: ${description}`);
+        }
+      }
+
+      // 3. Optional recurring rule generation
+      if (recurringConfig?.isRecurring) {
+        const recId = `rec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
         db.prepare(`
-          INSERT INTO journal_lines (id, tenant_id, transaction_id, account_id, entry_type, amount, currency, base_amount, description)
-          VALUES (?, ?, ?, ?, 'debit', ?, ?, ?, ?)
-        `).run(`jl_${txId}_2`, session.tenantId, txId, toAccountId, decAmount, currency, decAmount, `Transfer from ${accountId}`);
-      } else if (txType === 'refund') {
-        // Refund is debit into asset account
-        db.prepare(`
-          INSERT INTO journal_lines (id, tenant_id, transaction_id, account_id, entry_type, amount, currency, base_amount, description)
-          VALUES (?, ?, ?, ?, 'debit', ?, ?, ?, ?)
-        `).run(`jl_${txId}_1`, session.tenantId, txId, accountId, decAmount, currency, decAmount, `Refund: ${description}`);
+          INSERT INTO recurring_financial_rules (
+            id, tenant_id, name, rule_type, frequency, start_date, next_due_date, expected_amount, currency, account_id, to_account_id, category_id, is_active
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        `).run(
+          recId,
+          session.tenantId,
+          description.trim(),
+          recurringConfig.ruleType || (txType === 'income' ? 'income' : 'bill'),
+          recurringConfig.frequency || 'monthly',
+          txDate,
+          recurringConfig.nextDueDate || txDate,
+          decAmount,
+          currency,
+          accountId,
+          toAccountId || null,
+          categoryId || null
+        );
       }
 
       // Record audit event
@@ -155,7 +223,7 @@ export async function POST(request: Request) {
       `).run(`aud_${txId}`, session.tenantId, session.userId, txId, JSON.stringify(body));
     })();
 
-    const created = db.prepare('SELECT * FROM journal_transactions WHERE id = ?').get(txId);
+    const created = db.prepare('SELECT * FROM journal_transactions WHERE id = ? AND tenant_id = ?').get(txId, session.tenantId);
     return NextResponse.json({ transaction: created }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

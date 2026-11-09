@@ -173,15 +173,15 @@ export default function MetricDictionaryPage() {
           />
         </div>
 
-        <div className="flex items-center gap-1.5 self-end sm:self-center">
+        <div className="flex items-center gap-1 self-end sm:self-center bg-zinc-950/80 p-0.5 rounded-md border border-white/[0.08]">
           {(['All', 'Finance', 'Productivity'] as const).map(domain => (
             <button
               key={domain}
               onClick={() => setSelectedDomain(domain)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
                 selectedDomain === domain
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'
+                  ? 'bg-zinc-800 text-zinc-100'
+                  : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
               {domain}
@@ -195,25 +195,19 @@ export default function MetricDictionaryPage() {
         {filteredMetrics.map(metric => (
           <div
             key={metric.id}
-            className="p-5 bg-zinc-900 border border-zinc-800 rounded-xl space-y-4 hover:border-zinc-700 transition-colors"
+            className="p-5 bg-zinc-950/60 border border-white/[0.06] rounded-lg space-y-4 hover:border-white/[0.12] transition-colors"
           >
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-3">
-                <span className="text-base font-bold text-zinc-100">{metric.name}</span>
-                <span
-                  className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                    metric.domain === 'Finance'
-                      ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/50'
-                      : 'bg-indigo-950/60 text-indigo-400 border-indigo-800/50'
-                  }`}
-                >
+                <span className="text-sm font-semibold text-zinc-100">{metric.name}</span>
+                <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-white/[0.06]">
                   {metric.domain}
                 </span>
               </div>
 
               <button
                 onClick={() => inspectMetricInDrawer(metric)}
-                className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 font-medium self-start sm:self-center"
+                className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200 font-medium self-start sm:self-center transition-colors"
               >
                 <HelpCircle className="w-3.5 h-3.5" />
                 <span>Open in Explainer Drawer</span>

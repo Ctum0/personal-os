@@ -96,10 +96,12 @@ export default function FormulaStudioPage() {
 
         {/* Test Variables Input */}
         <div>
-          <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-1">
+          <label htmlFor="test-context-variables" className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-1">
             Test Context Variables (JSON)
           </label>
           <textarea
+            id="test-context-variables"
+            aria-label="Test Context Variables (JSON)"
             rows={4}
             value={variablesJson}
             onChange={e => setVariablesJson(e.target.value)}
