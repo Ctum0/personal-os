@@ -10,8 +10,6 @@ import {
   Terminal,
   Wifi,
   WifiOff,
-  Sun,
-  Moon,
   Folder,
   Briefcase,
   User,
@@ -43,7 +41,6 @@ export function TopNavbar() {
   const [isSpaceMenuOpen, setIsSpaceMenuOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   useEffect(() => {
     setIsMounted(true);
@@ -62,27 +59,11 @@ export function TopNavbar() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    if (document.documentElement.classList.contains('light')) {
-      setTheme('light');
-    }
-
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
-
-  const toggleTheme = () => {
-    if (theme === 'dark') {
-      setTheme('light');
-      document.documentElement.classList.remove('dark');
-      document.documentElement.classList.add('light');
-    } else {
-      setTheme('dark');
-      document.documentElement.classList.remove('light');
-      document.documentElement.classList.add('dark');
-    }
-  };
 
   const getSpaceIcon = (iconName: string) => {
     switch (iconName) {
@@ -94,7 +75,29 @@ export function TopNavbar() {
   };
 
   const currentSpace = spaces.find(s => s.id === activeSpaceId);
+  const spaceMenuRef = React.useRef<HTMLDivElement>(null);
 
+  // Close the space menu on Escape or clicks outside it
+  useEffect(() => {
+    if (!isSpaceMenuOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setIsSpaceMenuOpen(false);
+      }
+    };
+    const handleClick = (e: MouseEvent) => {
+      if (spaceMenuRef.current && !spaceMenuRef.current.contains(e.target as Node)) {
+        setIsSpaceMenuOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('mousedown', handleClick);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('mousedown', handleClick);
+    };
+  }, [isSpaceMenuOpen]);
   // Derive current section label for clean breadcrumb orientation
   const getSectionLabel = () => {
     if (pathname === '/') return 'Today';
@@ -191,10 +194,11 @@ export function TopNavbar() {
 
         {/* Space Context Selector (Contextually visible on Productivity views) */}
         {isProductivitySurface && (
-          <div className="relative hidden md:block">
+          <div ref={spaceMenuRef} className="relative hidden md:block">
             <button
               onClick={() => setIsSpaceMenuOpen(!isSpaceMenuOpen)}
               aria-expanded={isSpaceMenuOpen}
+              aria-haspopup="menu"
               className="flex items-center gap-2 px-2.5 py-1 text-xs text-zinc-300 bg-zinc-900/60 hover:bg-zinc-850 border border-zinc-800/80 rounded-md transition-colors"
             >
               <span className="text-zinc-500 text-[11px]">Space:</span>
@@ -205,7 +209,7 @@ export function TopNavbar() {
             </button>
 
             {isSpaceMenuOpen && (
-              <div className="absolute left-0 mt-1.5 w-44 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl py-1 z-50">
+              <div role="menu" aria-label="Select space" className="absolute left-0 mt-1.5 w-44 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl py-1 z-50">
                 <button
                   onClick={() => {
                     setActiveSpaceId('all');
@@ -216,6 +220,7 @@ export function TopNavbar() {
                       ? 'bg-zinc-800 text-white font-medium'
                       : 'text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200'
                   }`}
+                  role="menuitem"
                 >
                   <Folder className="w-3.5 h-3.5 text-zinc-400" />
                   <span>All Spaces</span>
@@ -232,6 +237,7 @@ export function TopNavbar() {
                         ? 'bg-zinc-800 text-white font-medium'
                         : 'text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200'
                     }`}
+                      role="menuitem"
                   >
                     <span style={{ color: s.color }}>{getSpaceIcon(s.icon)}</span>
                     <span>{s.name}</span>
@@ -313,15 +319,6 @@ export function TopNavbar() {
           )}
           {offlinePendingCount > 0 && <span className="text-[10px] tabular-nums">{offlinePendingCount}</span>}
         </div>
-
-        {/* Theme Toggle */}
-        <button
-          onClick={toggleTheme}
-          className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850 rounded-lg transition-colors"
-          aria-label="Toggle color theme"
-        >
-          {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-        </button>
 
         {/* User profile avatar */}
         <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-semibold text-zinc-300 ml-0.5">

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useWorkspace } from '../layout/WorkspaceContext';
 import { todayISO } from "@/lib/time";
 import {
@@ -17,6 +18,8 @@ import {
 
 export function QuickAddModal() {
   const { isQuickAddOpen, setIsQuickAddOpen, workspace, activeSpaceId } = useWorkspace();
+  const router = useRouter();
+  const dialogRef = React.useRef<HTMLDivElement>(null);
 
   // Type default based on workspace
   const [activeType, setActiveType] = useState<string>(
@@ -37,13 +40,34 @@ export function QuickAddModal() {
   // Escape key handler
   React.useEffect(() => {
     if (!isQuickAddOpen) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        e.stopPropagation();
         setIsQuickAddOpen(false);
+      }
+      // Basic focus trap: cycle Tab within the dialog
+      if (e.key === 'Tab' && dialogRef.current) {
+        const focusables = dialogRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        } else if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      previouslyFocused?.focus?.();
+    };
   }, [isQuickAddOpen, setIsQuickAddOpen]);
 
   if (!isQuickAddOpen) return null;
@@ -127,12 +151,9 @@ export function QuickAddModal() {
         if (!res.ok) throw new Error('Failed to create habit');
       }
 
-      // Reset and close
-      setTitle('');
-      setDescription('');
-      setAmount('');
+      // Refresh active view's data without a hard reload (preserves client state)
+      router.refresh();
       setIsQuickAddOpen(false);
-      window.location.reload(); // Refresh active view
     } catch (err: any) {
       setMessage(err.message || 'Operation failed');
     } finally {
@@ -151,7 +172,13 @@ export function QuickAddModal() {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Universal Quick Add"
+        className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800">
           <div className="flex items-center gap-2">
@@ -222,7 +249,6 @@ export function QuickAddModal() {
                 >
                   <option value="expense">Expense</option>
                   <option value="income">Income</option>
-                  <option value="transfer">Transfer</option>
                   <option value="refund">Refund</option>
                 </select>
               </div>

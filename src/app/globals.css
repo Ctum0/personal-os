@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* Design system token: zinc-850 sits between zinc-800 and zinc-900.
+   Used app-wide for hover/active fills; undefined in the default Tailwind
+   zinc scale, so it is declared here explicitly (CSS-first theme). */
+@theme {
+  --color-zinc-850: #1f1f22;
+}
+
 :root {
   --background: #090a0b;
   --foreground: #ededef;
