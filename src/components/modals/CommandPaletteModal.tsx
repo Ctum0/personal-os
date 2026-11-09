@@ -176,7 +176,12 @@ export function CommandPaletteModal() {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start justify-center pt-20 p-4">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-full max-w-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
+        className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-full max-w-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100"
+      >
         {/* Search Input Bar */}
         <div className="flex items-center px-4 py-3 border-b border-zinc-800 gap-3">
           <Search className="w-4 h-4 text-zinc-400 shrink-0" />

@@ -49,3 +49,19 @@ body {
   outline: 2px solid #e4e4e7;
   outline-offset: 2px;
 }
+
+/* Muted-text contrast floor (unlayered, so it beats the layered utilities).
+   zinc-500 (#71717a) measured ~2.6:1 on card backgrounds in the final audit and
+   was the single largest source of axe color-contrast violations; zinc-600
+   measured ~1.8:1. These brighter equivalents keep the restrained palette and
+   pass WCAG AA against the dark background tokens. */
+.text-zinc-500 {
+  color: #8b8d94;
+}
+.text-zinc-600 {
+  color: #7a7c83;
+}
+::placeholder {
+  color: #8b8d94;
+  opacity: 1;
+}
