@@ -501,7 +501,8 @@ export default function ProductivityExecutionDashboard() {
                     <div className="flex items-center gap-2.5 min-w-0">
                       <button
                         onClick={() => toggleTask(task.id, task.status)}
-                        className="text-zinc-500 hover:text-emerald-400 transition-colors shrink-0"
+                        className="text-zinc-500 hover:text-emerald-400 transition-colors shrink-0 p-2 -m-2"
+                        aria-label={`Mark "${task.title}" complete`}
                       >
                         <Circle className="w-4 h-4 text-zinc-500" />
                       </button>
@@ -552,7 +553,20 @@ export default function ProductivityExecutionDashboard() {
                 <div
                   key={habit.id}
                   onClick={() => logHabit(habit.id, habit.isCompletedToday)}
-                  className="p-2.5 bg-zinc-900/60 border border-white/[0.04] rounded-md flex items-center justify-between text-xs cursor-pointer hover:border-white/[0.08] transition-colors"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={
+                    habit.isCompletedToday
+                      ? `${habit.title} — habit completed today`
+                      : `${habit.title} — mark habit as done today`
+                  }
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      logHabit(habit.id, habit.isCompletedToday);
+                    }
+                  }}
+                  className="p-2.5 bg-zinc-900/60 border border-white/[0.04] rounded-md flex items-center justify-between text-xs cursor-pointer hover:border-white/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-zinc-300 transition-colors"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     {habit.isCompletedToday ? (

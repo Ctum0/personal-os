@@ -255,7 +255,7 @@ export function TopNavbar() {
         <button
           onClick={() => setIsCommandPaletteOpen(true)}
           className="hidden xl:flex items-center gap-2 px-3 py-2 bg-zinc-900/80 hover:bg-zinc-850 border border-zinc-800/80 rounded-lg text-xs text-zinc-400 transition-colors w-40 lg:w-48 justify-between"
-          aria-label="Open command palette"
+          aria-label="Search system — open command palette"
         >
           <div className="flex items-center gap-1.5 truncate">
             <Search className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
@@ -270,7 +270,7 @@ export function TopNavbar() {
         <button
           onClick={() => setIsQuickAddOpen(true)}
           className="flex items-center gap-1.5 px-3.5 py-2 bg-zinc-100 hover:bg-white text-zinc-950 rounded-lg text-xs font-semibold shadow-xs transition-all active:scale-98"
-          aria-label="Universal quick add"
+          aria-label="Quick Add (⌘N)"
         >
           <Plus className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">Quick Add</span>

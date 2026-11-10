@@ -66,7 +66,14 @@ export function QuickAddModal() {
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      previouslyFocused?.focus?.();
+      // Restore focus to the trigger. The trigger node may have been replaced by
+      // router.refresh() re-rendering the page after a successful create, so
+      // fall back to the stable header trigger if the snapshot is detached.
+      if (previouslyFocused?.isConnected) {
+        previouslyFocused.focus();
+      } else {
+        document.querySelector<HTMLElement>('[aria-label="Quick Add (⌘N)"]')?.focus();
+      }
     };
   }, [isQuickAddOpen, setIsQuickAddOpen]);
 
