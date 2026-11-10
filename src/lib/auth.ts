@@ -66,7 +66,7 @@ export function getCurrentSession(): UserSession {
 }
 
 /**
- * @deprecated Prefer the middleware gate: `src/middleware.ts` +
+ * @deprecated Prefer the middleware gate: `src/proxy.ts` (Next 16 proxy
  * `gateRequest()` in `@/lib/api/gate`. This function was previously dead code —
  * no route called it — which is why the middleware approach landed. Kept for
  * route-level defense in depth only; it performs no constant-time comparison.

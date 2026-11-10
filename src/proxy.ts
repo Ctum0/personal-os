@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { gateRequest } from "@/lib/api/gate";
 
 /**
- * Global API gate middleware.
+ * Global API gate (Next 16 `proxy` convention — replaces deprecated `middleware`).
  *
  * Enforced on every /api/* route. When PERSONAL_OS_PIN is set in the
  * environment, unauthenticated requests receive 401 with the session unlock
@@ -10,11 +10,11 @@ import { gateRequest } from "@/lib/api/gate";
  * workstation mode) but still get an x-request-id for log correlation.
  *
  * Note: security checks must ALSO tolerate direct route hits bypassing
- * middleware in exotic runtimes — the /api/auth/session route validates its
+ * proxy in exotic runtimes — the /api/auth/session route validates its
  * own pin input server-side, and validateApiRequest remains available for
  * route-level defense in depth.
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const result = await gateRequest(request as unknown as { headers: { get(name: string): string | null } }, pathname);
 
