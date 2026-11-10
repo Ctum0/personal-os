@@ -161,19 +161,21 @@ export default function TasksPage() {
           <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 flex items-center">
             <button
               onClick={() => setViewMode('list')}
-              className={`p-1.5 rounded-md text-xs font-medium transition-colors ${
+              className={`p-2 rounded-md text-xs font-medium transition-colors ${
                 viewMode === 'list' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200'
               }`}
               title="List View"
+              aria-label="Switch to list view"
             >
               <List className="w-4 h-4" />
             </button>
             <button
               onClick={() => setViewMode('kanban')}
-              className={`p-1.5 rounded-md text-xs font-medium transition-colors ${
+              className={`p-2 rounded-md text-xs font-medium transition-colors ${
                 viewMode === 'kanban' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200'
               }`}
               title="Kanban Board View"
+              aria-label="Switch to kanban board view"
             >
               <Columns3 className="w-4 h-4" />
             </button>
@@ -194,7 +196,7 @@ export default function TasksPage() {
       <div className="flex items-center gap-2 border-b border-white/[0.06] pb-2 text-xs font-medium">
         <button
           onClick={() => setCategoryTab('all')}
-          className={`px-3 py-1.5 rounded-lg transition-colors ${
+          className={`px-3 py-2.5 rounded-lg transition-colors ${
             categoryTab === 'all'
               ? 'bg-zinc-800 text-zinc-100 border border-white/[0.08]'
               : 'text-zinc-400 hover:text-zinc-200'
@@ -204,7 +206,7 @@ export default function TasksPage() {
         </button>
         <button
           onClick={() => setCategoryTab('scheduled')}
-          className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
+          className={`px-3 py-2.5 rounded-lg transition-colors flex items-center gap-1.5 ${
             categoryTab === 'scheduled'
               ? 'bg-zinc-800 text-zinc-100 border border-white/[0.08]'
               : 'text-zinc-400 hover:text-zinc-200'
@@ -215,7 +217,7 @@ export default function TasksPage() {
         </button>
         <button
           onClick={() => setCategoryTab('backlog')}
-          className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
+          className={`px-3 py-2.5 rounded-lg transition-colors flex items-center gap-1.5 ${
             categoryTab === 'backlog'
               ? 'bg-zinc-800 text-zinc-100 border border-white/[0.08]'
               : 'text-zinc-400 hover:text-zinc-200'
@@ -226,7 +228,7 @@ export default function TasksPage() {
         </button>
         <button
           onClick={() => setCategoryTab('completed')}
-          className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
+          className={`px-3 py-2.5 rounded-lg transition-colors flex items-center gap-1.5 ${
             categoryTab === 'completed'
               ? 'bg-zinc-800 text-zinc-100 border border-white/[0.08]'
               : 'text-zinc-400 hover:text-zinc-200'
@@ -245,7 +247,7 @@ export default function TasksPage() {
             value={inlineTitle}
             onChange={e => setInlineTitle(e.target.value)}
             placeholder="+ Quick capture task (press Enter to save)..."
-            className="flex-1 w-full px-3.5 py-1.5 bg-zinc-900/80 border border-white/[0.08] rounded-lg text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-400 transition-colors"
+            className="flex-1 w-full px-3.5 py-2 bg-zinc-900/80 border border-white/[0.08] rounded-lg text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-400 transition-colors"
           />
 
           <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
@@ -253,7 +255,7 @@ export default function TasksPage() {
               value={inlinePriority}
               onChange={e => setInlinePriority(e.target.value)}
               aria-label="Set priority for new task"
-              className="bg-zinc-900 border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-zinc-400"
+              className="bg-zinc-900 border border-white/[0.08] rounded-lg px-2.5 py-2 text-xs text-zinc-300 focus:outline-none focus:border-zinc-400"
             >
               <option value="urgent">Urgent</option>
               <option value="high">High</option>
@@ -266,7 +268,7 @@ export default function TasksPage() {
               value={inlineDueDate}
               onChange={e => setInlineDueDate(e.target.value)}
               aria-label="Set due date for new task"
-              className="bg-zinc-900 border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-zinc-400"
+              className="bg-zinc-900 border border-white/[0.08] rounded-lg px-2 py-[9px] text-xs text-zinc-300 focus:outline-none focus:border-zinc-400"
             />
 
             <Button type="submit" size="sm" variant="outline" disabled={!inlineTitle.trim()}>
@@ -288,7 +290,7 @@ export default function TasksPage() {
               value={projectFilter}
               onChange={e => setProjectFilter(e.target.value)}
               aria-label="Filter by project"
-              className="bg-zinc-900 border border-white/[0.08] rounded-md px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-zinc-400"
+              className="bg-zinc-900 border border-white/[0.08] rounded-md px-2 py-2 text-xs text-zinc-300 focus:outline-none focus:border-zinc-400"
             >
               <option value="all">All Projects</option>
               {projects.map(p => (
@@ -303,7 +305,7 @@ export default function TasksPage() {
               value={priorityFilter}
               onChange={e => setPriorityFilter(e.target.value)}
               aria-label="Filter by priority"
-              className="bg-zinc-900 border border-white/[0.08] rounded-md px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-zinc-400"
+              className="bg-zinc-900 border border-white/[0.08] rounded-md px-2 py-2 text-xs text-zinc-300 focus:outline-none focus:border-zinc-400"
             >
               <option value="all">All Priorities</option>
               <option value="urgent">Urgent</option>
@@ -314,13 +316,13 @@ export default function TasksPage() {
           </div>
 
           <div className="relative">
-            <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-2" />
+            <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-2.5" />
             <input
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search tasks..."
-              className="pl-8 pr-3 py-1 bg-zinc-900/60 border border-white/[0.08] rounded-md text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-400 w-44"
+              className="pl-8 pr-3 py-2 bg-zinc-900/60 border border-white/[0.08] rounded-md text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-400 w-44"
             />
           </div>
         </div>
@@ -345,7 +347,7 @@ export default function TasksPage() {
                     <div className="flex items-center gap-3 min-w-0 pr-4">
                       <button
                         onClick={() => toggleTaskStatus(task.id, task.status)}
-                        className="text-zinc-600 hover:text-emerald-400 transition-colors shrink-0"
+                        className="p-2 -m-2 text-zinc-600 hover:text-emerald-400 transition-colors shrink-0"
                         aria-label={`Toggle task ${task.title}`}
                       >
                         {isDone ? (
@@ -405,10 +407,11 @@ export default function TasksPage() {
 
                       <button
                         onClick={() => deleteTask(task.id)}
-                        className="opacity-0 group-hover:opacity-100 p-1 hover:text-rose-400 text-zinc-500 transition-opacity"
+                        className="opacity-60 max-sm:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-2 -m-2 hover:text-rose-400 text-zinc-500 transition-opacity"
                         title="Archive task"
+                        aria-label={`Archive task ${task.title}`}
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
@@ -448,12 +451,13 @@ export default function TasksPage() {
                         <span className="font-medium text-zinc-200 leading-snug">{t.title}</span>
                         <button
                           onClick={() => toggleTaskStatus(t.id, t.status)}
-                          className="shrink-0 text-zinc-600 hover:text-emerald-400"
+                          className="shrink-0 p-2 -m-2 text-zinc-600 hover:text-emerald-400"
+                          aria-label={t.status === 'completed' ? `Reopen task ${t.title}` : `Mark task ${t.title} as done`}
                         >
-                          <Circle className="w-3.5 h-3.5" />
+                          <Circle className="w-4 h-4" />
                         </button>
                       </div>
-                      <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-mono">
+                      <div className="flex items-center gap-2 text-[11px] text-zinc-500 font-mono">
                         {t.due_date && <span>Due: {t.due_date}</span>}
                         {t.project_name && <span>• {t.project_name}</span>}
                       </div>

@@ -543,10 +543,16 @@ export default function CalendarPage() {
     return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
   }, [calendarView, weekDays, selectedDate]);
 
-  // Agenda events filtered & sorted chronologically
+  // Agenda events: today + upcoming only, sorted chronologically (past events are history, not agenda)
   const sortedAgendaEvents = useMemo(() => {
-    return [...events].sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
-  }, [events]);
+    return [...events]
+      .filter(ev => ev.end_time.split('T')[0] >= todayStr)
+      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+  }, [events, todayStr]);
+  const pastEventsHidden = useMemo(
+    () => [...events].filter(ev => ev.end_time.split('T')[0] < todayStr).length,
+    [events, todayStr]
+  );
 
   return (
     <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -1406,6 +1412,11 @@ export default function CalendarPage() {
             <div>
               <span className="text-xs uppercase tracking-wider font-semibold text-zinc-400">Chronological Agenda</span>
               <h3 className="text-sm font-bold text-zinc-100">Scheduled Priorities & Time Reservations</h3>
+              {pastEventsHidden > 0 && (
+                <span className="text-[10px] font-mono text-zinc-500 mt-0.5 block">
+                  {pastEventsHidden} past {pastEventsHidden === 1 ? 'event' : 'events'} hidden (showing today & upcoming)
+                </span>
+              )}
             </div>
             <button
               onClick={() => {

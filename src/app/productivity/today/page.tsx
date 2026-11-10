@@ -337,7 +337,7 @@ export default function ProductivityTodayPage() {
           </div>
 
           {/* 1-Click Action Buttons */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex flex-wrap items-center gap-2.5 justify-start md:justify-end md:shrink-0">
             {immediateNextTask ? (
               <>
                 <Link
@@ -409,7 +409,7 @@ export default function ProductivityTodayPage() {
           <div className="divide-y divide-white/[0.04]">
             {missedTasks.slice(0, 4).map(missed => (
               <div key={missed.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                <div>
+                <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-zinc-200">{missed.title}</span>
                     <span className="text-[10px] font-mono text-amber-400/90 bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/20">
@@ -422,7 +422,7 @@ export default function ProductivityTodayPage() {
                 </div>
 
                 {/* 1-Click Action Tray */}
-                <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex flex-wrap items-center gap-1.5 justify-start sm:justify-end sm:shrink-0">
                   <button
                     onClick={() => handleReschedule(missed.id, 'rescheduled', today)}
                     className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 rounded text-[11px] font-mono border border-white/[0.06] transition-colors"
@@ -570,7 +570,8 @@ export default function ProductivityTodayPage() {
                       <div className="flex items-center gap-2.5 min-w-0 pr-2">
                         <button
                           onClick={() => toggleTask(t.id, t.status)}
-                          className="shrink-0 text-zinc-600 hover:text-emerald-400 transition-colors"
+                          className="shrink-0 p-2 -m-2 text-zinc-600 hover:text-emerald-400 transition-colors"
+                          aria-label={isDone ? `Mark task ${t.title} as not done` : `Mark task ${t.title} as done`}
                         >
                           {isDone ? (
                             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
@@ -618,7 +619,8 @@ export default function ProductivityTodayPage() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => toggleHabit(h.id, h.isCompletedToday)}
-                        className="text-zinc-500 hover:text-emerald-400 transition-colors"
+                        className="shrink-0 p-2 -m-2 text-zinc-500 hover:text-emerald-400 transition-colors"
+                        aria-label={h.isCompletedToday ? `Mark habit ${h.title} as not done today` : `Mark habit ${h.title} as done today`}
                       >
                         {h.isCompletedToday ? (
                           <CheckCircle2 className="w-4 h-4 text-emerald-400" />
@@ -630,10 +632,10 @@ export default function ProductivityTodayPage() {
                         {h.title}
                       </span>
                     </div>
-                    {h.currentStreak > 0 && (
+                    {(h.streak ?? h.currentStreak ?? 0) > 0 && (
                       <span className="text-[10px] font-mono text-amber-400 flex items-center gap-1">
                         <Flame className="w-3 h-3 fill-amber-400" />
-                        {h.currentStreak}d
+                        {h.streak ?? h.currentStreak ?? 0}d
                       </span>
                     )}
                   </div>

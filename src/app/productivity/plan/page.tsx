@@ -533,14 +533,14 @@ export default function PlanMyDayPage() {
                   </div>
                 </div>
 
-                <div className="pt-1 flex items-center justify-between">
-                  <p className="text-[11px] text-zinc-400">
+                <div className="pt-1 flex items-center justify-between gap-3">
+                  <p className="text-[11px] text-zinc-400 min-w-0">
                     Ready to schedule. You can chat on the left or auto-build a schedule from your top open tasks.
                   </p>
                   <button
                     onClick={handleAutoDraftFromOpenTasks}
                     disabled={isProcessing}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 hover:bg-white text-zinc-950 rounded text-xs font-medium transition-colors shadow-xs disabled:opacity-40"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 hover:bg-white text-zinc-950 rounded text-xs font-medium transition-colors shadow-xs disabled:opacity-40 shrink-0 whitespace-nowrap"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
                     <span>Auto-Draft Day</span>
@@ -877,7 +877,7 @@ export default function PlanMyDayPage() {
                       <span>Daily plan committed successfully! All time blocks scheduled.</span>
                     </div>
                     <Link
-                      href="/"
+                      href="/productivity/today"
                       className="px-3 py-1 bg-zinc-100 hover:bg-white text-zinc-950 rounded text-xs font-medium transition-colors"
                     >
                       Open Today Cockpit →

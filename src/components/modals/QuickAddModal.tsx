@@ -153,6 +153,7 @@ export function QuickAddModal() {
 
       // Refresh active view's data without a hard reload (preserves client state)
       router.refresh();
+      window.dispatchEvent(new Event('personal-os:data-changed'));
       setIsQuickAddOpen(false);
     } catch (err: any) {
       setMessage(err.message || 'Operation failed');

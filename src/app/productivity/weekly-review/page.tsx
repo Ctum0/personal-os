@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
-import { todayISO } from "@/lib/time";
+import { todayISO, addDaysISO } from "@/lib/time";
 import {
   CalendarCheck,
   CheckCircle2,
@@ -105,10 +105,26 @@ export default function WeeklyReviewPage() {
     loadData();
   }, [activeSpaceId]);
 
-  const completedTasks = tasks.filter(t => t.status === 'completed');
+  // 7-day rolling review window (matches the explainer's "Active 7-day rolling evaluation window")
+  const [windowStart, setWindowStart] = useState('');
+
+  useEffect(() => {
+    setWindowStart(addDaysISO(todayISO(), -7));
+  }, []);
+
+  const completedTasks = tasks.filter(t =>
+    t.status === 'completed' &&
+    (!windowStart || (t.completion_at && t.completion_at.slice(0, 10) >= windowStart) || t.due_date >= windowStart)
+  );
   const openTasks = tasks.filter(t => t.status !== 'completed');
   const blockedProjects = projects.filter(p => p.status === 'paused' || p.status === 'active');
-  const upcomingDeadlines = openTasks.filter(t => t.due_date);
+  const upcomingDeadlines = useMemo(() => {
+    const today = todayISO();
+    const in7Days = addDaysISO(today, 7);
+    return openTasks
+      .filter(t => t.due_date && t.due_date >= today && t.due_date <= in7Days)
+      .sort((a, b) => a.due_date.localeCompare(b.due_date));
+  }, [openTasks]);
 
   const handleSaveReview = async () => {
     setIsSaving(true);
@@ -264,6 +280,7 @@ export default function WeeklyReviewPage() {
               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
               <span>1. Verified Completed Tasks ({completedTasks.length})</span>
             </h2>
+            <span className="text-[11px] font-mono text-zinc-500">last 7 days window</span>
           </div>
           <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
             {completedTasks.length === 0 ? (
@@ -272,7 +289,9 @@ export default function WeeklyReviewPage() {
               completedTasks.slice(0, 10).map(t => (
                 <div key={t.id} className="p-2.5 bg-zinc-950/60 border border-zinc-800/80 rounded-lg flex items-center justify-between text-xs">
                   <span className="text-zinc-300 font-medium">{t.title}</span>
-                  <span className="text-[10px] text-zinc-500 font-mono">Done</span>
+                  <span className="text-[10px] text-zinc-500 font-mono">
+                    {t.completion_at ? `Done ${t.completion_at.slice(0, 10)}` : 'Done'}
+                  </span>
                 </div>
               ))
             )}
@@ -296,7 +315,7 @@ export default function WeeklyReviewPage() {
                   <span className="text-zinc-300 font-medium">{h.title}</span>
                   <span className="text-xs font-mono text-amber-400 flex items-center gap-1">
                     <Flame className="w-3 h-3 fill-amber-400" />
-                    {h.currentStreak || 0}d streak
+                    {(h.streak ?? h.currentStreak ?? 0)}d streak
                   </span>
                 </div>
               ))

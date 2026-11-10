@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import { todayISO } from '@/lib/time';
 import {
   Clock,
   Play,
@@ -45,7 +46,15 @@ export default function FocusTimerPage() {
       .then(r => r.json())
       .then(data => {
         if (data.sessions) {
-          setCompletedSessions(data.sessions.map((s: any) => ({
+          // Heading says "Today's Completed Sessions" — filter out older days client-side
+          // (GET /api/focus returns the 20 most recent sessions of all time; backend
+          // date filtering is pending — see agent1 findings section B).
+          const today = todayISO();
+          const todaySessions = data.sessions.filter((s: any) => {
+            const created = s.created_at || s.started_at || '';
+            return created.slice(0, 10) === today;
+          });
+          setCompletedSessions(todaySessions.map((s: any) => ({
             id: s.id,
             title: s.notes || s.task_title || 'Deep Work Session',
             duration: s.actual_duration || s.planned_duration,
@@ -210,10 +219,11 @@ export default function FocusTimerPage() {
   }, [isRunning, secondsRemaining, sessionDurationMinutes, sessionNotes, interruptionsCount, sessionStartTime]);
 
   const setDuration = async (mins: number) => {
-    // If running with >= 1 minute elapsed, save interrupted session
+    // If >= 1 minute has elapsed (running OR paused), record the partial session
+    // so the time isn't silently discarded when the preset changes.
     const elapsedSec = (sessionDurationMinutes * 60) - secondsRemaining;
     const elapsedMins = Math.floor(elapsedSec / 60);
-    if (isRunning && elapsedMins >= 1) {
+    if (elapsedMins >= 1) {
       await saveSessionToDb(
         sessionDurationMinutes,
         elapsedMins,
