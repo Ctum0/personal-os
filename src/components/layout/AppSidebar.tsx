@@ -328,7 +328,7 @@ export function AppSidebar() {
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/80"></span>
         Personal OS
       </span>
-      <span className="text-[10px] text-zinc-600 font-mono">Local Active</span>
+      <span className="text-[10px] text-zinc-600 font-mono uppercase tracking-wider">Local Active</span>
     </div>
   );
 

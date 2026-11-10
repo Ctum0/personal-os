@@ -128,7 +128,7 @@ export function TopNavbar() {
         {/* Mobile menu trigger */}
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="lg:hidden p-1.5 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-850 transition-colors"
+          className="lg:hidden p-2 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-850 transition-colors -m-0.5"
           aria-label="Toggle navigation menu"
           aria-expanded={isMobileMenuOpen}
         >
@@ -160,7 +160,7 @@ export function TopNavbar() {
         </Link>
 
         {/* Subtle Breadcrumb Divider & Section Name */}
-        <div className="hidden sm:flex items-center gap-2 text-xs text-zinc-500 font-medium pl-2 border-l border-zinc-800">
+        <div className="hidden lg:flex items-center gap-2 text-xs text-zinc-500 font-medium pl-2 border-l border-zinc-800 min-w-0">
           <span className="text-zinc-300">{getSectionLabel()}</span>
         </div>
 
@@ -254,7 +254,7 @@ export function TopNavbar() {
         {/* Command Palette Button */}
         <button
           onClick={() => setIsCommandPaletteOpen(true)}
-          className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-zinc-900/80 hover:bg-zinc-850 border border-zinc-800/80 rounded-lg text-xs text-zinc-400 transition-colors w-40 lg:w-48 justify-between"
+          className="hidden xl:flex items-center gap-2 px-3 py-2 bg-zinc-900/80 hover:bg-zinc-850 border border-zinc-800/80 rounded-lg text-xs text-zinc-400 transition-colors w-40 lg:w-48 justify-between"
           aria-label="Open command palette"
         >
           <div className="flex items-center gap-1.5 truncate">
@@ -269,12 +269,12 @@ export function TopNavbar() {
         {/* Universal Quick Add Button */}
         <button
           onClick={() => setIsQuickAddOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 hover:bg-white text-zinc-950 rounded-lg text-xs font-semibold shadow-xs transition-all active:scale-98"
+          className="flex items-center gap-1.5 px-3.5 py-2 bg-zinc-100 hover:bg-white text-zinc-950 rounded-lg text-xs font-semibold shadow-xs transition-all active:scale-98"
           aria-label="Universal quick add"
         >
           <Plus className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">Quick Add</span>
-          <kbd className="hidden sm:inline px-1 py-0.5 text-[9px] bg-zinc-200 text-zinc-800 rounded font-mono">
+          <kbd className="hidden sm:inline px-1 py-0.5 text-[10px] bg-zinc-200 text-zinc-800 rounded font-mono">
             ⌘N
           </kbd>
         </button>
@@ -282,19 +282,30 @@ export function TopNavbar() {
         {/* Assistant Console Drawer Trigger */}
         <button
           onClick={() => setIsAiDrawerOpen(!isAiDrawerOpen)}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 border rounded-lg text-xs font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
             isAiDrawerOpen
               ? 'bg-zinc-800 border-zinc-600 text-zinc-100'
-              : 'bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200'
+              : 'bg-zinc-900/80 border border-zinc-800 text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200'
           }`}
           aria-label="Open Assistant Console"
+          aria-pressed={isAiDrawerOpen}
         >
           <Terminal className="w-3.5 h-3.5 text-zinc-300" />
-          <span className="hidden md:inline">Console</span>
+          <span className="hidden lg:inline">Console</span>
         </button>
 
         {/* Sync / Network status indicator */}
         <div
+          role="status"
+          aria-label={
+            !isMounted
+              ? 'Connecting'
+              : isOnline
+              ? offlinePendingCount > 0
+                ? `${offlinePendingCount} pending offline sync mutations`
+                : 'Connected and synced'
+              : 'Offline, local storage active'
+          }
           className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-mono transition-colors ${
             !isMounted || (isOnline && offlinePendingCount === 0)
               ? 'text-zinc-500 hover:text-zinc-300'
