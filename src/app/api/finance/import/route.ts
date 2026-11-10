@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { previewCsvImport, commitCsvImport, reverseImportBatch } from '@/lib/finance/csv-import';
+import { readJson } from '@/lib/db/validate';
 
 export async function GET() {
   try {
@@ -26,7 +27,11 @@ export async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     const { action, accountId, fileName, csvText, customMapping, fileHash, rows, skipDuplicates } = body;
 

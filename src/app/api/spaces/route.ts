@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
+import { readJson } from '@/lib/db/validate';
 
 export async function GET() {
   try {
@@ -23,7 +24,11 @@ export async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     if (!body.name || !body.name.trim()) {
       return NextResponse.json({ error: 'Space name is required' }, { status: 400 });

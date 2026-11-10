@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
+import { taskVisibleClause, isOperationallyVisibleTask } from '@/lib/db/visibility';
+import {matchesEnum, isISODateString, referenceExists, readJson } from "@/lib/db/validate";
 
 export async function GET(request: Request) {
   try {
@@ -11,6 +13,9 @@ export async function GET(request: Request) {
     const status = searchParams.get('status');
     const priority = searchParams.get('priority');
     const search = searchParams.get('search');
+    // Quarantine visibility policy: quarantined records are excluded from all
+    // operational listings unless explicitly requested (administrative recovery).
+    const includeQuarantined = searchParams.get('includeQuarantined') === '1';
 
     let query = `
       SELECT t.*, p.name as project_name, p.color as project_color, s.name as space_name
@@ -18,6 +23,7 @@ export async function GET(request: Request) {
       LEFT JOIN projects p ON t.project_id = p.id
       LEFT JOIN spaces s ON t.space_id = s.id
       WHERE t.tenant_id = ? AND t.is_deleted = 0
+        ${includeQuarantined ? '' : `AND ${taskVisibleClause('t')}`}
     `;
     const params: any[] = [session.tenantId];
 
@@ -62,7 +68,11 @@ export async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     if (!body.title || typeof body.title !== 'string' || !body.title.trim()) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
@@ -80,8 +90,20 @@ export async function POST(request: Request) {
     if (body.estimatedDuration !== undefined && (typeof body.estimatedDuration !== 'number' || body.estimatedDuration < 0 || isNaN(body.estimatedDuration))) {
       return NextResponse.json({ error: 'estimatedDuration must be a non-negative number' }, { status: 400 });
     }
-    if (body.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(body.dueDate)) {
+    if (body.dueDate && !isISODateString(body.dueDate)) {
       return NextResponse.json({ error: 'dueDate must be in YYYY-MM-DD format' }, { status: 400 });
+    }
+
+    // Space / project / goal isolation: references must exist within the tenant,
+    // otherwise a record from another space or tenant could be attached by id.
+    if (body.spaceId !== undefined && body.spaceId !== null && body.spaceId !== '' && !referenceExists(db, session.tenantId, 'spaces', body.spaceId)) {
+      return NextResponse.json({ error: 'Space not found' }, { status: 404 });
+    }
+    if (!referenceExists(db, session.tenantId, 'projects', body.projectId)) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
+    if (!referenceExists(db, session.tenantId, 'goals', body.goalId)) {
+      return NextResponse.json({ error: 'Goal not found' }, { status: 404 });
     }
 
     const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
@@ -125,7 +147,11 @@ export async function PUT(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     if (!body.id) {
       return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
@@ -136,7 +162,10 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
 
-    const validStatuses = ['inbox', 'next', 'todo', 'in_progress', 'done', 'completed', 'blocked', 'cancelled', 'waiting'];
+    // 'quarantined' is accepted ONLY on update, to enable administrative
+    // reclassification of records (in and out of quarantine). POST deliberately
+    // refuses to create records classified as quarantined.
+    const validStatuses = ['inbox', 'next', 'todo', 'in_progress', 'done', 'completed', 'blocked', 'cancelled', 'waiting', 'quarantined'];
     const validPriorities = ['urgent', 'high', 'normal', 'low', 'critical', 'optional'];
 
     if (body.status && !validStatuses.includes(body.status)) {
@@ -151,8 +180,16 @@ export async function PUT(request: Request) {
     if (body.actualDuration !== undefined && (typeof body.actualDuration !== 'number' || body.actualDuration < 0 || isNaN(body.actualDuration))) {
       return NextResponse.json({ error: 'actualDuration must be a non-negative number' }, { status: 400 });
     }
-    if (body.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(body.dueDate)) {
+    if (body.dueDate !== undefined && body.dueDate !== null && body.dueDate !== '' && !isISODateString(body.dueDate)) {
       return NextResponse.json({ error: 'dueDate must be in YYYY-MM-DD format' }, { status: 400 });
+    }
+
+    // Space isolation: moved task must land in a space of the same tenant.
+    if (body.spaceId !== undefined && body.spaceId !== null && body.spaceId !== '' && !referenceExists(db, session.tenantId, 'spaces', body.spaceId)) {
+      return NextResponse.json({ error: 'Space not found' }, { status: 404 });
+    }
+    if (body.projectId !== undefined && body.projectId !== null && !referenceExists(db, session.tenantId, 'projects', body.projectId)) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
 
     let completionAt = existing.completion_at;

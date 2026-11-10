@@ -80,6 +80,12 @@ export interface BudgetCalculationResult {
   currency: string;
   periodStart: string;
   periodEnd: string;
+  /** Read-time projection: persisted row stays authoritative. */
+  persistedPeriodStart: string;
+  persistedPeriodEnd: string;
+  /** True when the auto-selected monthly budget's ended period was projected into the current month. */
+  periodRolledForward: boolean;
+  periodType: string;
   rolloverMode: string;
   totalAllocated: string;
   totalSpent: string;
@@ -97,6 +103,10 @@ export interface SafeToSpendResult {
   currency: string;
   liquidFunds: string;
   upcomingObligations: string;
+  /** Amount of recurring obligations whose persisted next_due_date is already past — reserved immediately. */
+  overdueObligations: string;
+  overdueObligationsCount: number;
+  upcomingObligationsCount: number;
   earmarkedSavings: string;
   safetyBuffer: string;
   daysHorizon: number;
@@ -346,8 +356,11 @@ export function calculateIncomeAndExpenses(
 
   const totalExpenseDec = rawExpenseDec.minus(totalRefunds);
   const netSavingsDec = totalIncomeDec.minus(totalExpenseDec);
+  // Savings rate is clamped to 0–100%: a refund-heavy period can otherwise exceed
+  // 100% and a zero-income period would divide by zero. Both are meaningless as a
+  // rate; the absolute figures above carry the truth.
   const savingsRate = totalIncomeDec.greaterThan(0)
-    ? netSavingsDec.dividedBy(totalIncomeDec).times(100).toFixed(1)
+    ? Decimal.min(100, Decimal.max(0, netSavingsDec.dividedBy(totalIncomeDec).times(100))).toFixed(1)
     : '0.0';
 
   // Calculate percentages
@@ -414,6 +427,26 @@ export function calculateBudget(
     rollover_mode: string;
   };
 
+  // Read-time period projection (B-wave 2): a monthly budget whose persisted period
+  // has ALREADY ENDED is projected onto the calendar month containing today, so the
+  // "current" budget is never silently stale. The persisted row stays authoritative
+  // (no write); an explicit `budgetId` query is NOT projected (archived viewing).
+  const persistedPeriodStart = b.start_date;
+  const persistedPeriodEnd = b.end_date;
+  let periodStart = b.start_date;
+  let periodEnd = b.end_date;
+  let periodRolledForward = false;
+  if (!budgetId && b.period_type === 'monthly') {
+    const today = todayISO();
+    if (today > b.end_date) {
+      periodStart = `${today.slice(0, 7)}-01`;
+      const [y, m] = today.slice(0, 7).split('-').map(Number);
+      const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate(); // day 0 of next month = last of current
+      periodEnd = `${today.slice(0, 7)}-${String(lastDay).padStart(2, '0')}`;
+      periodRolledForward = true;
+    }
+  }
+
   const lines = db.prepare(`
     SELECT bl.*, c.name as category_name, c.color as category_color, c.icon as category_icon
     FROM budget_lines bl
@@ -443,7 +476,7 @@ export function calculateBudget(
       FROM journal_transactions
       WHERE tenant_id = ? AND category_id = ? AND transaction_type = 'expense'
         AND status = 'posted' AND date >= ? AND date <= ?
-    `).all(tenantId, line.category_id, b.start_date, b.end_date) as Array<{ amount: string }>;
+    `).all(tenantId, line.category_id, periodStart, periodEnd) as Array<{ amount: string }>;
     const categorySpent = sumDecimalAmounts(spentRows);
 
     // Subtract refunds in this category during budget period
@@ -452,7 +485,7 @@ export function calculateBudget(
       FROM journal_transactions
       WHERE tenant_id = ? AND category_id = ? AND transaction_type = 'refund'
         AND status = 'posted' AND date >= ? AND date <= ?
-    `).all(tenantId, line.category_id, b.start_date, b.end_date) as Array<{ amount: string }>;
+    `).all(tenantId, line.category_id, periodStart, periodEnd) as Array<{ amount: string }>;
     const categoryRefunds = sumDecimalAmounts(refundRows);
 
     const spent = categorySpent.minus(categoryRefunds);
@@ -497,8 +530,12 @@ export function calculateBudget(
     budgetName: b.name,
     budgetType: b.budget_type,
     currency: b.currency,
-    periodStart: b.start_date,
-    periodEnd: b.end_date,
+    periodStart,
+    periodEnd,
+    persistedPeriodStart,
+    persistedPeriodEnd,
+    periodRolledForward,
+    periodType: b.period_type,
     rolloverMode: b.rollover_mode,
     totalAllocated: totalAllocatedDec.toFixed(2),
     totalSpent: totalSpentDec.toFixed(2),
@@ -509,11 +546,13 @@ export function calculateBudget(
       metricName: `Budget: ${b.name}`,
       definition: 'Category-level expense tracking against user-defined spending targets and rollovers.',
       formula: 'Remaining = (Allocated + Permitted Rollover) - (Posted Category Expenses - Period Refunds)',
-      dateRange: { start: b.start_date, end: b.end_date, label: `${b.start_date} to ${b.end_date}` },
+      dateRange: { start: periodStart, end: periodEnd, label: `${periodStart} to ${periodEnd}` },
       currency: b.currency,
       includedEntities: ['Budgeted Categories', 'Posted Category Expenses', 'Associated Category Refunds'],
       excludedEntities: ['Transfers', 'Unbudgeted categories (reported separately)', 'Pending transactions'],
-      assumptions: [`Rollover policy: ${b.rollover_mode}`],
+      assumptions: periodRolledForward
+        ? [`Rollover policy: ${b.rollover_mode}`, `Persisted period ${persistedPeriodStart} to ${persistedPeriodEnd} has ended; read-time projection onto the current calendar month is in effect (persisted data untouched).`]
+        : [`Rollover policy: ${b.rollover_mode}`],
       inputs: {
         totalAllocated: totalAllocatedDec.toFixed(2),
         totalSpent: totalSpentDec.toFixed(2),
@@ -570,10 +609,27 @@ export function calculateSafeToSpend(
   const pendingDeductions = sumDecimalAmounts(pendingRows);
 
   // 3. Reserved upcoming obligations (recurring bills due in horizon)
+  // 3. Reserved upcoming obligations (schedule-aware, read-time; no writes)
+  //
+  // Persisted `next_due_date` is authoritative, but a rule whose period has
+  // already passed (never generated: last_generated_at NULL, e.g. Rent due
+  // 2026-10-01 still showing on 2026-11-09) must NOT silently drop out of the
+  // reservation. Overdue occurrences are counted as due immediately; further
+  // in-horizon occurrences are projected from the persisted schedule via
+  // advanceRecurringNextDueDate (pure function, no DB write).
   const today = todayISO();
   const futureDate = new Date();
   futureDate.setDate(futureDate.getDate() + horizonDays);
   const horizonEndDate = toISODate(futureDate);
+
+  const activeObligationRules = db.prepare(`
+    SELECT id, name, expected_amount as amount, category_id, next_due_date, frequency, interval_count, day_of_month
+    FROM recurring_financial_rules
+    WHERE tenant_id = ? AND is_active = 1 AND rule_type IN ('bill', 'subscription', 'loan_payment')
+  `).all(tenantId) as Array<{
+    id: string; name: string; amount: string; category_id?: string;
+    next_due_date: string; frequency: string; interval_count: number; day_of_month: number | null;
+  }>;
 
   const upcomingBills = db.prepare(`
     SELECT id, name, expected_amount as amount, category_id
@@ -582,6 +638,24 @@ export function calculateSafeToSpend(
       AND next_due_date >= ? AND next_due_date <= ?
   `).all(tenantId, today, horizonEndDate) as Array<{ id: string; name: string; amount: string; category_id?: string }>;
 
+  // Overdue rules: reserve the persisted (unknown-paid) occurrence NOW, plus any
+  // projected occurrence that still lands inside the horizon. Bounded walk.
+  const overdueRules = activeObligationRules.filter(r => r.next_due_date < today);
+  const overdueObligationsDec = sumDecimalAmounts(overdueRules.map(r => r.amount));
+  const projectedOccurrences: Array<{ id: string; name: string; amount: string; category_id?: string }> = [];
+  for (const rule of overdueRules) {
+    let cursor = rule.next_due_date;
+    let guard = 0;
+    while (cursor < today && guard++ < 120) {
+      cursor = advanceRecurringNextDueDate(cursor, rule.frequency, rule.interval_count, rule.day_of_month);
+    }
+    if (cursor >= today && cursor <= horizonEndDate) {
+      projectedOccurrences.push({ id: `${rule.id}@${cursor}`, name: rule.name, amount: rule.amount, category_id: rule.category_id });
+    }
+  }
+
+  const allOccurrences = [...upcomingBills, ...projectedOccurrences];
+
   // Check active budget to avoid double-counting between category budget envelopes and recurring obligations
   const activeBudget = calculateBudget(db, tenantId);
   const budgetedCategoryIds = new Set(activeBudget ? activeBudget.items.map(it => it.categoryId) : []);
@@ -589,9 +663,9 @@ export function calculateSafeToSpend(
   let unbudgetedObligations = new Decimal(0);
   let budgetedObligationsSum = new Decimal(0);
 
-  // Group recurring bills by category to prevent duplicate reservations
+  // Group scheduled+overdue recurring bills by category to prevent duplicate reservations
   const billsByCategory = new Map<string, Decimal>();
-  for (const bill of upcomingBills) {
+  for (const bill of allOccurrences) {
     const billAmt = new Decimal(bill.amount || '0.00');
     if (bill.category_id && budgetedCategoryIds.has(bill.category_id)) {
       budgetedObligationsSum = budgetedObligationsSum.plus(billAmt);
@@ -602,7 +676,7 @@ export function calculateSafeToSpend(
     }
   }
 
-  let totalUpcomingObligations = unbudgetedObligations.plus(budgetedObligationsSum);
+  let totalUpcomingObligations = unbudgetedObligations.plus(budgetedObligationsSum).plus(overdueObligationsDec);
 
   // If includeBudgetEnvelopes is requested, add non-recurring budget envelope remaining balances without double-counting
   if (options?.includeBudgetEnvelopes && activeBudget) {
@@ -627,13 +701,27 @@ export function calculateSafeToSpend(
     WHERE tenant_id = ? AND status = 'active'
   `).all(tenantId) as Array<{ id: string; name: string; amount: string; target_amount: string; linked_account_id?: string }>;
 
+  const balancesById = new Map(balances.map(a => [a.accountId, new Decimal(a.currentBalance)]));
+
   let earmarkedSavings = new Decimal(0);
   for (const sg of savingsGoalsRows) {
     // Only earmark if the goal is backed by liquid funds
     if (!sg.linked_account_id || liquidAccountIds.has(sg.linked_account_id)) {
-      earmarkedSavings = earmarkedSavings.plus(new Decimal(sg.amount || '0.00'));
+      let amt = new Decimal(sg.amount || '0.00');
+      const linkedLedgerBalance = sg.linked_account_id ? balancesById.get(sg.linked_account_id) : undefined;
+      if (linkedLedgerBalance !== undefined) {
+        // Ledger is the source of truth: a user-typed current_amount that exceeds
+        // what the linked account actually holds must NOT earmark money that is
+        // not there (and a negative balance earmarks nothing).
+        amt = Decimal.min(amt, Decimal.max(0, linkedLedgerBalance));
+      }
+      earmarkedSavings = earmarkedSavings.plus(amt);
     }
   }
+
+  const upcomingObligationsDetails = overdueRules.length === 0
+    ? `${upcomingBills.length} active recurring commitments due before horizon`
+    : `${allOccurrences.length} scheduled occurrences before horizon plus ${overdueRules.length} overdue persisted occurrence(s) reserved immediately (schedule-aware read-time projection; persisted data untouched)`;
 
   // Safe-to-spend calculation:
   // Liquid funds - pending deductions - upcoming obligations - earmarked savings - safety buffer
@@ -660,8 +748,8 @@ export function calculateSafeToSpend(
     ...(pendingDeductions.greaterThan(0) ? [
       { label: 'Pending Deductions', amount: pendingDeductions.toFixed(2), operation: 'subtract' as const, details: 'Authorized transactions pending ledger settlement' }
     ] : []),
-    { label: 'Upcoming Recurring', amount: totalUpcomingObligations.toFixed(2), operation: 'subtract', details: `${upcomingBills.length} active recurring commitments due before horizon` },
-    { label: 'Earmarked Savings', amount: earmarkedSavings.toFixed(2), operation: 'subtract', details: 'Liquid funds dedicated to active savings milestones' },
+    { label: 'Upcoming Recurring', amount: totalUpcomingObligations.toFixed(2), operation: 'subtract', details: upcomingObligationsDetails },
+    { label: 'Earmarked Savings', amount: earmarkedSavings.toFixed(2), operation: 'subtract', details: 'Liquid funds dedicated to active savings milestones — capped at the linked account ledger balance when one is linked (MIN entered current_amount, ledger balance)' },
     { label: 'Safety Buffer', amount: buffer.toFixed(2), operation: 'subtract', details: 'Configurable emergency reserve' },
     ...(isDeficit ? [
       { label: 'Funding Deficit', amount: fundingDeficit, operation: 'subtract' as const, details: 'Obligations exceed liquid capital; safe-to-spend is zero-floored' }
@@ -676,6 +764,9 @@ export function calculateSafeToSpend(
     currency,
     liquidFunds: liquidFunds.toFixed(2),
     upcomingObligations: totalUpcomingObligations.toFixed(2),
+    overdueObligations: overdueObligationsDec.toFixed(2),
+    overdueObligationsCount: overdueRules.length,
+    upcomingObligationsCount: allOccurrences.length,
     earmarkedSavings: earmarkedSavings.toFixed(2),
     safetyBuffer: buffer.toFixed(2),
     daysHorizon: horizonDays,
@@ -691,12 +782,15 @@ export function calculateSafeToSpend(
       excludedEntities: ['Available credit lines', 'Illiquid investments', 'Duplicate budgeted obligations'],
       assumptions: [
         'Recurring obligations are deduced once with zero duplicate reservations against envelope budgets',
+        'Overdue recurring obligations (persisted next_due_date in the past) are reserved immediately; later in-horizon occurrences are projected read-time from the persisted schedule without writing to it',
+        'Earmarked savings are capped at the linked account ledger balance when a liquid account is linked',
         'Multi-currency limitation: All multi-currency operations use configured base currency without live external FX feeds',
       ],
       inputs: {
         'Liquid Cash': `$${liquidFunds.toFixed(2)}`,
         'Pending Deductions': `-$${pendingDeductions.toFixed(2)}`,
         'Upcoming Recurring': `-$${totalUpcomingObligations.toFixed(2)}`,
+        'Overdue (Due Immediately)': `-$${overdueObligationsDec.toFixed(2)}`,
         'Earmarked Savings': `-$${earmarkedSavings.toFixed(2)}`,
         'Safety Buffer': `-$${buffer.toFixed(2)}`,
         'Funding Deficit': isDeficit ? `-$${fundingDeficit}` : '$0.00',
@@ -830,7 +924,68 @@ export function calculateNetWorth(db: Database.Database, tenantId: string): NetW
 }
 
 /**
+ * Resolves, for every debt, both truth figures plus the effective payoff basis:
+ * - `principalBalance`: the user-typed debts.principal_balance record
+ * - `ledgerBalance` / `ledgerOutstanding`: the linked ledger account's signed / absolute balance
+ * - `effectivePrincipal`: ledger-derived amount when a linked account exists and holds a
+ *   positive outstanding balance; the record figure otherwise. The ledger is the source
+ *   of truth (this is the same figure calculateNetWorth books as the liability).
+ */
+export function calculateDebtLedgerReconciliations(
+  db: Database.Database,
+  tenantId: string
+): Array<{
+  debtId: string;
+  principalBalance: string;
+  ledgerBalance: string | null;
+  ledgerOutstanding: string | null;
+  balanceSource: 'ledger' | 'principal';
+  effectivePrincipal: string;
+  mismatch: boolean;
+}> {
+  const balances = calculateAccountBalances(db, tenantId);
+  const balanceById = new Map(balances.map(b => [b.accountId, b]));
+
+  const debts = db.prepare(`
+    SELECT id, principal_balance, linked_account_id
+    FROM debts WHERE tenant_id = ?
+  `).all(tenantId) as Array<{ id: string; principal_balance: string; linked_account_id: string | null }>;
+
+  return debts.map(d => {
+    const acc = d.linked_account_id ? balanceById.get(d.linked_account_id) : undefined;
+    const principal = new Decimal(d.principal_balance || '0.00');
+    let ledgerBalance: string | null = null;
+    let ledgerOutstanding: string | null = null;
+    let effective = principal;
+    let balanceSource: 'ledger' | 'principal' = 'principal';
+    if (acc) {
+      const bal = new Decimal(acc.currentBalance);
+      ledgerBalance = bal.toFixed(2);
+      const outstanding = Decimal.max(0, bal.abs());
+      ledgerOutstanding = outstanding.toFixed(2);
+      if (outstanding.greaterThan(0)) {
+        effective = outstanding;
+        balanceSource = 'ledger';
+      }
+    }
+    return {
+      debtId: d.id,
+      principalBalance: principal.toFixed(2),
+      ledgerBalance,
+      ledgerOutstanding,
+      balanceSource,
+      effectivePrincipal: effective.toFixed(2),
+      mismatch: ledgerOutstanding !== null && !principal.equals(effective),
+    };
+  });
+}
+
+/**
  * Calculates Debt Payoff scenarios (Avalanche vs Snowball)
+ *
+ * Payoff basis: when a debt is linked to a ledger account, the amortization runs on the
+ * LEDGER-derived outstanding balance (source of truth, same figure booked in net worth),
+ * not on the possibly-stale typed principal_balance record.
  */
 export function calculateDebtPayoffScenarios(
   db: Database.Database,
@@ -845,14 +1000,25 @@ export function calculateDebtPayoffScenarios(
     principal_balance: string;
     interest_rate: string;
     minimum_payment: string;
+    linked_account_id: string | null;
   }>;
+
+  // Ledger reconciliation drives the effective principal per debt
+  const reconciliations = new Map(
+    calculateDebtLedgerReconciliations(db, tenantId).map(r => [r.debtId, r])
+  );
+
+  const effectiveDebts = debts.map(d => {
+    const rec = reconciliations.get(d.id);
+    return { ...d, principal_balance: rec?.effectivePrincipal ?? d.principal_balance };
+  });
 
   const extra = new Decimal(extraMonthlyPayment || '0.00');
 
   // Avalanche: Sort by interest rate desc
-  const avalancheDebts = [...debts].sort((a, b) => new Decimal(b.interest_rate || '0').minus(new Decimal(a.interest_rate || '0')).toNumber());
+  const avalancheDebts = [...effectiveDebts].sort((a, b) => new Decimal(b.interest_rate || '0').minus(new Decimal(a.interest_rate || '0')).toNumber());
   // Snowball: Sort by principal balance asc
-  const snowballDebts = [...debts].sort((a, b) => new Decimal(a.principal_balance || '0').minus(new Decimal(b.principal_balance || '0')).toNumber());
+  const snowballDebts = [...effectiveDebts].sort((a, b) => new Decimal(a.principal_balance || '0').minus(new Decimal(b.principal_balance || '0')).toNumber());
 
   return {
     extraMonthlyPayment: extra.toFixed(2),
@@ -861,6 +1027,35 @@ export function calculateDebtPayoffScenarios(
   };
 }
 
+/**
+ * Soft duplicate-warning (reconciliation-noise guard, advisory only — never blocks).
+ * Detects prior posted transactions with the same (account, date, type, amount).
+ * Used by POST /api/finance/transactions; the import flow has its own preview-time
+ * duplicate detection.
+ */
+export function detectDuplicateTransaction(
+  db: Database.Database,
+  tenantId: string,
+  probe: { accountId: string; date: string; transactionType: string; amount: string; excludeTransactionId?: string }
+): { isDuplicate: boolean; existingIds: string[]; existingCount: number } {
+  const rows = db.prepare(`
+    SELECT id FROM journal_transactions
+    WHERE tenant_id = ? AND account_id = ? AND date = ? AND transaction_type = ?
+      AND amount = ? AND status = 'posted' AND id != coalesce(?, '')
+    LIMIT 5
+  `).all(
+    tenantId,
+    probe.accountId,
+    probe.date,
+    probe.transactionType,
+    probe.amount,
+    probe.excludeTransactionId ?? null
+  ) as Array<{ id: string }>;
+
+  return { isDuplicate: rows.length > 0, existingIds: rows.map(r => r.id), existingCount: rows.length };
+}
+
+/** Simulates the payoff of a set of debts month by month until all are settled. */
 function simulatePayoff(
   debts: Array<{ id: string; name: string; principal_balance: string; interest_rate: string; minimum_payment: string }>,
   extraPayment: Decimal
@@ -951,67 +1146,79 @@ export function rolloverBudgetPeriod(
   const rolloverMode = options?.rolloverModeOverride || (sourceBudget.rolloverMode as 'carry_unused' | 'reset') || 'carry_unused';
   const name = newBudgetName || `${sourceBudget.budgetName} (Next Cycle)`;
 
-  db.prepare(`
-    INSERT INTO budgets (
-      id, tenant_id, name, budget_type, period_type, start_date, end_date, currency, rollover_mode, is_active
-    ) VALUES (?, ?, ?, ?, 'monthly', ?, ?, ?, ?, 1)
-  `).run(
-    newBudgetId,
-    tenantId,
-    name,
-    sourceBudget.budgetType,
-    newPeriodStart,
-    newPeriodEnd,
-    sourceBudget.currency,
-    rolloverMode
-  );
-
-  const rolledLines: BudgetRolloverResult['rolledLines'] = [];
-
-  for (const item of sourceBudget.items) {
-    let rolloverAmt = new Decimal(0);
-    if (rolloverMode === 'carry_unused') {
-      const remaining = new Decimal(item.remainingAmount);
-      // Unused positive balance rolls over as additional budget
-      if (remaining.greaterThan(0)) {
-        rolloverAmt = remaining;
-      }
-    }
-
-    const newAllocatedStr = options?.categoryAllocations?.[item.categoryId] ?? item.allocatedAmount;
-    const newAllocated = new Decimal(newAllocatedStr);
-    const newTotal = newAllocated.plus(rolloverAmt);
-
-    db.prepare(`
-      INSERT INTO budget_lines (id, tenant_id, budget_id, category_id, allocated_amount, rollover_amount)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      `bl_${newBudgetId}_${item.categoryId}`,
-      tenantId,
-      newBudgetId,
-      item.categoryId,
-      newAllocated.toFixed(2),
-      rolloverAmt.toFixed(2)
-    );
-
-    rolledLines.push({
-      categoryId: item.categoryId,
-      categoryName: item.categoryName,
-      previousAllocated: item.allocatedAmount,
-      previousSpent: item.spentAmount,
-      previousRemaining: item.remainingAmount,
-      rolloverAmount: rolloverAmt.toFixed(2),
-      newAllocated: newAllocated.toFixed(2),
-      newTotalBudgeted: newTotal.toFixed(2),
-    });
-  }
-
-  return {
+  let result: BudgetRolloverResult = {
     previousBudgetId: sourceBudgetId,
     newBudgetId,
     rolloverMode,
-    rolledLines,
+    rolledLines: [],
   };
+
+  // Atomic roll: budget header + all lines commit together or not at all.
+  db.transaction(() => {
+    db.prepare(`
+      INSERT INTO budgets (
+        id, tenant_id, name, budget_type, period_type, start_date, end_date, currency, rollover_mode, is_active
+      ) VALUES (?, ?, ?, ?, 'monthly', ?, ?, ?, ?, 1)
+    `).run(
+      newBudgetId,
+      tenantId,
+      name,
+      sourceBudget.budgetType,
+      newPeriodStart,
+      newPeriodEnd,
+      sourceBudget.currency,
+      rolloverMode
+    );
+
+    const rolledLines: BudgetRolloverResult['rolledLines'] = [];
+
+    for (const item of sourceBudget.items) {
+      let rolloverAmt = new Decimal(0);
+      if (rolloverMode === 'carry_unused') {
+        const remaining = new Decimal(item.remainingAmount);
+        // Unused positive balance rolls over as additional budget
+        if (remaining.greaterThan(0)) {
+          rolloverAmt = remaining;
+        }
+      }
+
+      const newAllocatedStr = options?.categoryAllocations?.[item.categoryId] ?? item.allocatedAmount;
+      const newAllocated = new Decimal(newAllocatedStr);
+      const newTotal = newAllocated.plus(rolloverAmt);
+
+      db.prepare(`
+        INSERT INTO budget_lines (id, tenant_id, budget_id, category_id, allocated_amount, rollover_amount)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(
+        `bl_${newBudgetId}_${item.categoryId}`,
+        tenantId,
+        newBudgetId,
+        item.categoryId,
+        newAllocated.toFixed(2),
+        rolloverAmt.toFixed(2)
+      );
+
+      rolledLines.push({
+        categoryId: item.categoryId,
+        categoryName: item.categoryName,
+        previousAllocated: item.allocatedAmount,
+        previousSpent: item.spentAmount,
+        previousRemaining: item.remainingAmount,
+        rolloverAmount: rolloverAmt.toFixed(2),
+        newAllocated: newAllocated.toFixed(2),
+        newTotalBudgeted: newTotal.toFixed(2),
+      });
+    }
+
+    result = {
+      previousBudgetId: sourceBudgetId,
+      newBudgetId,
+      rolloverMode,
+      rolledLines,
+    };
+  })();
+
+  return result;
 }
 
 export interface DebtPaymentSplitResult {
@@ -1052,4 +1259,68 @@ export function calculateDebtPaymentSplit(
     remainingPrincipal: remaining.toFixed(2),
     effectiveMonthlyRate: monthlyRate.toFixed(6),
   };
+}
+
+/**
+ * Advances a recurring rule's next_due_date by one occurrence.
+ *
+ * - Calendar-arithmetic on ISO date strings (no DST wall-clock drift; month-end
+ *   overflows clamp to the last valid day, e.g. Jan 31 -> Feb 28).
+ * - For monthly/quarterly/yearly cadences the anchored day of month is
+ *   preserved (from `dayOfMonth` when provided, otherwise from the current date).
+ * - Pure function: safe to re-run; the caller persists the result inside the
+ *   same transaction that records the generated transaction to prevent
+ *   duplicate generations.
+ */
+export function advanceRecurringNextDueDate(
+  currentDueDate: string,
+  frequency: string,
+  intervalCount: number = 1,
+  dayOfMonth?: number | null
+): string {
+  const [y, m, d] = currentDueDate.split('-').map(Number);
+  const interval = Math.max(1, Math.floor(intervalCount || 1));
+
+  const daysInMonth = (year: number, month1: number) => new Date(Date.UTC(year, month1 + 1, 0)).getUTCDate();
+
+  const clamp = (year: number, month1: number, day: number) =>
+    `${String(year).padStart(4, '0')}-${String(month1 + 1).padStart(2, '0')}-${String(
+      Math.min(day, daysInMonth(year, month1))
+    ).padStart(2, '0')}`;
+
+  switch (frequency) {
+    case 'daily': {
+      const dt = new Date(Date.UTC(y, m - 1, d));
+      dt.setUTCDate(dt.getUTCDate() + interval);
+      return dt.toISOString().slice(0, 10);
+    }
+    case 'weekly':
+    case 'biweekly': {
+      const weeks = frequency === 'biweekly' ? interval * 2 : interval;
+      const dt = new Date(Date.UTC(y, m - 1, d));
+      dt.setUTCDate(dt.getUTCDate() + weeks * 7);
+      return dt.toISOString().slice(0, 10);
+    }
+    case 'monthly':
+    case 'quarterly': {
+      const months = frequency === 'quarterly' ? interval * 3 : interval;
+      const anchorDay = dayOfMonth && dayOfMonth >= 1 && dayOfMonth <= 31 ? dayOfMonth : d;
+      let targetMonth = m - 1 + months;
+      let targetYear = y + Math.floor(targetMonth / 12);
+      targetMonth = ((targetMonth % 12) + 12) % 12;
+      return clamp(targetYear, targetMonth, anchorDay);
+    }
+    case 'yearly': {
+      const anchorDay = dayOfMonth && dayOfMonth >= 1 && dayOfMonth <= 31 ? dayOfMonth : d;
+      return clamp(y + interval, m - 1, anchorDay);
+    }
+    default: {
+      // Unknown cadence: conservative monthly step with clamping.
+      const anchorDay = dayOfMonth && dayOfMonth >= 1 && dayOfMonth <= 31 ? dayOfMonth : d;
+      let targetMonth = m - 1 + interval;
+      let targetYear = y + Math.floor(targetMonth / 12);
+      targetMonth = ((targetMonth % 12) + 12) % 12;
+      return clamp(targetYear, targetMonth, anchorDay);
+    }
+  }
 }

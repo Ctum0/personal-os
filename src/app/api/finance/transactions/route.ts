@@ -3,6 +3,8 @@ import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { Decimal } from 'decimal.js';
 import { todayISO } from "@/lib/time";
+import { readJson } from '@/lib/db/validate';
+import { detectDuplicateTransaction } from '@/lib/finance/engine';
 
 export async function GET(request: Request) {
   try {
@@ -65,7 +67,11 @@ export async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     const {
       transactionType,
@@ -111,6 +117,20 @@ export async function POST(request: Request) {
     const acc = db.prepare('SELECT id, currency FROM finance_accounts WHERE id = ? AND tenant_id = ?').get(accountId, session.tenantId) as { id: string; currency: string } | undefined;
     if (!acc) {
       return NextResponse.json({ error: 'Source account not found' }, { status: 404 });
+    }
+
+    // Category must exist within the tenant (prevents cross-tenant category ids)
+    if (categoryId) {
+      const cat = db.prepare('SELECT id FROM categories WHERE id = ? AND tenant_id = ?').get(categoryId, session.tenantId);
+      if (!cat) {
+        return NextResponse.json({ error: 'Category not found' }, { status: 404 });
+      }
+    }
+    if (payeeName !== undefined && payeeName !== null && typeof payeeName !== 'string') {
+      return NextResponse.json({ error: 'payeeName must be a string' }, { status: 400 });
+    }
+    if (notes !== undefined && notes !== null && typeof notes !== 'string') {
+      return NextResponse.json({ error: 'notes must be a string' }, { status: 400 });
     }
 
     // For transfers, verify destination account exists and belongs to current tenant
@@ -224,7 +244,18 @@ export async function POST(request: Request) {
     })();
 
     const created = db.prepare('SELECT * FROM journal_transactions WHERE id = ? AND tenant_id = ?').get(txId, session.tenantId);
-    return NextResponse.json({ transaction: created }, { status: 201 });
+
+    // Advisory duplicate warning (B6): same account + date + type + amount already
+    // posted. Response-only flag; nothing is blocked or mutated.
+    const duplicateWarning = detectDuplicateTransaction(db, session.tenantId, {
+      accountId,
+      date: txDate,
+      transactionType: txType,
+      amount: decAmount,
+      excludeTransactionId: txId,
+    });
+
+    return NextResponse.json({ transaction: created, duplicateWarning }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -244,16 +275,24 @@ export async function DELETE(request: Request) {
     db.transaction(() => {
       // Per spec: financial corrections preserve history or mark as reversed/voided.
       // journal_lines are preserved intact for immutable audit history.
+      const existing = db.prepare('SELECT id, status FROM journal_transactions WHERE id = ? AND tenant_id = ?').get(id, session.tenantId) as { id: string; status: string } | undefined;
+      if (!existing) {
+        return;
+      }
+      const alreadyVoided = existing.status === 'voided';
       db.prepare(`
-        UPDATE journal_transactions 
+        UPDATE journal_transactions
         SET status = 'voided', updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
       `).run(id, session.tenantId);
 
-      db.prepare(`
-        INSERT INTO audit_events (id, tenant_id, actor_id, domain, action, entity_type, entity_id, changes)
-        VALUES (?, ?, ?, 'finance', 'void_transaction', 'journal_transaction', ?, '{}')
-      `).run(`aud_void_${id}`, session.tenantId, session.userId, id);
+      // Idempotent: re-voiding a voided transaction does not duplicate audit rows.
+      if (!alreadyVoided) {
+        db.prepare(`
+          INSERT INTO audit_events (id, tenant_id, actor_id, domain, action, entity_type, entity_id, changes)
+          VALUES (?, ?, ?, 'finance', 'void_transaction', 'journal_transaction', ?, '{}')
+        `).run(`aud_void_${id}`, session.tenantId, session.userId, id);
+      }
     })();
 
     return NextResponse.json({ success: true });

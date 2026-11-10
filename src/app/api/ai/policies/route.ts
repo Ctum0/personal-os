@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
+import { readJson } from '@/lib/db/validate';
 
 export async function GET() {
   try {
@@ -23,30 +24,45 @@ export async function PUT(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
     const { toolName, capabilityLevel, allowAutoExecution } = body;
 
-    if (!toolName) {
+    if (!toolName || typeof toolName !== 'string' || toolName.length > 100) {
       return NextResponse.json({ error: 'toolName is required' }, { status: 400 });
     }
 
-    const autoExecInt = allowAutoExecution ? 1 : 0;
+    // Schema columns are permission_level / is_enabled; accept the historical
+    // capabilityLevel/allowAutoExecution payload names as aliases.
+    const validLevels = ['read_and_recommend', 'prepare_and_confirm', 'auto_execute'];
+    if (capabilityLevel !== undefined && !validLevels.includes(capabilityLevel)) {
+      return NextResponse.json({ error: `Invalid capabilityLevel. Must be one of: ${validLevels.join(', ')}` }, { status: 400 });
+    }
+    if (allowAutoExecution !== undefined && typeof allowAutoExecution !== 'boolean') {
+      return NextResponse.json({ error: 'allowAutoExecution must be a boolean' }, { status: 400 });
+    }
+
+    const permissionLevel = capabilityLevel || 'prepare_and_confirm';
+    // Auto execution is only meaningful at the auto_execute level; otherwise the
+    // policy is simply enabled with the given level.
+    const isEnabled = allowAutoExecution === false && permissionLevel === 'auto_execute' ? 0 : 1;
 
     db.prepare(`
-      INSERT INTO ai_tool_policies (
-        id, tenant_id, tool_name, capability_level, allow_auto_execution,
-        daily_call_limit, requires_diff_hash, updated_at
-      ) VALUES (?, ?, ?, ?, ?, 50, 1, datetime('now'))
+      INSERT INTO ai_tool_policies (id, tenant_id, tool_name, permission_level, is_enabled, updated_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))
       ON CONFLICT(tenant_id, tool_name) DO UPDATE SET
-        capability_level = excluded.capability_level,
-        allow_auto_execution = excluded.allow_auto_execution,
+        permission_level = excluded.permission_level,
+        is_enabled = excluded.is_enabled,
         updated_at = datetime('now')
     `).run(
       `pol_${toolName}`,
       session.tenantId,
       toolName,
-      capabilityLevel || 'prepare_and_confirm',
-      autoExecInt
+      permissionLevel,
+      isEnabled
     );
 
     const updated = db.prepare(`

@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { calculateHabitStreak } from '@/lib/productivity/engine';
 import { todayISO } from "@/lib/time";
+import { readJson } from '@/lib/db/validate';
 
 export async function GET(request: Request) {
   try {
@@ -55,10 +56,39 @@ export async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     if (!body.title || !body.title.trim()) {
       return NextResponse.json({ error: 'Habit title is required' }, { status: 400 });
+    }
+
+    const validTrackingTypes = ['boolean', 'duration', 'quantity'];
+    if (!validTrackingTypes.includes(body.trackingType || 'boolean')) {
+      return NextResponse.json({ error: `Invalid trackingType. Must be one of: ${validTrackingTypes.join(', ')}` }, { status: 400 });
+    }
+    const targetCheck = body.targetValue !== undefined ? body.targetValue : 1;
+    if (isNaN(Number(targetCheck)) || Number(targetCheck) <= 0) {
+      return NextResponse.json({ error: 'targetValue must be a positive number' }, { status: 400 });
+    }
+    if (body.minimumThreshold !== undefined && (isNaN(Number(body.minimumThreshold)) || Number(body.minimumThreshold) <= 0)) {
+      return NextResponse.json({ error: 'minimumThreshold must be a positive number' }, { status: 400 });
+    }
+    if (body.idealTarget !== undefined && (isNaN(Number(body.idealTarget)) || Number(body.idealTarget) <= 0)) {
+      return NextResponse.json({ error: 'idealTarget must be a positive number' }, { status: 400 });
+    }
+    if (body.scheduleType && !['daily', 'custom'].includes(body.scheduleType)) {
+      return NextResponse.json({ error: `Invalid scheduleType. Must be one of: daily, custom` }, { status: 400 });
+    }
+    if (body.scheduleDays !== undefined) {
+      const days = body.scheduleDays;
+      const ok = Array.isArray(days) && days.length > 0 && days.every((d: unknown) => Number.isInteger(d) && (d as number) >= 1 && (d as number) <= 7);
+      if (!ok) {
+        return NextResponse.json({ error: 'scheduleDays must be an array of integers 1-7 (Mon-Sun)' }, { status: 400 });
+      }
     }
 
     const habitId = `habit_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;

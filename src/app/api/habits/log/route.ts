@@ -2,16 +2,34 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { todayISO } from "@/lib/time";
+import { readJson, referenceExists } from '@/lib/db/validate';
 
 export async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     const { habitId, date, value, status, notes } = body;
     if (!habitId) {
       return NextResponse.json({ error: 'Habit ID is required' }, { status: 400 });
+    }
+    if (typeof habitId !== 'string' || !referenceExists(db, session.tenantId, 'habits', habitId)) {
+      return NextResponse.json({ error: 'Habit not found' }, { status: 404 });
+    }
+    if (date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return NextResponse.json({ error: 'date must be in YYYY-MM-DD format' }, { status: 400 });
+    }
+    if (value !== undefined && (isNaN(Number(value)) || Number(value) < 0)) {
+      return NextResponse.json({ error: 'value must be a non-negative number' }, { status: 400 });
+    }
+    const validStatuses = ['completed', 'excused', 'missed', 'failed'];
+    if (status !== undefined && !validStatuses.includes(status)) {
+      return NextResponse.json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` }, { status: 400 });
     }
 
     const logDate = date || todayISO();

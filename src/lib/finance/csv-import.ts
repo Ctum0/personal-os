@@ -375,34 +375,46 @@ export function commitCsvImport(
 }
 
 /**
- * Reverses all transactions created by an import batch safely and atomically
+ * Reverses all transactions created by an import batch.
+ *
+ * Audit-immutability policy (aligned with the manual void path): imported rows are
+ * SOFT-VOIDED (status='voided'), never hard-deleted. journal_lines are preserved
+ * untouched, so the doubly-entered audit history survives. Account balances are
+ * unaffected because every balance/report query filters status='posted'.
+ * Idempotent: reversing an already-reversed batch is a no-op.
  */
 export function reverseImportBatch(
   db: Database.Database,
   tenantId: string,
   batchId: string
-): { success: boolean; reversedCount: number; deletedCount?: number } {
+): { success: boolean; reversedCount: number; alreadyReversed?: boolean } {
   let reversedCount = 0;
+  let alreadyReversed = false;
 
   db.transaction(() => {
-    // Count transactions created by this batch
+    const batch = db.prepare(`
+      SELECT id, status FROM import_batches WHERE id = ? AND tenant_id = ?
+    `).get(batchId, tenantId) as { id: string; status: string } | undefined;
+    if (!batch) {
+      throw new Error(`Import batch ${batchId} not found`);
+    }
+    if (batch.status === 'reversed') {
+      alreadyReversed = true;
+      return;
+    }
+
+    // Count only rows that will transition posted -> voided
     const countRow = db.prepare(`
       SELECT count(*) as count FROM journal_transactions
-      WHERE tenant_id = ? AND import_batch_id = ?
+      WHERE tenant_id = ? AND import_batch_id = ? AND status != 'voided'
     `).get(tenantId, batchId) as { count: number };
     reversedCount = countRow.count;
 
-    // Delete created journal lines and transactions
+    // Soft-void the transactions; rows and their journal_lines are preserved intact
     db.prepare(`
-      DELETE FROM journal_lines
-      WHERE tenant_id = ? AND transaction_id IN (
-        SELECT id FROM journal_transactions WHERE tenant_id = ? AND import_batch_id = ?
-      )
-    `).run(tenantId, tenantId, batchId);
-
-    db.prepare(`
-      DELETE FROM journal_transactions
-      WHERE tenant_id = ? AND import_batch_id = ?
+      UPDATE journal_transactions
+      SET status = 'voided', updated_at = datetime('now')
+      WHERE tenant_id = ? AND import_batch_id = ? AND status != 'voided'
     `).run(tenantId, batchId);
 
     // Update batch status
@@ -411,7 +423,13 @@ export function reverseImportBatch(
       SET status = 'reversed'
       WHERE id = ? AND tenant_id = ?
     `).run(batchId, tenantId);
+
+    // Audit trail: batch-level reversal event
+    db.prepare(`
+      INSERT INTO audit_events (id, tenant_id, domain, action, entity_type, entity_id, changes)
+      VALUES (?, ?, 'finance', 'reverse_import_batch', 'import_batch', ?, ?)
+    `).run(`aud_revimp_${batchId}`, tenantId, batchId, JSON.stringify({ voidedCount: reversedCount }));
   })();
 
-  return { success: true, reversedCount, deletedCount: reversedCount };
+  return { success: true, reversedCount, alreadyReversed };
 }

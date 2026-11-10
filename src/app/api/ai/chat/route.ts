@@ -2,12 +2,17 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { AI_TOOLS, checkToolPermission, createAiActionDraft } from '@/lib/ai/tools';
+import { readJson } from '@/lib/db/validate';
 
 export async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     const { message, contextWorkspace } = body;
     if (!message || !message.trim()) {

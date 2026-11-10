@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { calculateProjectProgress } from '@/lib/productivity/engine';
+import { readJson } from '@/lib/db/validate';
 
 export async function GET(request: Request) {
   try {
@@ -47,7 +48,11 @@ export async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     if (!body.name || !body.name.trim()) {
       return NextResponse.json({ error: 'Project name is required' }, { status: 400 });
@@ -104,7 +109,11 @@ export async function PUT(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     if (!body.id) {
       return NextResponse.json({ error: 'Project ID is required' }, { status: 400 });

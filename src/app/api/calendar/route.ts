@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
+import { QUARANTINED_STATUS } from '@/lib/db/visibility';
+import {referenceExists, isISODateString, isISODateTimeString, readJson } from "@/lib/db/validate";
+
+/** Quarantined-task isolation: calendar blocks linked to quarantined tasks are hidden. */
+const NOT_QUARANTINED_TASK = `
+  AND NOT EXISTS (
+    SELECT 1 FROM tasks qt WHERE qt.id = calendar_events.task_id AND qt.status = '${QUARANTINED_STATUS}'
+  )
+`;
 
 export async function GET(request: Request) {
   try {
@@ -9,8 +18,13 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
+    const includeQuarantined = searchParams.get('includeQuarantined') === '1';
 
-    let query = 'SELECT * FROM calendar_events WHERE tenant_id = ?';
+    if ((startDate && !isISODateString(startDate)) || (endDate && !isISODateString(endDate))) {
+      return NextResponse.json({ error: 'startDate and endDate must be in YYYY-MM-DD format' }, { status: 400 });
+    }
+
+    let query = `SELECT * FROM calendar_events WHERE tenant_id = ? ${includeQuarantined ? '' : NOT_QUARANTINED_TASK}`;
     const params: any[] = [session.tenantId];
 
     if (startDate && endDate) {
@@ -30,10 +44,37 @@ export async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     if (!body.title || !body.startTime || !body.endTime) {
       return NextResponse.json({ error: 'Title, startTime, and endTime are required' }, { status: 400 });
+    }
+    if (typeof body.title !== 'string' || !body.title.trim()) {
+      return NextResponse.json({ error: 'Title must be a non-empty string' }, { status: 400 });
+    }
+    if (!isISODateTimeString(body.startTime) || !isISODateTimeString(body.endTime)) {
+      return NextResponse.json({ error: 'startTime and endTime must be valid datetime strings (YYYY-MM-DD or ISO 8601)' }, { status: 400 });
+    }
+    if (body.endTime < body.startTime) {
+      return NextResponse.json({ error: 'endTime must not precede startTime' }, { status: 400 });
+    }
+    if (body.eventType && !['time_block', 'daily_plan_block', 'habit', 'meeting'].includes(body.eventType)) {
+      return NextResponse.json({ error: `Invalid eventType. Must be one of: time_block, daily_plan_block, habit, meeting` }, { status: 400 });
+    }
+
+    // Isolation: referenced records must belong to this tenant
+    if (body.spaceId !== undefined && body.spaceId !== null && !referenceExists(db, session.tenantId, 'spaces', body.spaceId)) {
+      return NextResponse.json({ error: 'Space not found' }, { status: 404 });
+    }
+    if (body.taskId !== undefined && body.taskId !== null && !referenceExists(db, session.tenantId, 'tasks', body.taskId)) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+    }
+    if (body.projectId !== undefined && body.projectId !== null && !referenceExists(db, session.tenantId, 'projects', body.projectId)) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
 
     const eventId = `ev_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
@@ -74,7 +115,11 @@ export async function PUT(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     if (!body.id) {
       return NextResponse.json({ error: 'Event ID is required' }, { status: 400 });
@@ -83,6 +128,27 @@ export async function PUT(request: Request) {
     const existing = db.prepare('SELECT * FROM calendar_events WHERE id = ? AND tenant_id = ?').get(body.id, session.tenantId);
     if (!existing) {
       return NextResponse.json({ error: 'Event not found' }, { status: 404 });
+    }
+
+    if (body.startTime !== undefined && !isISODateTimeString(body.startTime)) {
+      return NextResponse.json({ error: 'startTime must be a valid datetime string' }, { status: 400 });
+    }
+    if (body.endTime !== undefined && !isISODateTimeString(body.endTime)) {
+      return NextResponse.json({ error: 'endTime must be a valid datetime string' }, { status: 400 });
+    }
+    const effStart = body.startTime !== undefined ? body.startTime : (existing as any).start_time;
+    const effEnd = body.endTime !== undefined ? body.endTime : (existing as any).end_time;
+    if (effEnd < effStart) {
+      return NextResponse.json({ error: 'endTime must not precede startTime' }, { status: 400 });
+    }
+    if (body.eventType !== undefined && !['time_block', 'daily_plan_block', 'habit', 'meeting'].includes(body.eventType)) {
+      return NextResponse.json({ error: `Invalid eventType. Must be one of: time_block, daily_plan_block, habit, meeting` }, { status: 400 });
+    }
+    if (body.taskId !== undefined && body.taskId !== null && !referenceExists(db, session.tenantId, 'tasks', body.taskId)) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+    }
+    if (body.projectId !== undefined && body.projectId !== null && !referenceExists(db, session.tenantId, 'projects', body.projectId)) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
 
     db.prepare(`

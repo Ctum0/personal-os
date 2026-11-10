@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
+import { taskVisibleClause } from '@/lib/db/visibility';
 
 export async function GET(request: Request) {
   try {
@@ -27,8 +28,9 @@ export async function GET(request: Request) {
     // Search Productivity
     if (scope === 'productivity' || scope === 'global' || scope === 'current') {
       const tasks = db.prepare(`
-        SELECT id, title, priority, status FROM tasks 
+        SELECT id, title, priority, status FROM tasks
         WHERE tenant_id = ? AND is_deleted = 0 AND (title LIKE ? OR description LIKE ?)
+          AND ${taskVisibleClause()}
         LIMIT 5
       `).all(session.tenantId, term, term) as any[];
 

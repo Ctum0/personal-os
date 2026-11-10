@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { applyAiActionDraft } from '@/lib/ai/tools';
+import { readJson } from '@/lib/db/validate';
 
 export async function GET() {
   try {
@@ -29,7 +30,11 @@ export async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     const { draftId, decision } = body;
     if (!draftId || !decision) {

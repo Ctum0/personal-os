@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { calculateAccountBalances } from '@/lib/finance/engine';
+import { readJson } from '@/lib/db/validate';
 
 export async function GET() {
   try {
@@ -18,16 +19,34 @@ export async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     if (!body.name || !body.name.trim()) {
       return NextResponse.json({ error: 'Account name is required' }, { status: 400 });
     }
 
+    const validTypes = ['checking', 'savings', 'cash', 'credit_card', 'loan', 'investment', 'liability'];
+    if (!validTypes.includes(body.type || 'checking')) {
+      return NextResponse.json({ error: `Invalid type. Must be one of: ${validTypes.join(', ')}` }, { status: 400 });
+    }
+
     const accountId = `acc_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const openingBalance = body.openingBalance ? String(Number(body.openingBalance).toFixed(2)) : '0.00';
+    let openingBalance = '0.00';
+    if (body.openingBalance !== undefined && body.openingBalance !== null && body.openingBalance !== '') {
+      const n = Number(body.openingBalance);
+      if (isNaN(n) || !isFinite(n)) {
+        return NextResponse.json({ error: 'openingBalance must be a valid number' }, { status: 400 });
+      }
+      openingBalance = n.toFixed(2);
+    }
     const currency = body.currency || 'USD';
-    const type = body.type || 'checking';
+    if (typeof currency !== 'string' || !/^[A-Z]{3}$/.test(currency)) {
+      return NextResponse.json({ error: 'currency must be a 3-letter ISO code (e.g. USD)' }, { status: 400 });
+    }
     const color = body.displayColor || '#3b82f6';
 
     db.prepare(`
@@ -38,7 +57,7 @@ export async function POST(request: Request) {
       accountId,
       session.tenantId,
       body.name.trim(),
-      type,
+      body.type || 'checking',
       currency,
       openingBalance,
       body.institution || null,

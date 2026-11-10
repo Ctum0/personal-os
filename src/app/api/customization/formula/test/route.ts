@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server';
 import { evaluateFormula, validateFormula } from '@/lib/customization/formula';
+import { readJson } from '@/lib/db/validate';
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
     const { formula, variables } = body;
 
     if (!formula || typeof formula !== 'string') {

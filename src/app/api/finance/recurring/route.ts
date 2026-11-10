@@ -3,6 +3,10 @@ import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { todayISO } from "@/lib/time";
 import { Decimal } from 'decimal.js';
+import {isISODateString, matchesEnum, readJson } from "@/lib/db/validate";
+
+const VALID_FREQUENCIES = ['daily', 'weekly', 'biweekly', 'monthly', 'quarterly', 'yearly'];
+const VALID_AUTO_ACTIONS = ['reminder_only', 'auto_post', 'draft_transaction'];
 
 export async function GET() {
   try {
@@ -28,10 +32,35 @@ export async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     if (!body.name || !body.name.trim() || body.expectedAmount === undefined || !body.accountId || !body.nextDueDate) {
       return NextResponse.json({ error: 'Name, expectedAmount, accountId, and nextDueDate are required' }, { status: 400 });
+    }
+
+    if (!isISODateString(body.nextDueDate)) {
+      return NextResponse.json({ error: 'nextDueDate must be in YYYY-MM-DD format' }, { status: 400 });
+    }
+    if (body.startDate !== undefined && body.startDate !== null && !isISODateString(body.startDate)) {
+      return NextResponse.json({ error: 'startDate must be in YYYY-MM-DD format' }, { status: 400 });
+    }
+    if (!matchesEnum(body.frequency, VALID_FREQUENCIES)) {
+      return NextResponse.json({ error: `Invalid frequency. Must be one of: ${VALID_FREQUENCIES.join(', ')}` }, { status: 400 });
+    }
+    if (!matchesEnum(body.autoAction, VALID_AUTO_ACTIONS)) {
+      return NextResponse.json({ error: `Invalid autoAction. Must be one of: ${VALID_AUTO_ACTIONS.join(', ')}` }, { status: 400 });
+    }
+    const intervalCount = body.intervalCount !== undefined ? Number(body.intervalCount) : 1;
+    if (!Number.isInteger(intervalCount) || intervalCount < 1) {
+      return NextResponse.json({ error: 'intervalCount must be a positive integer' }, { status: 400 });
+    }
+    const dayOfMonth = body.dayOfMonth !== undefined ? Number(body.dayOfMonth) : 1;
+    if (!Number.isInteger(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31) {
+      return NextResponse.json({ error: 'dayOfMonth must be an integer between 1 and 31' }, { status: 400 });
     }
 
     let amountDec: Decimal;
@@ -70,8 +99,8 @@ export async function POST(request: Request) {
       body.name.trim(),
       body.ruleType || 'bill',
       body.frequency || 'monthly',
-      body.intervalCount || 1,
-      body.dayOfMonth || 1,
+      intervalCount,
+      dayOfMonth,
       body.startDate || today,
       amount,
       body.accountId,

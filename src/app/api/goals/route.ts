@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { calculateGoalProgress } from '@/lib/productivity/engine';
+import {referenceExists, readJson } from "@/lib/db/validate";
 
 export async function GET(request: Request) {
   try {
@@ -47,10 +48,37 @@ export async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     if (!body.title || !body.title.trim()) {
       return NextResponse.json({ error: 'Goal title is required' }, { status: 400 });
+    }
+    if (typeof body.title !== 'string') {
+      return NextResponse.json({ error: 'Goal title must be a string' }, { status: 400 });
+    }
+
+    const startNum = body.startValue !== undefined ? Number(body.startValue) : 0;
+    const targetNum = body.targetValue !== undefined ? Number(body.targetValue) : 100;
+    const currentNum = body.currentValue !== undefined ? Number(body.currentValue) : startNum;
+    if (isNaN(startNum) || isNaN(targetNum) || isNaN(currentNum)) {
+      return NextResponse.json({ error: 'startValue, targetValue, and currentValue must be valid numbers' }, { status: 400 });
+    }
+    if (targetNum < 0 || currentNum < 0 || startNum < 0) {
+      return NextResponse.json({ error: 'Goal values must be non-negative' }, { status: 400 });
+    }
+    if (body.linkedSavingsGoalId) {
+      const sg = db.prepare('SELECT id FROM savings_goals WHERE id = ? AND tenant_id = ?').get(body.linkedSavingsGoalId, session.tenantId);
+      if (!sg) {
+        return NextResponse.json({ error: 'Linked savings goal not found' }, { status: 404 });
+      }
+    }
+    // Isolation: owner space must exist within the tenant
+    if (body.spaceId !== undefined && body.spaceId !== null && body.spaceId !== '' && !referenceExists(db, session.tenantId, 'spaces', body.spaceId)) {
+      return NextResponse.json({ error: 'Space not found' }, { status: 404 });
     }
 
     const goalId = `goal_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
@@ -106,7 +134,11 @@ export async function PUT(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     if (!body.id) {
       return NextResponse.json({ error: 'Goal ID is required' }, { status: 400 });
@@ -115,6 +147,17 @@ export async function PUT(request: Request) {
     const existing = db.prepare('SELECT * FROM goals WHERE id = ? AND tenant_id = ?').get(body.id, session.tenantId) as any;
     if (!existing) {
       return NextResponse.json({ error: 'Goal not found' }, { status: 404 });
+    }
+
+    const nextValue = body.currentValue !== undefined ? Number(body.currentValue) : (body.newLogValue !== undefined ? Number(body.newLogValue) : undefined);
+    if (nextValue !== undefined && isNaN(nextValue)) {
+      return NextResponse.json({ error: 'currentValue / newLogValue must be valid numbers' }, { status: 400 });
+    }
+    if (nextValue !== undefined && nextValue < 0) {
+      return NextResponse.json({ error: 'Goal values must be non-negative' }, { status: 400 });
+    }
+    if (body.targetValue !== undefined && (isNaN(Number(body.targetValue)) || Number(body.targetValue) < 0)) {
+      return NextResponse.json({ error: 'targetValue must be a non-negative number' }, { status: 400 });
     }
 
     db.transaction(() => {

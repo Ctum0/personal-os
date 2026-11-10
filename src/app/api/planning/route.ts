@@ -4,6 +4,7 @@ import { getCurrentSession } from '@/lib/auth';
 import { generateDailyPlanProposal } from '@/lib/productivity/engine';
 import { getPlanningContext } from '@/lib/productivity/planner';
 import { todayISO } from "@/lib/time";
+import {isISODateString, referenceExists, readJson } from "@/lib/db/validate";
 
 export async function GET(request: Request) {
   try {
@@ -46,11 +47,33 @@ export async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     const { targetDate, timeBlocks } = body;
     if (!Array.isArray(timeBlocks)) {
       return NextResponse.json({ error: 'timeBlocks array is required' }, { status: 400 });
+    }
+    if (!isISODateString(targetDate || todayISO())) {
+      return NextResponse.json({ error: 'targetDate must be in YYYY-MM-DD format' }, { status: 400 });
+    }
+
+    for (const block of timeBlocks) {
+      if (!block || typeof block !== 'object' || !block.title || typeof block.startTime !== 'string' || typeof block.endTime !== 'string') {
+        return NextResponse.json({ error: 'Each time block needs title, startTime and endTime' }, { status: 400 });
+      }
+      if (!/^\d{2}:\d{2}$/.test(block.startTime) || !/^\d{2}:\d{2}$/.test(block.endTime)) {
+        return NextResponse.json({ error: 'Block startTime and endTime must be HH:mm strings' }, { status: 400 });
+      }
+      if (block.endTime <= block.startTime) {
+        return NextResponse.json({ error: `Block "${block.title}" endTime must be after startTime` }, { status: 400 });
+      }
+      if (block.taskId && !referenceExists(db, session.tenantId, 'tasks', block.taskId)) {
+        return NextResponse.json({ error: `Task not found: ${block.taskId}` }, { status: 404 });
+      }
     }
 
     db.transaction(() => {

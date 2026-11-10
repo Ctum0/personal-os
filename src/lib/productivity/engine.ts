@@ -301,13 +301,57 @@ export function calculateHabitStreak(
   const successfulLogs = logs.filter(l => l.status === 'completed' || l.value >= habit.minimum_threshold).length;
   const completionRate = totalLogsCount > 0 ? Math.round((successfulLogs / totalLogsCount) * 100) : 0;
 
+  // Best streak: computed from the FULL logged history using the same rule as the
+  // current streak (a missed scheduled day breaks the run; unscheduled days are
+  // transparent; excused days neither break nor extend). Walking forward in time
+  // bounds total work at (referenceDate - start_date) day steps (capped ~10 years).
+  let bestStreak = 0;
+  {
+    const earliest = new Date(Math.min(
+      new Date(habit.start_date + 'T12:00:00Z').getTime(),
+      logs.length > 0 ? new Date(logs[logs.length - 1].log_date + 'T12:00:00Z').getTime() : Infinity
+    ));
+    earliest.setDate(earliest.getDate() - 1);
+    let run = 0;
+    let walk = new Date(earliest.getTime());
+    let dayCount = 0;
+    while (walk.getTime() <= new Date(referenceDate + 'T12:00:00Z').getTime() && dayCount < 3650) {
+      dayCount++;
+      const walkDateStr = toISODate(walk);
+      const walkJsDay = walk.getDay();
+      const walkIsoDay = walkJsDay === 0 ? 7 : walkJsDay;
+      const walkScheduled = habit.schedule_type === 'daily' || scheduledDays.includes(walkIsoDay);
+      if (walkScheduled) {
+        const entry = logMap.get(walkDateStr);
+        if (entry) {
+          // Mirror the current-streak rule EXACTLY: completed or value >= minimum
+          // counts as success even on an excused-marked entry.
+          if (entry.status === 'completed' || entry.value >= habit.minimum_threshold) {
+            run++;
+            if (run > bestStreak) bestStreak = run;
+          } else if (entry.status === 'excused') {
+            // Excused with sub-threshold value: neither breaks nor extends
+          } else {
+            run = 0;
+          }
+        } else {
+          run = 0;
+        }
+      }
+      walk.setDate(walk.getDate() + 1);
+    }
+    // A live current streak must always be a candidate for best streak
+    // (e.g. a streak still building before any longer historical run exists).
+    if (currentStreak > bestStreak) bestStreak = currentStreak;
+  }
+
   return {
     habitId: habit.id,
     habitTitle: habit.title,
     trackingType: habit.tracking_type,
     unit: habit.unit,
     currentStreak,
-    bestStreak: Math.max(currentStreak, currentStreak), // Can be persisted
+    bestStreak,
     completionRatePercent: completionRate,
     totalLogsCount,
     isCompletedToday,
@@ -325,10 +369,12 @@ export function generateDailyPlanProposal(
   targetDate: string = todayISO()
 ) {
   // 1. Get due or open priority tasks
+  // Quarantined records are excluded from every operational proposal surface.
   const tasks = db.prepare(`
     SELECT id, title, priority, estimated_duration, due_date, status, space_id
     FROM tasks
     WHERE tenant_id = ? AND is_deleted = 0 AND status IN ('inbox', 'next', 'in_progress')
+      AND status != 'quarantined'
     ORDER BY 
       CASE priority 
         WHEN 'urgent' THEN 1 

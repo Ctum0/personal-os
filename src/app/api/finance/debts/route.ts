@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
-import { calculateDebtPayoffScenarios } from '@/lib/finance/engine';
+import { calculateDebtPayoffScenarios, calculateDebtLedgerReconciliations, calculateDebtPaymentSplit } from '@/lib/finance/engine';
 import { Decimal } from 'decimal.js';
+import { readJson } from '@/lib/db/validate';
 
 export async function GET(request: Request) {
   try {
@@ -10,6 +11,15 @@ export async function GET(request: Request) {
     const db = getDb();
     const { searchParams } = new URL(request.url);
     const extraPayment = searchParams.get('extra') || '100.00';
+    let extraNum: number;
+    try {
+      extraNum = new Decimal(extraPayment).toNumber();
+    } catch {
+      return NextResponse.json({ error: 'extra must be a valid numeric value' }, { status: 400 });
+    }
+    if (!isFinite(extraNum) || extraNum < 0) {
+      return NextResponse.json({ error: 'extra must be a non-negative number' }, { status: 400 });
+    }
 
     const debts = db.prepare(`
       SELECT d.*, a.name as linked_account_name
@@ -19,6 +29,28 @@ export async function GET(request: Request) {
     `).all(session.tenantId) as any[];
 
     debts.sort((a, b) => new Decimal(b.interest_rate || '0').minus(new Decimal(a.interest_rate || '0')).toNumber());
+
+    // Dual-truth exposure (B3) + per-debt payment split (Agent 2 request):
+    // principal record vs ledger-derived outstanding; payoff runs on the ledger
+    // figure when a linked account exists (see calculateDebtLedgerReconciliations).
+    const reconciliations = new Map(
+      calculateDebtLedgerReconciliations(db, session.tenantId).map(r => [r.debtId, r])
+    );
+    for (const d of debts) {
+      const rec = reconciliations.get(d.id);
+      d.principalBalance = d.principal_balance;
+      d.effectiveBalance = rec?.effectivePrincipal ?? d.principal_balance;
+      d.balanceSource = rec?.balanceSource ?? 'principal';
+      d.ledgerBalance = rec?.ledgerBalance ?? null;
+      d.ledgerOutstanding = rec?.ledgerOutstanding ?? null;
+      d.ledgerPrincipalMismatch = rec?.mismatch ?? false;
+
+      const minPay = new Decimal(d.minimum_payment || '0.00');
+      // Default payment used by the UI's next-payment split preview:
+      // max(minimum_payment, 1% of balance, floored at $25) — documented for the UI.
+      const defaultPayment = Decimal.max(minPay, new Decimal(d.effectiveBalance).times(0.01), new Decimal(25));
+      d.paymentSplit = calculateDebtPaymentSplit(d.effectiveBalance, d.interest_rate || '0', defaultPayment.toFixed(2));
+    }
 
     const payoffScenarios = calculateDebtPayoffScenarios(db, session.tenantId, extraPayment);
 
@@ -32,7 +64,11 @@ export async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     if (!body.name || !body.name.trim() || body.principalBalance === undefined) {
       return NextResponse.json({ error: 'Name and principalBalance are required' }, { status: 400 });
@@ -79,6 +115,11 @@ export async function POST(request: Request) {
       }
     }
 
+    const dueDay = body.dueDayOfMonth !== undefined ? Number(body.dueDayOfMonth) : 15;
+    if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) {
+      return NextResponse.json({ error: 'dueDayOfMonth must be an integer between 1 and 31' }, { status: 400 });
+    }
+
     const debtId = `debt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const principal = principalDec.toFixed(2);
     const apr = aprDec.toFixed(2);
@@ -96,7 +137,7 @@ export async function POST(request: Request) {
       principal,
       apr,
       minPay,
-      body.dueDayOfMonth || 15,
+      dueDay,
       body.payoffStrategy || 'avalanche',
       body.linkedAccountId || null,
       body.notes || ''

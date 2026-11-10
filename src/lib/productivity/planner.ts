@@ -211,11 +211,13 @@ export function getPlanningContext(
   `).all(tenantId, targetDate) as Array<{ id: string; title: string; startTime: string; endTime: string }>);
 
   // 4. Backlog and incomplete tasks with priorities and deadlines
+  // Quarantined records are excluded from every operational planning surface.
   const backlogTasks = (db.prepare(`
     SELECT id, title, priority, due_date as dueDate, estimated_duration as estimatedDuration
     FROM tasks
     WHERE tenant_id = ? AND is_deleted = 0 AND status IN ('inbox', 'next', 'in_progress', 'todo')
-    ORDER BY 
+      AND status != 'quarantined'
+    ORDER BY
       CASE priority WHEN 'urgent' THEN 1 WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 ELSE 4 END ASC,
       due_date ASC NULLS LAST
     LIMIT 25
@@ -242,6 +244,7 @@ export function getPlanningContext(
     SELECT id, title, priority, due_date as originalDueDate
     FROM tasks
     WHERE tenant_id = ? AND is_deleted = 0 AND status != 'completed' AND due_date IS NOT NULL AND due_date < ?
+      AND status != 'quarantined'
     ORDER BY due_date ASC
   `).all(tenantId, targetDate) as Array<{ id: string; title: string; priority: string; originalDueDate: string }>).map(t => {
     const diffDays = Math.max(1, Math.round((new Date(targetDate).getTime() - new Date(t.originalDueDate).getTime()) / (1000 * 60 * 60 * 24)));
@@ -1187,7 +1190,11 @@ export function reviseDailyPlan(
   } else if (/cancel|remove|drop/i.test(lower)) {
     // 3. Removal
     const cancelTarget = lower.replace(/cancel|remove|drop/gi, '').trim();
-    const idx = items.findIndex(item => item.title.toLowerCase().includes(cancelTarget) || cancelTarget.includes(item.title.toLowerCase()));
+    // Empty or too-short targets must NOT use substring matching: `name.includes('')`
+    // is always true and would delete the first block instead of no block.
+    const idx = cancelTarget.length >= 2
+      ? items.findIndex(item => item.title.toLowerCase().includes(cancelTarget) || cancelTarget.includes(item.title.toLowerCase()))
+      : -1;
     if (idx !== -1) {
       const removed = items.splice(idx, 1)[0];
       changedItems.push(`Cancelled: ${removed.title}`);
@@ -1233,7 +1240,7 @@ export function reviseDailyPlan(
 
   const explanation = changedItems.length > 0
     ? `Adjusted schedule for ${changedItems.join(', ')} while preserving ${preservedItems.length} existing plan blocks.`
-    : `Preserved all ${preservedItems.length} plan blocks as requested.`;
+    : `No matching plan block was identified, so nothing was changed.`;
 
   return {
     proposal: revisedProposal,

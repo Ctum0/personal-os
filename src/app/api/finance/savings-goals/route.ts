@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { Decimal } from 'decimal.js';
+import { readJson } from '@/lib/db/validate';
 
 export async function GET() {
   try {
@@ -39,7 +40,11 @@ export async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     if (!body.name || !String(body.name).trim() || body.targetAmount === undefined || body.targetAmount === null) {
       return NextResponse.json({ error: 'Name and targetAmount are required' }, { status: 400 });
@@ -105,7 +110,11 @@ export async function PUT(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     if (!body.id) {
       return NextResponse.json({ error: 'Goal ID is required' }, { status: 400 });

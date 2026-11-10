@@ -15,6 +15,7 @@ import {
   DailyPlanProposal,
 } from '@/lib/productivity/planner';
 import { todayISO, addDaysISO } from "@/lib/time";
+import { readJson } from '@/lib/db/validate';
 
 export async function GET(request: Request) {
   try {
@@ -42,7 +43,11 @@ export async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     const {
       message = '',
@@ -97,7 +102,9 @@ export async function POST(request: Request) {
 
     if (isRevision && priorProposedPlan) {
       const revision = reviseDailyPlan(context, priorProposedPlan, message);
-      const reply = `${revision.explanation}\n\nYour schedule for ${targetDate} has been updated. Unchanged blocks remain preserved.`;
+      const reply: string = revision.changedItems.length > 0
+        ? `${revision.explanation}\n\nYour schedule for ${targetDate} has been updated. Unchanged blocks remain preserved.`
+        : `${revision.explanation}\n\nI could not confidently identify which block "${message.trim()}" refers to, so nothing was changed. Your schedule for ${targetDate} is untouched. Please name the block explicitly (for example: move the "Design review" to 15:00) and I will apply it.`;
 
       const turns = [
         ...priorConversation,

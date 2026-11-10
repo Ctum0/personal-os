@@ -1187,10 +1187,105 @@ const MIGRATIONS: Migration[] = [
         db.exec("ALTER TABLE tasks ADD COLUMN origin_plan_item_id TEXT;");
       }
       db.exec(`
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_tenant_origin_plan_item 
-        ON tasks(tenant_id, origin_plan_item_id) 
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_tenant_origin_plan_item
+        ON tasks(tenant_id, origin_plan_item_id)
         WHERE origin_plan_item_id IS NOT NULL;
       `);
+    },
+  },
+  {
+    version: 4,
+    name: "weekly_reviews_authoritative_store",
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS weekly_reviews (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          week_start TEXT NOT NULL,
+          week_end TEXT,
+          title TEXT,
+          summary TEXT,
+          payload TEXT NOT NULL DEFAULT '{}',
+          created_by TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE(tenant_id, week_start)
+        );
+        CREATE INDEX IF NOT EXISTS idx_weekly_reviews_tenant_week ON weekly_reviews(tenant_id, week_start);
+      `);
+
+      // Move historical reviews out of users.preferences (JSON blob) into the
+      // authoritative table. Preferences entries can carry older, ambiguous
+      // shapes; entries are normalized and unknown shapes are preserved in
+      // preferences rather than dropped.
+      const users = db.prepare('SELECT id, tenant_id, preferences FROM users').all() as Array<{
+        id: string;
+        tenant_id: string;
+        preferences: string;
+      }>;
+      const insertReview = db.prepare(`
+        INSERT INTO weekly_reviews (id, tenant_id, week_start, week_end, title, summary, payload, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(tenant_id, week_start) DO UPDATE SET
+          payload = excluded.payload,
+          summary = excluded.summary,
+          updated_at = datetime('now')
+      `);
+      for (const u of users) {
+        let prefs: any = {};
+        try {
+          prefs = JSON.parse(u.preferences || '{}');
+        } catch {
+          continue;
+        }
+        const entries = prefs?.weeklyReviews;
+        if (!Array.isArray(entries)) continue;
+        const migrated: unknown[] = [];
+        entries.forEach((e: any, idx: number) => {
+          try {
+            if (!e || typeof e !== 'object') {
+              migrated.push(e);
+              return;
+            }
+            // A review needs a week anchor: weekEnding / weekStart / date — else it
+            // stays in preferences as an unknown-shape entry (preserved, not dropped).
+            const anchor: string | undefined = e.weekEnding || e.weekStart || e.date;
+            if (!anchor || !/^\d{4}-\d{2}-\d{2}/.test(String(anchor))) {
+              migrated.push(e);
+              return;
+            }
+            const weekStart = String(anchor).slice(0, 10);
+            const payload = {
+              weekEnding: e.weekEnding,
+              completedCount: e.completedCount ?? 0,
+              missedCount: e.missedCount ?? e.openCount ?? 0,
+              openCount: e.openCount,
+              habitsCount: e.habitsCount,
+              reflectionNotes: e.reflectionNotes ?? e.reflection ?? '',
+              nextWeekCommitments: e.nextWeekCommitments ?? '',
+            };
+            insertReview.run(
+              e.id || `wrev_${u.tenant_id}_${weekStart}_${idx}`,
+              u.tenant_id,
+              weekStart,
+              weekStart,
+              e.title || null,
+              payload.reflectionNotes || null,
+              JSON.stringify(payload),
+              e.createdBy || u.id
+            );
+            migrated.push(e);
+          } catch {
+            migrated.push(e);
+          }
+        });
+        if (migrated.length !== entries.length || migrated.length > 0) {
+          // Keep preferences as the mirror for one release (read-compat) but the
+          // table is authoritative going forward.
+          prefs.weeklyReviews = migrated;
+        }
+        db.prepare('UPDATE users SET preferences = ? WHERE id = ?').run(JSON.stringify(prefs), u.id);
+      }
     },
   },
 ];

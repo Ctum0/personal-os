@@ -1,23 +1,33 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
+import { readJson } from '@/lib/db/validate';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
+
+    // Bounded history window (non-breaking, defaults to ~30 days).
+    const { searchParams } = new URL(request.url);
+    const daysParam = searchParams.get('days') ?? '30';
+    let days = Number(daysParam);
+    if (!Number.isFinite(days) || !Number.isInteger(days) || days < 1) days = 30;
+    days = Math.min(days, 365); // sanity cap
+
+    const startedAfter = new Date(Date.now() - days * 86400000).toISOString();
 
     const sessions = db.prepare(`
       SELECT f.*, t.title as task_title, p.name as project_name
       FROM focus_sessions f
       LEFT JOIN tasks t ON f.task_id = t.id
       LEFT JOIN projects p ON f.project_id = p.id
-      WHERE f.tenant_id = ?
-      ORDER BY f.created_at DESC
-      LIMIT 20
-    `).all(session.tenantId);
+      WHERE f.tenant_id = ? AND f.started_at >= ?
+      ORDER BY f.started_at DESC
+      LIMIT 200
+    `).all(session.tenantId, startedAfter);
 
-    return NextResponse.json({ sessions });
+    return NextResponse.json({ sessions, days, startedAfter, limit: 200 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -27,7 +37,11 @@ export async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const body = await request.json();
+    const parsedBody = await readJson(request);
+    if ("error" in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+    }
+    const body = parsedBody.data;
 
     const id = `foc_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const plannedDuration = Number(body.plannedDuration !== undefined ? body.plannedDuration : 25);
@@ -39,6 +53,18 @@ export async function POST(request: Request) {
     const taskId = body.taskId || null;
     const projectId = body.projectId || null;
     const notes = body.notes || null;
+    // Accept `interruptions` (or `interruptionsCount`): client-reported interruption
+    // tally. Non-negative integer; junk falls back to 0 rather than failing a session.
+    let interruptions = 0;
+    const rawInterruptions = body.interruptions ?? body.interruptionsCount;
+    if (rawInterruptions !== undefined && rawInterruptions !== null && rawInterruptions !== '') {
+      const n = Number(rawInterruptions);
+      if (Number.isFinite(n) && Number.isInteger(n) && n >= 0) {
+        interruptions = Math.min(n, 1000); // sanity cap
+      } else {
+        return NextResponse.json({ error: 'interruptions must be a non-negative integer' }, { status: 400 });
+      }
+    }
     const startedAt = body.startedAt || new Date().toISOString();
     const endedAt = body.endedAt || new Date().toISOString();
 
@@ -61,7 +87,7 @@ export async function POST(request: Request) {
         INSERT INTO focus_sessions (
           id, tenant_id, task_id, project_id, planned_duration, actual_duration,
           status, notes, interruptions_count, started_at, ended_at
-        ) VALUES (?, ?, ?, ?, ?, ?, 'completed', ?, 0, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?, ?)
       `).run(
         id,
         session.tenantId,
@@ -70,6 +96,7 @@ export async function POST(request: Request) {
         plannedDuration,
         actualDuration,
         notes,
+        interruptions,
         startedAt,
         endedAt
       );

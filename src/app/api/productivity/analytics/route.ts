@@ -57,11 +57,12 @@ export async function GET(request: Request) {
       : [session.tenantId, startDate, endDate];
     const dueTasks = db.prepare(dueTasksQuery).all(...dueTasksParams) as any[];
 
-    // Overdue tasks currently
+    // Overdue tasks currently (quarantined records are excluded)
     const overdueQuery = `
       SELECT COUNT(*) as count
       FROM tasks
       WHERE tenant_id = ? AND is_deleted = 0 AND status != 'completed' AND status != 'cancelled'
+        AND status != 'quarantined'
       AND due_date IS NOT NULL AND due_date < ?
       ${spaceClause}
     `;

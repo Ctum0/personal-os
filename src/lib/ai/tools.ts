@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3';
 import { calculateAccountBalances, calculateIncomeAndExpenses, calculateBudget, calculateSafeToSpend } from '@/lib/finance/engine';
 import { calculateProjectProgress, calculateGoalProgress, calculateHabitStreak, generateDailyPlanProposal } from '@/lib/productivity/engine';
 import { todayISO, toISODate } from "@/lib/time";
+import { taskVisibleClause } from '@/lib/db/visibility';
 
 export type ToolPermissionLevel = 'read_and_recommend' | 'prepare_and_confirm' | 'auto_execute';
 
@@ -217,7 +218,7 @@ export const AI_TOOLS: Record<string, AiToolDefinition> = {
     isConsequential: false,
     execute: (db, tenantId) => {
       const today = todayISO();
-      const openTasks = (db.prepare("SELECT count(*) as c FROM tasks WHERE tenant_id = ? AND is_deleted = 0 AND status IN ('inbox', 'next', 'in_progress')").get(tenantId) as any).c;
+      const openTasks = (db.prepare(`SELECT count(*) as c FROM tasks WHERE tenant_id = ? AND is_deleted = 0 AND status IN ('inbox', 'next', 'in_progress') AND ${taskVisibleClause()}`).get(tenantId) as any).c;
       const completedToday = (db.prepare("SELECT count(*) as c FROM tasks WHERE tenant_id = ? AND status = 'completed' AND date(completion_at) = ?").get(tenantId, today) as any).c;
       const safeSpend = calculateSafeToSpend(db, tenantId);
       return {
@@ -241,6 +242,7 @@ export const AI_TOOLS: Record<string, AiToolDefinition> = {
         SELECT id, title, priority, status, due_date, estimated_duration, space_id
         FROM tasks
         WHERE tenant_id = ? AND is_deleted = 0 AND status != 'completed'
+          AND ${taskVisibleClause()}
         ORDER BY 
           CASE priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 ELSE 4 END ASC,
           due_date ASC
