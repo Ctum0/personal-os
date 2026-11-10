@@ -45,3 +45,5 @@ data/*.db
 data/*.db-wal
 data/*.db-shm
 .vitest/
+
+.next-e2e/
