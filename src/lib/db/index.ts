@@ -4,6 +4,7 @@ import fs from 'fs';
 import { todayISO } from "@/lib/time";
 import { mkdirSync as __mkdirSync } from "node:fs";
 import { dirname as __dirnameOf, join as __joinPath } from "node:path";
+import { maybeRunMaintenance, registerDbPath } from "./maintenance";
 
 // Database directory in project root; path is resolvable at call time so
 // sandboxed tests and isolated profiles can override PERSONAL_OS_DB_PATH
@@ -24,6 +25,11 @@ function resolveDbPath(): string {
 let dbInstance: Database.Database | null = null;
 let dbInstancePath: string | null = null;
 
+/** Current resolved live DB file path (exported for maintenance tooling). */
+export function resolveLiveDbPath(): string {
+  return resolveDbPath();
+}
+
 export function getDb(): Database.Database {
   const dbPath = resolveDbPath();
   if (!dbInstance || dbInstancePath !== dbPath) {
@@ -33,6 +39,8 @@ export function getDb(): Database.Database {
     dbInstance.pragma('foreign_keys = ON');
     runMigrations(dbInstance);
     dbInstancePath = dbPath;
+    registerDbPath(dbPath);
+    maybeRunMaintenance(dbInstance);
   }
   return dbInstance;
 }
