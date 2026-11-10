@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import { Decimal } from 'decimal.js';
+import { fmtMoney, sumDecimalParts, toDecimal } from '../_shared/format';
 import {
   PiggyBank,
   Plus,
@@ -80,9 +82,9 @@ export default function SavingsGoalsPage() {
     }
   };
 
-  const totalTarget = savingsGoals.reduce((sum, g) => sum + parseFloat(g.target_amount || '0'), 0);
-  const totalSaved = savingsGoals.reduce((sum, g) => sum + parseFloat(g.current_amount || '0'), 0);
-  const overallPercent = totalTarget > 0 ? ((totalSaved / totalTarget) * 100).toFixed(1) : '0.0';
+  const totalTarget = sumDecimalParts(savingsGoals.map(sg => sg.target_amount));
+  const totalSaved = sumDecimalParts(savingsGoals.map(sg => sg.current_amount));
+  const overallPercent = totalTarget.greaterThan(0) ? totalSaved.dividedBy(totalTarget).times(100).toDecimalPlaces(1).toFixed(1) : '0.0';
 
   return (
     <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -111,14 +113,14 @@ export default function SavingsGoalsPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl">
             <span className="text-xs text-zinc-400">Total Earmarked Capital</span>
-            <div className="text-xl font-bold font-mono text-emerald-400 mt-1">
-              ${totalSaved.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <div className="text-xl font-bold font-mono text-emerald-400 mt-1 tabular-nums">
+              {fmtMoney(totalSaved)}
             </div>
           </div>
           <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl">
             <span className="text-xs text-zinc-400">Total Milestones Target</span>
-            <div className="text-xl font-bold font-mono text-zinc-100 mt-1">
-              ${totalTarget.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <div className="text-xl font-bold font-mono text-zinc-100 mt-1 tabular-nums">
+              {fmtMoney(totalTarget)}
             </div>
           </div>
           <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl">
@@ -252,7 +254,7 @@ export default function SavingsGoalsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {savingsGoals.map(sg => {
-            const remaining = Math.max(0, parseFloat(sg.target_amount || '0') - parseFloat(sg.current_amount || '0'));
+            const remaining = Decimal.max(toDecimal(sg.target_amount).minus(toDecimal(sg.current_amount)), 0);
             return (
               <div key={sg.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4 shadow-sm">
                 <div className="flex items-start justify-between">
@@ -275,9 +277,9 @@ export default function SavingsGoalsPage() {
                       style={{ width: `${Math.min(100, sg.progressPercent)}%` }}
                     />
                   </div>
-                  <div className="flex items-center justify-between text-xs font-mono text-zinc-400">
-                    <span>Saved: ${sg.current_amount}</span>
-                    <span>Target: ${sg.target_amount}</span>
+                  <div className="flex items-center justify-between text-xs font-mono text-zinc-400 tabular-nums">
+                    <span>Saved: {fmtMoney(sg.current_amount)}</span>
+                    <span>Target: {fmtMoney(sg.target_amount)}</span>
                   </div>
                 </div>
 
@@ -287,8 +289,8 @@ export default function SavingsGoalsPage() {
                   ) : (
                     <span>General Liquid Reserve</span>
                   )}
-                  {remaining > 0 ? (
-                    <span className="font-mono text-zinc-400">${remaining.toFixed(2)} to go</span>
+                  {remaining.greaterThan(0) ? (
+                    <span className="font-mono text-zinc-400 tabular-nums">{fmtMoney(remaining)} to go</span>
                   ) : (
                     <span className="text-emerald-400 font-semibold">Goal Achieved!</span>
                   )}

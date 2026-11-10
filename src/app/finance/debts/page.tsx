@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { Decimal } from 'decimal.js';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import { fmtMoney, fmtAbsMoney, sumDecimalParts, ordinalOf, toDecimal } from '../_shared/format';
 import {
   TrendingDown,
   Plus,
@@ -77,7 +79,7 @@ export default function DebtsPage() {
     loadDebts();
   };
 
-  const totalDebt = debts.reduce((sum, d) => sum + parseFloat(d.principal_balance || '0'), 0);
+  const totalDebt = sumDecimalParts(debts.map(d => d.principal_balance));
 
   return (
     <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -193,7 +195,7 @@ export default function DebtsPage() {
                   <span>{showFormula ? 'Hide Formula' : 'Calculation Formula'}</span>
                 </button>
               </div>
-              <p className="text-xs text-zinc-400">Total Outstanding Liabilities: ${totalDebt.toFixed(2)}</p>
+              <p className="text-xs text-zinc-400 tabular-nums">Total Outstanding Liabilities: {fmtMoney(totalDebt)}</p>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-zinc-400">Extra Monthly Payment:</span>
@@ -212,7 +214,7 @@ export default function DebtsPage() {
               <div className="font-semibold text-zinc-200">Compound Amortization Payoff Logic</div>
               <p className="text-zinc-400 text-[11px] leading-relaxed">
                 Both strategies simulate monthly billing cycles where accrued interest is computed as <span className="font-mono text-zinc-300">I_m = Principal × (APR / 1200)</span>.
-                Minimum payments are fulfilled across all obligations first. Any surplus extra payment (<span className="font-mono text-zinc-300">${extraPayment}/mo</span>) is allocated to the priority debt until retired, after which its freed payment cascades into the next liability.
+                Minimum payments are fulfilled across all obligations first. Any surplus extra payment (<span className="font-mono text-zinc-300">{fmtMoney(extraPayment)}/mo</span>) is allocated to the priority debt until retired, after which its freed payment cascades into the next liability.
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 text-[11px]">
                 <div className="border-l-2 border-indigo-500 pl-2 text-zinc-400">
@@ -235,14 +237,14 @@ export default function DebtsPage() {
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>
                   <span className="text-zinc-500 block">Debt-Free In</span>
-                  <span className="font-mono text-lg font-bold text-zinc-100">
+                  <span className="font-mono text-lg font-bold text-zinc-100 tabular-nums">
                     {payoffScenarios.avalanche?.monthsToDebtFree} Months
                   </span>
                 </div>
                 <div>
                   <span className="text-zinc-500 block">Total Interest Paid</span>
-                  <span className="font-mono text-lg font-bold text-emerald-400">
-                    ${payoffScenarios.avalanche?.totalInterestPaid}
+                  <span className="font-mono text-lg font-bold text-red-400 tabular-nums">
+                    {fmtMoney(payoffScenarios.avalanche?.totalInterestPaid)}
                   </span>
                 </div>
               </div>
@@ -260,14 +262,14 @@ export default function DebtsPage() {
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>
                   <span className="text-zinc-500 block">Debt-Free In</span>
-                  <span className="font-mono text-lg font-bold text-zinc-100">
+                  <span className="font-mono text-lg font-bold text-zinc-100 tabular-nums">
                     {payoffScenarios.snowball?.monthsToDebtFree} Months
                   </span>
                 </div>
                 <div>
                   <span className="text-zinc-500 block">Total Interest Paid</span>
-                  <span className="font-mono text-lg font-bold text-amber-400">
-                    ${payoffScenarios.snowball?.totalInterestPaid}
+                  <span className="font-mono text-lg font-bold text-red-400 tabular-nums">
+                    {fmtMoney(payoffScenarios.snowball?.totalInterestPaid)}
                   </span>
                 </div>
               </div>
@@ -314,35 +316,84 @@ export default function DebtsPage() {
                 <tr>
                   <th className="py-3 px-4">Liability & Linkage</th>
                   <th className="py-3 px-4 text-right">Principal Balance</th>
-                  <th className="py-3 px-4 text-right">Interest Rate (APR)</th>
+                  <th className="py-3 px-4 text-right">APR</th>
                   <th className="py-3 px-4 text-right">Minimum Monthly</th>
                   <th className="py-3 px-4 text-center">Due Day</th>
+                  <th className="py-3 px-4 text-right">Next Payment Split</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/60 font-mono">
-                {debts.map(d => (
-                  <tr key={d.id} className="hover:bg-zinc-800/40">
-                    <td className="py-3 px-4 font-sans">
-                      <div className="font-medium text-zinc-200">{d.name}</div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        {d.linked_account_name ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-800/50">
-                            <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                            Linked: {d.linked_account_name} (Auto-reconciled with ledger)
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-zinc-500 bg-zinc-950/40 px-1.5 py-0.5 rounded border border-zinc-800/50">
-                            Standalone Liability
-                          </span>
+                {debts.map(d => {
+                  // Payment split + effective balance come from the server (engine
+                  // calculateDebtPaymentSplit, ledger-reconciled since wave 2). The client-side
+                  // mirror below is only a fallback for older API responses.
+                  const principal = toDecimal(d.principal_balance);
+                  const apr = toDecimal(d.interest_rate);
+                  const minPay = toDecimal(d.minimum_payment);
+                  const serverSplit = d.paymentSplit || null;
+                  const fallbackInterest = principal.times(apr.dividedBy(100).dividedBy(12)).toDecimalPlaces(2);
+                  const fallbackPrincipalPortion = Decimal.min(Decimal.max(toDecimal(minPay).minus(fallbackInterest), 0), principal);
+                  const interestPortion = serverSplit ? toDecimal(serverSplit.interestPortion) : fallbackInterest;
+                  const principalPortion = serverSplit ? toDecimal(serverSplit.principalPortion) : fallbackPrincipalPortion;
+                  const splitBasis = serverSplit ? toDecimal(serverSplit.previousPrincipal) : principal;
+                  const ledgerDebt = d.ledgerOutstanding != null
+                    ? toDecimal(d.ledgerOutstanding)
+                    : (d.linked_account_id && accounts.find(a => a.accountId === d.linked_account_id)
+                        ? toDecimal(accounts.find(a => a.accountId === d.linked_account_id).currentBalance).abs()
+                        : null);
+                  const mismatch = serverSplit && d.ledgerPrincipalMismatch != null
+                    ? Boolean(d.ledgerPrincipalMismatch)
+                    : (ledgerDebt != null && !ledgerDebt.equals(principal));
+                  const balanceSource = d.balanceSource === 'ledger' || (serverSplit && splitBasis.equals(ledgerDebt || 0));
+                  return (
+                    <tr key={d.id} className="hover:bg-zinc-800/40">
+                      <td className="py-3 px-4 font-sans">
+                        <div className="font-medium text-zinc-200">{d.name}</div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {d.linked_account_name ? (
+                            <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${
+                              mismatch
+                                ? 'text-amber-400 bg-amber-950/40 border-amber-800/50'
+                                : 'text-emerald-400 bg-emerald-950/40 border-emerald-800/50'
+                            }`}>
+                              {mismatch ? (
+                                <ShieldAlert className="w-3 h-3 shrink-0" />
+                              ) : (
+                                <ShieldCheck className="w-3 h-3 shrink-0" />
+                              )}
+                              Linked: {d.linked_account_name} — ledger {ledgerDebt ? fmtMoney(ledgerDebt) : '—'} {ledgerDebt ? 'owed' : ''}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-zinc-500 bg-zinc-950/40 px-1.5 py-0.5 rounded border border-zinc-800/50">
+                              Standalone Liability
+                            </span>
+                          )}
+                        </div>
+                        {mismatch && (
+                          <p className="text-[10px] text-amber-400/90 mt-1 font-mono">
+                            {balanceSource
+                              ? `Tracked principal (${fmtMoney(principal)}) is stale vs ledger balance (${fmtMoney(ledgerDebt)} owed, incl. unsettled charges) — payoff scenarios and this payment split now use the ledger-reconciled figure (${fmtMoney(splitBasis)}). Update this debt record to align tracked figures.`
+                              : `Ledger balance (${fmtMoney(ledgerDebt)} owed) differs from tracked principal (${fmtMoney(principal)}) — payoff scenarios use the ${fmtMoney(principal)} tracked figure.`}
+                          </p>
                         )}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-right font-bold text-red-400">${d.principal_balance}</td>
-                    <td className="py-3 px-4 text-right text-zinc-300">{d.interest_rate}%</td>
-                    <td className="py-3 px-4 text-right text-zinc-300">${d.minimum_payment}</td>
-                    <td className="py-3 px-4 text-center text-zinc-400">{d.due_day_of_month}th</td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="py-3 px-4 text-right font-bold text-red-400 tabular-nums">{fmtMoney(principal)}</td>
+                      <td className="py-3 px-4 text-right text-zinc-300 tabular-nums">{apr.toFixed(2)}%</td>
+                      <td className="py-3 px-4 text-right text-zinc-300 tabular-nums">{fmtMoney(minPay)}</td>
+                      <td className="py-3 px-4 text-center text-zinc-400">{ordinalOf(d.due_day_of_month)}</td>
+                      <td className="py-3 px-4 text-right text-[11px]" title={splitBasis && !splitBasis.equals(principal) ? `Split computed on the ledger-reconciled balance ${fmtMoney(splitBasis)}` : undefined}>
+                        <div>
+                          <span className="text-rose-400">-{fmtMoney(interestPortion)}</span>
+                          <span className="text-zinc-500"> interest</span>
+                        </div>
+                        <div>
+                          <span className="text-emerald-400/90">+{fmtMoney(principalPortion)}</span>
+                          <span className="text-zinc-500"> principal</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

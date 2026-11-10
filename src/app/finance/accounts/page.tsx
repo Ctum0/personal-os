@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import { fmtMoney, fmtAbsMoney } from '../_shared/format';
 import {
   Landmark,
   Plus,
@@ -204,12 +205,12 @@ export default function AccountsPage() {
                   ? 'Current Outstanding Ledger Debt:'
                   : 'Current Calculated Ledger Balance:'}
               </span>
-              <p className="font-mono text-lg font-bold text-zinc-100">
+              <p className="font-mono text-lg font-bold text-zinc-100 tabular-nums">
                 {selectedReconcileAccount.accountType === 'credit_card' || selectedReconcileAccount.accountType === 'loan'
                   ? (parseFloat(selectedReconcileAccount.currentBalance) < 0
-                      ? `$${Math.abs(parseFloat(selectedReconcileAccount.currentBalance)).toFixed(2)} Owed`
-                      : `+$${parseFloat(selectedReconcileAccount.currentBalance).toFixed(2)} Credit`)
-                  : `$${selectedReconcileAccount.currentBalance}`} {selectedReconcileAccount.currency}
+                      ? `${fmtAbsMoney(selectedReconcileAccount.currentBalance)} Owed`
+                      : `+${fmtMoney(selectedReconcileAccount.currentBalance)} Credit`)
+                  : fmtMoney(selectedReconcileAccount.currentBalance)} {selectedReconcileAccount.currency}
               </p>
             </div>
 
@@ -322,6 +323,7 @@ export default function AccountsPage() {
                     onClick={() => setSelectedExplainer(acc.explainer)}
                     className="text-zinc-500 hover:text-emerald-400 transition-colors p-1"
                     title="Inspect balance calculation inputs"
+                    aria-label={`Inspect balance calculation inputs for ${acc.accountName}`}
                   >
                     <HelpCircle className="w-4 h-4" />
                   </button>
@@ -345,7 +347,7 @@ export default function AccountsPage() {
                       </span>
                     )}
                   </div>
-                  <p className={`font-mono text-2xl font-extrabold mt-0.5 ${
+                  <p className={`font-mono text-2xl font-extrabold mt-0.5 tabular-nums ${
                     isDebt && balNum < 0
                       ? 'text-amber-400'
                       : balNum < 0
@@ -353,18 +355,14 @@ export default function AccountsPage() {
                       : 'text-zinc-100'
                   }`}>
                     {isDebt
-                      ? balNum < 0
-                        ? `$${Math.abs(balNum).toFixed(2)}`
-                        : `+$${balNum.toFixed(2)}`
-                      : balNum < 0
-                      ? `-$${Math.abs(balNum).toFixed(2)}`
-                      : `$${balNum.toFixed(2)}`}
+                      ? fmtAbsMoney(balNum)
+                      : fmtMoney(balNum)}
                   </p>
-                  <div className="flex items-center justify-between text-[10px] text-zinc-500 mt-1">
-                    <span>Opening: ${acc.openingBalance}</span>
+                  <div className="flex items-center justify-between text-[10px] text-zinc-500 mt-1 tabular-nums">
+                    <span>Opening: {fmtMoney(acc.openingBalance)}</span>
                     {isDebt && (
                       <span className="text-[10px] text-zinc-500 font-mono">
-                        Ledger: {acc.currentBalance}
+                        Ledger: {fmtMoney(acc.currentBalance)}
                       </span>
                     )}
                   </div>

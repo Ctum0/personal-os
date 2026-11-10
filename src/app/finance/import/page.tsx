@@ -108,9 +108,13 @@ export default function CsvImportPage() {
         setStatusMessage({ type: 'error', text: data.error || 'Failed to commit import batch.' });
         return;
       }
+      const skipped = Number(data.skippedCount || 0);
+      const skippedNote = skipped > 0
+        ? ` ${skipped} row${skipped === 1 ? '' : 's'} skipped (duplicates or malformed). Reupload after fixing them if needed.`
+        : '';
       setStatusMessage({
         type: 'success',
-        text: `Import committed! ${data.importedCount} rows successfully written to ledger.`
+        text: `Import committed! ${data.importedCount} rows written to ledger as a single atomic batch.${skippedNote}`
       });
       setPreview(null);
       setCsvFile(null);
@@ -251,13 +255,22 @@ export default function CsvImportPage() {
 
             <button
               onClick={handleCommit}
-              disabled={isCommitting}
-              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-2 disabled:opacity-50"
+              disabled={isCommitting || preview.validRowsCount === 0}
+              title={preview.validRowsCount === 0 ? 'No valid rows to commit — fix the errored rows and re-upload.' : undefined}
+              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <CheckCircle2 className="w-4 h-4" />
               <span>{isCommitting ? 'Committing Ledger...' : `Confirm & Commit (${preview.validRowsCount} rows)`}</span>
             </button>
           </div>
+
+          {preview.errorRowsCount > 0 && (
+            <div className="p-3 rounded-lg bg-red-950/30 border border-red-900/50 text-xs text-red-300/90">
+              {preview.errorRowsCount} row{preview.errorRowsCount === 1 ? '' : 's'} failed validation and will be skipped
+              on commit — they are recorded as errored rows in this batch. Commit is atomic: either all valid rows post to
+              the ledger or none do; malformed rows never write partial entries.
+            </div>
+          )}
 
           {/* Rows Preview Table */}
           <div className="overflow-x-auto max-h-96">

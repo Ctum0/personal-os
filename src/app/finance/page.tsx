@@ -3,9 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import { todayISO } from '@/lib/time';
 import {
   HelpCircle,
-  ArrowRight,
+  ArrowRightLeft,
   Plus,
   FileSpreadsheet,
   Landmark,
@@ -14,6 +15,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { fmtMoney, fmtAbsMoney, sumDecimalParts } from './_shared/format';
 
 export default function FinanceDashboard() {
   const { setSelectedExplainer, setIsQuickAddOpen } = useWorkspace();
@@ -25,7 +27,7 @@ export default function FinanceDashboard() {
   const [upcomingBills, setUpcomingBills] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
+  const loadDashboard = () => {
     setIsLoading(true);
     Promise.all([
       fetch('/api/finance/accounts').then(r => r.json()),
@@ -44,11 +46,29 @@ export default function FinanceDashboard() {
         setUpcomingBills((recData.recurringRules || []).slice(0, 4));
       })
       .finally(() => setIsLoading(false));
+  };
+
+  useEffect(() => {
+    loadDashboard();
   }, []);
 
-  const totalLiquid = balances
-    .filter(a => a.accountType === 'checking' || a.accountType === 'cash' || a.accountType === 'savings')
-    .reduce((sum, a) => sum + Math.max(0, parseFloat(a.currentBalance)), 0);
+  // QuickAddModal (shared) now only calls router.refresh() after a write, which does not
+  // re-run client-side effects — listen for the cross-page data-change signal so money
+  // figures are never stale after a Quick Add. Contract: QuickAddModal dispatches
+  // `window.dispatchEvent(new Event('personal-os:data-changed'))`; this is a no-op until then.
+  useEffect(() => {
+    window.addEventListener('personal-os:data-changed', loadDashboard);
+    return () => window.removeEventListener('personal-os:data-changed', loadDashboard);
+  }, [loadDashboard]);
+
+  const totalLiquid = sumDecimalParts(
+    balances
+      .filter(a => a.accountType === 'checking' || a.accountType === 'cash' || a.accountType === 'savings')
+      .map(a => (parseFloat(a.currentBalance) > 0 ? a.currentBalance : 0))
+  );
+  const today = todayISO();
+  const budgetIsArchived = budget ? today > budget.periodEnd : false;
+  const budgetIsUpcoming = budget ? today < budget.periodStart : false;
 
   return (
     <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -59,7 +79,7 @@ export default function FinanceDashboard() {
             <span>Deterministic Accounting</span>
             <span>•</span>
             <span className="text-zinc-400 font-mono tabular-nums">
-              Liquid Capital: ${totalLiquid.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              Liquid Capital: {fmtMoney(totalLiquid)}
             </span>
           </div>
           <h1 className="text-xl font-bold tracking-tight text-zinc-100 mt-1">
@@ -94,8 +114,10 @@ export default function FinanceDashboard() {
       {/* 2. Hero Safe-to-Spend Feature (The Primary Financial Truth) */}
       {safeToSpend && (() => {
         const pendingItem = safeToSpend.breakdown?.find((b: any) => b.label.toLowerCase().includes('pending'));
-        const pendingAmt = pendingItem?.amount || safeToSpend.pendingExpenses || '0.00';
+        const pendingAmt = pendingItem?.amount || '0.00';
         const hasPending = parseFloat(pendingAmt) > 0;
+        const overdueAmt = parseFloat(safeToSpend.overdueObligations || '0');
+        const overdueCount = Number(safeToSpend.overdueObligationsCount || 0);
 
         return (
           <div className="p-5 rounded-xl border border-white/[0.08] bg-zinc-900/40 relative">
@@ -124,11 +146,11 @@ export default function FinanceDashboard() {
 
                 <div className="flex items-baseline gap-3 mt-1.5">
                   <div className="text-3xl sm:text-4xl font-semibold tracking-tight text-zinc-100 font-mono tabular-nums">
-                    ${safeToSpend.safeToSpendAmount}
+                    {fmtMoney(safeToSpend.safeToSpendAmount)}
                   </div>
                   {safeToSpend.isDeficit ? (
-                    <span className="text-xs font-mono px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30">
-                      Funding Deficit: -${safeToSpend.fundingDeficit} (Zero-Floored)
+                    <span className="text-xs font-mono px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30 tabular-nums">
+                      Funding Deficit: -{fmtAbsMoney(safeToSpend.fundingDeficit)} (Zero-Floored)
                     </span>
                   ) : (
                     <span className="text-xs font-mono text-emerald-400/80">
@@ -139,6 +161,11 @@ export default function FinanceDashboard() {
                 <p className="text-xs text-zinc-400 mt-1 max-w-xl leading-relaxed">
                   Uncommitted discretionary funds remaining after reserving for scheduled upcoming obligations, earmarked goals, uncleared deductions, and safety cushion.
                 </p>
+                {overdueAmt > 0 && (
+                  <p className="text-xs text-amber-400/90 mt-1.5 font-mono tabular-nums">
+                    Includes {fmtMoney(overdueAmt)} of {overdueCount} overdue obligation occurrence{overdueCount === 1 ? '' : 's'} reserved immediately (schedule-aware projection; persisted schedule untouched).
+                  </p>
+                )}
               </div>
 
               {/* Six-part transparent breakdown */}
@@ -146,37 +173,42 @@ export default function FinanceDashboard() {
                 <div className="p-2.5 bg-zinc-950/60 rounded-lg border border-white/[0.04]">
                   <span className="text-zinc-500 block text-[10px] uppercase font-medium">Liquid Cash</span>
                   <span className="font-mono text-zinc-200 tabular-nums font-semibold text-xs">
-                    ${safeToSpend.liquidFunds}
+                    {fmtMoney(safeToSpend.liquidFunds)}
                   </span>
                 </div>
                 <div className="p-2.5 bg-zinc-950/60 rounded-lg border border-white/[0.04]">
                   <span className="text-zinc-500 block text-[10px] uppercase font-medium">Pending Deductions</span>
                   <span className={`font-mono tabular-nums font-semibold text-xs ${hasPending ? 'text-amber-400' : 'text-zinc-400'}`}>
-                    -${pendingAmt}
+                    {hasPending ? `-${fmtAbsMoney(pendingAmt)}` : fmtMoney(0)}
                   </span>
                 </div>
                 <div className="p-2.5 bg-zinc-950/60 rounded-lg border border-white/[0.04]">
                   <span className="text-zinc-500 block text-[10px] uppercase font-medium">Upcoming Recurring</span>
                   <span className="font-mono text-amber-400 tabular-nums font-semibold text-xs">
-                    -${safeToSpend.upcomingObligations}
+                    -{fmtAbsMoney(safeToSpend.upcomingObligations)}
                   </span>
+                  {overdueAmt > 0 && (
+                    <span className="text-[9px] text-amber-500/80 block font-mono tabular-nums mt-0.5" title="Overdue occurrences are reserved immediately in addition to the projected occurrences due within the horizon.">
+                      incl. {fmtMoney(overdueAmt)} overdue ×{overdueCount}
+                    </span>
+                  )}
                 </div>
                 <div className="p-2.5 bg-zinc-950/60 rounded-lg border border-white/[0.04]">
                   <span className="text-zinc-500 block text-[10px] uppercase font-medium">Earmarked Savings</span>
                   <span className="font-mono text-sky-400 tabular-nums font-semibold text-xs">
-                    -${safeToSpend.earmarkedSavings || '0.00'}
+                    -{fmtAbsMoney(safeToSpend.earmarkedSavings || '0.00')}
                   </span>
                 </div>
                 <div className="p-2.5 bg-zinc-950/60 rounded-lg border border-white/[0.04]">
                   <span className="text-zinc-500 block text-[10px] uppercase font-medium">Safety Buffer</span>
                   <span className="font-mono text-zinc-400 tabular-nums font-semibold text-xs">
-                    -${safeToSpend.safetyBuffer}
+                    -{fmtAbsMoney(safeToSpend.safetyBuffer)}
                   </span>
                 </div>
                 <div className="p-2.5 bg-zinc-950/60 rounded-lg border border-white/[0.04]">
                   <span className="text-zinc-500 block text-[10px] uppercase font-medium">Funding Deficit</span>
                   <span className={`font-mono tabular-nums font-semibold text-xs ${safeToSpend.isDeficit ? 'text-rose-400' : 'text-zinc-500'}`}>
-                    {safeToSpend.isDeficit ? `-$${safeToSpend.fundingDeficit}` : '$0.00'}
+                    {safeToSpend.isDeficit ? `-${fmtAbsMoney(safeToSpend.fundingDeficit)}` : fmtMoney(0)}
                   </span>
                 </div>
               </div>
@@ -212,7 +244,7 @@ export default function FinanceDashboard() {
               </div>
               <div className="mt-3">
                 <p className="text-2xl font-semibold tracking-tight text-zinc-100 font-mono tabular-nums">
-                  ${netWorth.netWorth}
+                  {fmtMoney(netWorth.netWorth)}
                 </p>
                 <p className="text-xs text-zinc-500 mt-0.5">Valued economic assets minus liabilities</p>
               </div>
@@ -220,10 +252,10 @@ export default function FinanceDashboard() {
 
             <div className="mt-4 pt-3 border-t border-white/[0.04] flex items-center justify-between text-xs">
               <span className="text-zinc-500">
-                Assets: <strong className="text-zinc-300 font-mono tabular-nums font-normal">${netWorth.totalAssets}</strong>
+                Assets: <strong className="text-zinc-300 font-mono tabular-nums font-normal">{fmtMoney(netWorth.totalAssets)}</strong>
               </span>
               <span className="text-zinc-500">
-                Liabilities: <strong className="text-rose-400 font-mono tabular-nums font-normal">-${netWorth.totalLiabilities}</strong>
+                Liabilities: <strong className="text-rose-400 font-mono tabular-nums font-normal">-{fmtAbsMoney(netWorth.totalLiabilities)}</strong>
               </span>
             </div>
           </div>
@@ -253,12 +285,26 @@ export default function FinanceDashboard() {
                 </Link>
               </div>
               <div className="mt-3">
-                <p className="text-2xl font-semibold tracking-tight text-zinc-100 font-mono tabular-nums">
-                  ${budget.totalRemaining}
+                <p className={`text-2xl font-semibold tracking-tight font-mono tabular-nums ${parseFloat(budget.totalRemaining) < 0 ? 'text-rose-400' : 'text-zinc-100'}`}>
+                  {fmtMoney(budget.totalRemaining)}
                 </p>
-                <p className="text-xs text-zinc-500 mt-0.5">
-                  Remaining of ${budget.totalAllocated} allocated
-                </p>
+                {budgetIsArchived ? (
+                  <p className="text-xs text-amber-400 mt-0.5">
+                    Archived cycle — period ended {budget.periodEnd}. Not a current-month figure.
+                  </p>
+                ) : budgetIsUpcoming ? (
+                  <p className="text-xs text-sky-400 mt-0.5">
+                    Upcoming cycle — starts {budget.periodStart}.
+                  </p>
+                ) : budget.periodRolledForward ? (
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    {fmtMoney(budget.totalAllocated)} allocated for the current monthly cycle ({budget.periodStart} → {budget.periodEnd}); period auto-rolled forward, no data changed.
+                  </p>
+                ) : (
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    Remaining of {fmtMoney(budget.totalAllocated)} allocated
+                  </p>
+                )}
               </div>
             </div>
 
@@ -309,6 +355,7 @@ export default function FinanceDashboard() {
             ) : (
               recentTx.map(tx => {
                 const isIncome = tx.transaction_type === 'income' || tx.transaction_type === 'refund';
+                const isTransfer = tx.transaction_type === 'transfer';
                 return (
                   <div
                     key={tx.id}
@@ -324,13 +371,24 @@ export default function FinanceDashboard() {
                     </div>
 
                     <div className="text-right shrink-0">
-                      <span
-                        className={`text-xs font-mono font-semibold tabular-nums ${
-                          isIncome ? 'text-emerald-400' : 'text-zinc-200'
-                        }`}
-                      >
-                        {isIncome ? '+' : '-'}${tx.amount}
-                      </span>
+                      {isTransfer ? (
+                        <>
+                          <span className="text-xs font-mono font-semibold tabular-nums text-sky-400">
+                            ↔ {fmtMoney(tx.amount)}
+                          </span>
+                          <p className="text-[10px] text-zinc-500 mt-0.5">
+                            Transfer · {tx.to_account_name || '—'}
+                          </p>
+                        </>
+                      ) : (
+                        <span
+                          className={`text-xs font-mono font-semibold tabular-nums ${
+                            isIncome ? 'text-emerald-400' : 'text-zinc-200'
+                          }`}
+                        >
+                          {isIncome ? '+' : '-'}{fmtMoney(tx.amount)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 );
@@ -372,15 +430,15 @@ export default function FinanceDashboard() {
                     <div className="text-right font-mono text-xs font-semibold tabular-nums">
                       {isDebt && balNum < 0 ? (
                         <span className="text-amber-400 font-medium">
-                          ${Math.abs(balNum).toFixed(2)} <span className="text-[10px] uppercase font-sans text-amber-500/80">owed</span>
+                          {fmtAbsMoney(balNum)} <span className="text-[10px] uppercase font-sans text-amber-500/80">owed</span>
                         </span>
                       ) : balNum < 0 ? (
                         <span className="text-rose-400 font-medium">
-                          -${Math.abs(balNum).toFixed(2)} <span className="text-[10px] uppercase font-sans text-rose-500/80">overdraft</span>
+                          -{fmtAbsMoney(balNum)} <span className="text-[10px] uppercase font-sans text-rose-500/80">overdraft</span>
                         </span>
                       ) : (
                         <span className="text-zinc-200">
-                          ${balNum.toFixed(2)}
+                          {fmtMoney(balNum)}
                         </span>
                       )}
                     </div>

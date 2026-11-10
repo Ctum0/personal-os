@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import { fmtMoney, fmtAbsMoney } from '../_shared/format';
 import {
   BarChart3,
   TrendingUp,
@@ -83,20 +84,20 @@ export default function NetWorthPage() {
             <span className="text-xs font-bold uppercase tracking-wider text-blue-400">
               Total Valued Net Worth
             </span>
-            <p className="text-4xl font-extrabold text-zinc-100 font-mono tracking-tight mt-1">
-              ${netWorth.netWorth} <span className="text-sm font-normal text-zinc-400">{netWorth.currency}</span>
+            <p className={`text-4xl font-extrabold font-mono tracking-tight mt-1 tabular-nums ${parseFloat(String(netWorth.netWorth)) < 0 ? 'text-red-400' : 'text-zinc-100'}`}>
+              {fmtMoney(netWorth.netWorth)} <span className="text-sm font-normal text-zinc-400">{netWorth.currency}</span>
             </p>
             <p className="text-xs text-zinc-400 mt-1">Snapshot as of {netWorth.asOfDate}</p>
           </div>
 
-          <div className="flex items-center gap-8 text-xs font-mono">
+          <div className="flex items-center gap-8 text-xs font-mono tabular-nums">
             <div>
               <span className="text-zinc-500 block uppercase text-[10px]">Total Assets</span>
-              <span className="text-lg font-bold text-emerald-400">+${netWorth.totalAssets}</span>
+              <span className="text-lg font-bold text-emerald-400">+{fmtAbsMoney(netWorth.totalAssets)}</span>
             </div>
             <div>
               <span className="text-zinc-500 block uppercase text-[10px]">Total Liabilities</span>
-              <span className="text-lg font-bold text-red-400">-${netWorth.totalLiabilities}</span>
+              <span className="text-lg font-bold text-red-400">-{fmtAbsMoney(netWorth.totalLiabilities)}</span>
             </div>
           </div>
         </div>
@@ -124,8 +125,8 @@ export default function NetWorthPage() {
           {/* Assets */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-              <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
-                Assets (${netWorth.totalAssets})
+              <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider tabular-nums">
+                Assets ({fmtMoney(netWorth.totalAssets)})
               </span>
               <span className="text-[11px] text-zinc-500">{netWorth.assetsList?.length || 0} accounts</span>
             </div>
@@ -140,7 +141,7 @@ export default function NetWorthPage() {
                       <p className="text-[10px] text-zinc-500 uppercase font-mono">{a.type}</p>
                     </div>
                   </div>
-                  <span className="font-mono font-bold text-emerald-400">+${a.balance}</span>
+                  <span className="font-mono font-bold text-emerald-400 tabular-nums">+{fmtAbsMoney(a.balance)}</span>
                 </div>
               ))}
             </div>
@@ -149,8 +150,8 @@ export default function NetWorthPage() {
           {/* Liabilities */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-              <span className="text-xs font-bold text-red-400 uppercase tracking-wider">
-                Liabilities (${netWorth.totalLiabilities})
+              <span className="text-xs font-bold text-red-400 uppercase tracking-wider tabular-nums">
+                Liabilities ({fmtMoney(netWorth.totalLiabilities)})
               </span>
               <span className="text-[11px] text-zinc-500">{netWorth.liabilitiesList?.length || 0} accounts</span>
             </div>
@@ -168,7 +169,7 @@ export default function NetWorthPage() {
                         <p className="text-[10px] text-zinc-500 uppercase font-mono">{l.type}</p>
                       </div>
                     </div>
-                    <span className="font-mono font-bold text-red-400">-${l.balance}</span>
+                    <span className="font-mono font-bold text-red-400 tabular-nums">-{fmtAbsMoney(l.balance)}</span>
                   </div>
                 ))
               )}
@@ -214,9 +215,9 @@ export default function NetWorthPage() {
                 {snapshots.map((s: any) => (
                   <tr key={s.id} className="hover:bg-zinc-800/40">
                     <td className="py-2.5 px-3 text-zinc-300 font-sans">{s.snapshot_date}</td>
-                    <td className="py-2.5 px-3 text-right text-emerald-400">+${s.total_assets}</td>
-                    <td className="py-2.5 px-3 text-right text-red-400">-${s.total_liabilities}</td>
-                    <td className="py-2.5 px-3 text-right font-bold text-zinc-100">${s.net_worth}</td>
+                    <td className="py-2.5 px-3 text-right text-emerald-400 tabular-nums">+{fmtAbsMoney(s.total_assets)}</td>
+                    <td className="py-2.5 px-3 text-right text-red-400 tabular-nums">-{fmtAbsMoney(s.total_liabilities)}</td>
+                    <td className="py-2.5 px-3 text-right font-bold text-zinc-100 tabular-nums">{fmtMoney(s.net_worth)}</td>
                     <td className="py-2.5 px-3 text-center">
                       <span className="px-2 py-0.5 rounded text-[9px] uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20 font-semibold font-sans">
                         Immutable

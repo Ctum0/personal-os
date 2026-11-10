@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { todayISO } from '@/lib/time';
+import { fmtMoney, toDecimal } from '../_shared/format';
 import {
   Receipt,
   Plus,
@@ -101,6 +102,19 @@ export default function TransactionsPage() {
     loadTransactions();
   }, [selectedAccount, selectedType, search]);
 
+  // QuickAddModal (shared) now only calls router.refresh() after a write, which does not
+  // re-run client-side effects — listen for the cross-page data-change signal so the
+  // ledger view is never stale after a Quick Add. Contract: QuickAddModal dispatches
+  // `window.dispatchEvent(new Event('personal-os:data-changed'))`; no-op until then.
+  useEffect(() => {
+    const h = () => {
+      loadTransactions();
+      loadDependencies();
+    };
+    window.addEventListener('personal-os:data-changed', h);
+    return () => window.removeEventListener('personal-os:data-changed', h);
+  });
+
   const resetForm = () => {
     setFormType('expense');
     setFormDate(todayISO());
@@ -149,7 +163,13 @@ export default function TransactionsPage() {
       return;
     }
     const parsedAmount = parseFloat(formAmount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+    if (!formAmount.trim() || isNaN(parsedAmount) || parsedAmount <= 0) {
+      setSubmitError('Please enter a valid positive monetary amount (max 2 decimals, e.g. 12.34)');
+      return;
+    }
+    // Sub-cent rounding is half-up via exact decimal parsing, never silent truncation ("1.005" -> "1.01").
+    const roundedAmount = toDecimal(formAmount).toDecimalPlaces(2).toNumber();
+    if (roundedAmount <= 0) {
       setSubmitError('Please enter a valid positive monetary amount');
       return;
     }
@@ -169,7 +189,7 @@ export default function TransactionsPage() {
         transactionType: formType,
         date: formDate,
         accountId: formAccountId,
-        amount: parsedAmount.toFixed(2),
+        amount: roundedAmount.toFixed(2),
         description: formDescription.trim(),
         status: formStatus,
         notes: formNotes.trim() || undefined,
@@ -214,7 +234,15 @@ export default function TransactionsPage() {
 
   const voidTransaction = async (txId: string) => {
     if (!confirm('Void this transaction? A reversal ledger entry will be recorded.')) return;
-    await fetch(`/api/finance/transactions?id=${txId}`, { method: 'DELETE' });
+    try {
+      const res = await fetch(`/api/finance/transactions?id=${txId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Failed to void transaction. Nothing was changed.');
+      }
+    } catch {
+      alert('Network error while voiding transaction. Nothing was changed.');
+    }
     loadTransactions();
     loadDependencies();
   };
@@ -286,7 +314,7 @@ export default function TransactionsPage() {
       {/* Ledger Table */}
       <div className="bg-zinc-950/60 border border-white/[0.06] rounded-lg overflow-hidden shadow-none">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs tabular-nums">
             <thead className="bg-zinc-900/60 text-zinc-400 border-b border-white/[0.06] uppercase text-[10px] tracking-wider select-none">
               <tr>
                 <th className="py-2.5 px-4 font-medium">Date</th>
@@ -405,7 +433,7 @@ export default function TransactionsPage() {
                             ? 'text-emerald-400'
                             : 'text-zinc-100'
                         }>
-                          {isTransfer ? '↔' : isIncome ? '+' : '-'}${tx.amount}
+                          {isTransfer ? `↔ ${fmtMoney(tx.amount)}` : `${isIncome ? '+' : '-'}${fmtMoney(tx.amount)}`}
                         </span>
                       </td>
                       <td className="py-2.5 px-4 text-center">
@@ -425,6 +453,7 @@ export default function TransactionsPage() {
                             onClick={() => voidTransaction(tx.id)}
                             className="text-zinc-500 hover:text-red-400 p-1 rounded transition-colors"
                             title="Void transaction"
+                            aria-label={`Void transaction ${tx.description || tx.id}`}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -570,7 +599,7 @@ export default function TransactionsPage() {
                       >
                         {accounts.map(a => (
                           <option key={a.accountId} value={a.accountId}>
-                            {a.accountName} (${a.currentBalance})
+                            {a.accountName} ({fmtMoney(a.currentBalance)})
                           </option>
                         ))}
                       </select>
@@ -587,7 +616,7 @@ export default function TransactionsPage() {
                       >
                         {accounts.map(a => (
                           <option key={a.accountId} value={a.accountId}>
-                            {a.accountName} (${a.currentBalance})
+                            {a.accountName} ({fmtMoney(a.currentBalance)})
                           </option>
                         ))}
                       </select>
@@ -607,7 +636,7 @@ export default function TransactionsPage() {
                     >
                       {accounts.map(a => (
                         <option key={a.accountId} value={a.accountId}>
-                          {a.accountName} ({a.accountType}) • ${a.currentBalance}
+                          {a.accountName} ({a.accountType.replace('_', ' ')}) • {fmtMoney(a.currentBalance)}
                         </option>
                       ))}
                     </select>
@@ -807,6 +836,17 @@ export default function TransactionsPage() {
                       </div>
                       <div className="flex justify-between">
                         <span>Credit: Revenue / Income</span>
+                        <span className="text-zinc-300">-${parseFloat(formAmount).toFixed(2)}</span>
+                      </div>
+                    </>
+                  ) : formType === 'refund' ? (
+                    <>
+                      <div className="flex justify-between">
+                        <span>Debit: {selectedSourceAccount?.accountName || 'Account'}</span>
+                        <span className="text-emerald-400">+${parseFloat(formAmount).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Credit: Category Refund Offset</span>
                         <span className="text-zinc-300">-${parseFloat(formAmount).toFixed(2)}</span>
                       </div>
                     </>

@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import { todayISO } from '@/lib/time';
+import { fmtMoney } from '../_shared/format';
 import {
   ArrowRightLeft,
   Plus,
@@ -24,6 +26,7 @@ export default function RecurringBillsPage() {
   const [accountId, setAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const today = todayISO();
 
   const loadRules = () => {
     fetch('/api/finance/recurring')
@@ -265,17 +268,32 @@ export default function RecurringBillsPage() {
                   <h2 className="text-sm font-bold text-zinc-100 mt-1">{rule.name}</h2>
                   <p className="text-[11px] text-zinc-400 mt-0.5">Account: {rule.account_name}</p>
                 </div>
-                <span className="font-mono text-base font-extrabold text-amber-400">
-                  ${rule.expected_amount}
+                <span className="font-mono text-base font-extrabold text-amber-400 tabular-nums">
+                  {fmtMoney(rule.expected_amount)}
                 </span>
               </div>
 
               <div className="pt-2 border-t border-zinc-800 flex items-center justify-between text-xs text-zinc-400">
                 <span className="flex items-center gap-1.5">
                   <Calendar className="w-3.5 h-3.5 text-zinc-500" />
-                  Next: {rule.next_due_date}
+                  <span className="tabular-nums">Next: {rule.next_due_date}</span>
                 </span>
                 <span className="text-[10px] text-zinc-500 font-mono uppercase">{rule.auto_action || 'reminder_only'}</span>
+              </div>
+
+              {/* Overdue obligations are reserved immediately by the Safe-to-Spend projection
+                  (schedule-aware read-time projection; persisted next_due_date is untouched).
+                  Surface this so a user knows the amount is still being set aside. */}
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-zinc-500">
+                  {rule.is_active === 1 || rule.is_active ? 'Active on ledger' : 'Inactive'}
+                </span>
+                {String(rule.next_due_date) < today ? (
+                  <span className="text-[9px] uppercase px-1.5 py-0.5 rounded font-mono font-semibold bg-red-500/10 text-red-400 border border-red-500/20 flex items-center gap-1" title="This occurrence's projected due date is in the past. Safe-to-Spend reserves its amount immediately (schedule-aware projection) until it is posted; the persisted schedule is not modified.">
+                    <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+                    Overdue — reserved immediately by Safe-to-Spend
+                  </span>
+                ) : null}
               </div>
             </div>
           ))}

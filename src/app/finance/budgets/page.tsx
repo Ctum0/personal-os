@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
 import { todayISO } from '@/lib/time';
+import { fmtMoney, toDecimal } from '../_shared/format';
 import {
   PieChart,
   Plus,
@@ -23,6 +24,8 @@ export default function BudgetsPage() {
   const [editingCategory, setEditingCategory] = useState<any | null>(null);
   const [newAllocated, setNewAllocated] = useState('');
   const [newRollover, setNewRollover] = useState('');
+  const [allocError, setAllocError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const loadBudget = () => {
@@ -46,19 +49,51 @@ export default function BudgetsPage() {
     e.preventDefault();
     if (!editingCategory || !budget) return;
 
-    await fetch('/api/finance/budgets', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        budgetId: budget.budgetId,
-        categoryId: editingCategory.categoryId,
-        allocatedAmount: newAllocated,
-        rolloverAmount: newRollover,
-      }),
-    });
+    // Amounts must be non-negative, max 2 decimals, and a rollover may never exceed the envelope.
+    const alloc = toDecimal(newAllocated);
+    const roll = toDecimal(newRollover);
+    if (alloc.isNegative()) {
+      setAllocError('Allocated amount cannot be negative.');
+      return;
+    }
+    if (alloc.decimalPlaces() > 2 || roll.decimalPlaces() > 2) {
+      setAllocError('Amounts support at most 2 decimal places.');
+      return;
+    }
+    if (roll.isNegative()) {
+      setAllocError('Carried-over amount cannot be negative.');
+      return;
+    }
+    if (roll.greaterThan(alloc)) {
+      setAllocError('Carried-over funds cannot exceed the allocated envelope.');
+      return;
+    }
 
-    setEditingCategory(null);
-    loadBudget();
+    setIsSaving(true);
+    setAllocError(null);
+    try {
+      const res = await fetch('/api/finance/budgets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          budgetId: budget.budgetId,
+          categoryId: editingCategory.categoryId,
+          allocatedAmount: alloc.toDecimalPlaces(2).toFixed(2),
+          rolloverAmount: roll.toDecimalPlaces(2).toFixed(2),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setAllocError(err.error || 'Failed to save allocation. Your change was not stored.');
+        return;
+      }
+      setEditingCategory(null);
+      loadBudget();
+    } catch (err) {
+      setAllocError(err instanceof Error ? err.message : 'Network error saving allocation.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -105,6 +140,18 @@ export default function BudgetsPage() {
               </button>
             </div>
 
+            {allocError && (
+              <div className="p-2.5 bg-red-950/40 border border-red-800/60 rounded-lg text-xs text-red-300 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{allocError}</span>
+              </div>
+            )}
+
+            <div className="p-2.5 bg-zinc-950/60 border border-zinc-800 rounded-lg text-[11px] text-zinc-400 font-mono flex items-center justify-between">
+              <span>Currently spent this cycle:</span>
+              <span className="text-zinc-200">{fmtMoney(editingCategory.spentAmount)}</span>
+            </div>
+
             <div>
               <label className="block text-xs font-medium text-zinc-400 mb-1">
                 Allocated Spending Target ($ USD)
@@ -112,6 +159,7 @@ export default function BudgetsPage() {
               <input
                 type="number"
                 step="0.01"
+                min="0"
                 required
                 autoFocus
                 value={newAllocated}
@@ -119,6 +167,11 @@ export default function BudgetsPage() {
                 placeholder="0.00"
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-purple-500 font-mono"
               />
+              {parseFloat(editingCategory.spentAmount || '0') > toDecimal(newAllocated || '0').toNumber() && (
+                <p className="text-[10px] text-amber-400 mt-1">
+                  New target is below the {fmtMoney(editingCategory.spentAmount)} already spent — envelope will show as overspent.
+                </p>
+              )}
             </div>
 
             <div>
@@ -128,6 +181,7 @@ export default function BudgetsPage() {
               <input
                 type="number"
                 step="0.01"
+                min="0"
                 value={newRollover}
                 onChange={e => setNewRollover(e.target.value)}
                 placeholder="0.00"
@@ -145,9 +199,10 @@ export default function BudgetsPage() {
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-semibold"
+                disabled={isSaving}
+                className="px-4 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
               >
-                Save Allocation
+                {isSaving ? 'Saving…' : 'Save Allocation'}
               </button>
             </div>
           </form>
@@ -182,11 +237,14 @@ export default function BudgetsPage() {
                   </span>
                 )}
               </div>
-              <p className="text-3xl font-extrabold text-zinc-100 font-mono tracking-tight">
-                ${budget.totalRemaining} Remaining
+              <p className="text-3xl font-extrabold tracking-tight font-mono tabular-nums">
+                <span className={parseFloat(budget.totalRemaining) < 0 ? 'text-red-400' : 'text-zinc-100'}>
+                  {fmtMoney(budget.totalRemaining)}
+                </span>{' '}
+                Remaining
               </p>
-              <p className="text-xs text-zinc-400">
-                ${budget.totalSpent} spent of ${budget.totalAllocated} total allocated • Period: <span className="font-mono text-zinc-300">{budget.periodStart}</span> to <span className="font-mono text-zinc-300">{budget.periodEnd}</span>
+              <p className="text-xs text-zinc-400 tabular-nums">
+                {fmtMoney(budget.totalSpent)} spent of {fmtMoney(budget.totalAllocated)} total allocated • Period: <span className="font-mono text-zinc-300">{budget.periodStart}</span> to <span className="font-mono text-zinc-300">{budget.periodEnd}</span>
               </p>
             </div>
 
@@ -232,7 +290,7 @@ export default function BudgetsPage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-xs tabular-nums">
               <thead className="bg-zinc-950/80 text-zinc-400 border-b border-zinc-800 uppercase text-[10px] tracking-wider select-none">
                 <tr>
                   <th className="py-3 px-4">Category</th>
@@ -279,13 +337,13 @@ export default function BudgetsPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-right font-mono text-zinc-300">${item.allocatedAmount}</td>
-                      <td className="py-3 px-4 text-right font-mono text-zinc-400">${item.rolloverAmount}</td>
-                      <td className="py-3 px-4 text-right font-mono font-bold text-zinc-100">${item.totalBudgeted}</td>
-                      <td className="py-3 px-4 text-right font-mono text-zinc-200">${item.spentAmount}</td>
-                      <td className="py-3 px-4 text-right font-mono font-bold">
+                      <td className="py-3 px-4 text-right font-mono text-zinc-300 tabular-nums">{fmtMoney(item.allocatedAmount)}</td>
+                      <td className="py-3 px-4 text-right font-mono text-zinc-400 tabular-nums">{fmtMoney(item.rolloverAmount)}</td>
+                      <td className="py-3 px-4 text-right font-mono font-bold text-zinc-100 tabular-nums">{fmtMoney(item.totalBudgeted)}</td>
+                      <td className="py-3 px-4 text-right font-mono text-zinc-200 tabular-nums">{fmtMoney(item.spentAmount)}</td>
+                      <td className="py-3 px-4 text-right font-mono font-bold tabular-nums">
                         <span className={item.status === 'over' ? 'text-red-400' : 'text-emerald-400'}>
-                          ${item.remainingAmount}
+                          {fmtMoney(item.remainingAmount)}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-center">
@@ -315,7 +373,7 @@ export default function BudgetsPage() {
         <div className="p-3 bg-zinc-900/60 border border-white/[0.04] rounded-lg text-xs text-zinc-400 flex items-center gap-2">
           <Repeat className="w-4 h-4 text-amber-400 shrink-0" />
           <span>
-            <strong>Envelopes & Recurring Commitments:</strong> Fixed bills assigned to categories automatically consume budget allowances and are deduced once in Safe-to-Spend calculations to prevent duplicate reservations.
+            <strong>Envelopes & Recurring Commitments:</strong> Fixed bills assigned to categories automatically consume budget allowances and are deducted once in Safe-to-Spend calculations to prevent duplicate reservations.
           </span>
         </div>
       )}

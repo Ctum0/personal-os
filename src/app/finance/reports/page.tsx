@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
 import { toISODate } from "@/lib/time";
+import { fmtMoney } from '../_shared/format';
 import {
   Sliders,
   TrendingUp,
@@ -20,7 +21,9 @@ export default function FinanceReportsPage() {
 
   useEffect(() => {
     const now = new Date();
-    setStartDate(now.toISOString().slice(0, 7) + '-01');
+    // toISODate respects the app timezone (Asia/Colombo); raw toISOString() is UTC and
+    // can produce the wrong month for the first hours of a local month.
+    setStartDate(toISODate(now).slice(0, 7) + '-01');
     setEndDate(toISODate(now));
   }, []);
 
@@ -84,7 +87,7 @@ export default function FinanceReportsPage() {
             type="button"
             onClick={() => {
               const now = new Date();
-              setStartDate(now.toISOString().slice(0, 7) + '-01');
+              setStartDate(toISODate(now).slice(0, 7) + '-01');
               setEndDate(toISODate(now));
             }}
             className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md text-[11px] font-medium transition-colors"
@@ -125,7 +128,7 @@ export default function FinanceReportsPage() {
               <span>Total Operating Income</span>
               <TrendingUp className="w-4 h-4 text-emerald-400" />
             </div>
-            <p className="text-3xl font-extrabold text-emerald-400 font-mono">${reports.totalIncome}</p>
+            <p className="text-3xl font-extrabold text-emerald-400 font-mono tabular-nums">{fmtMoney(reports.totalIncome)}</p>
             <p className="text-[11px] text-zinc-500">Excludes internal transfers</p>
           </div>
 
@@ -134,7 +137,7 @@ export default function FinanceReportsPage() {
               <span>Total Net Expenses</span>
               <TrendingDown className="w-4 h-4 text-red-400" />
             </div>
-            <p className="text-3xl font-extrabold text-red-400 font-mono">${reports.totalExpenses}</p>
+            <p className="text-3xl font-extrabold text-red-400 font-mono tabular-nums">{fmtMoney(reports.totalExpenses)}</p>
             <p className="text-[11px] text-zinc-500">Includes period refunds offset</p>
           </div>
 
@@ -143,7 +146,9 @@ export default function FinanceReportsPage() {
               <span>Net Savings & Rate</span>
               <PieChart className="w-4 h-4 text-purple-400" />
             </div>
-            <p className="text-3xl font-extrabold text-zinc-100 font-mono">${reports.netSavings}</p>
+            <p className={`text-3xl font-extrabold font-mono tabular-nums ${parseFloat(reports.netSavings) < 0 ? 'text-red-400' : 'text-zinc-100'}`}>
+              {fmtMoney(reports.netSavings)}
+            </p>
             <p className="text-[11px] text-zinc-400 font-semibold">{reports.savingsRatePercent}% Savings Rate</p>
           </div>
         </div>
@@ -168,7 +173,7 @@ export default function FinanceReportsPage() {
                 <TrendingUp className="w-4 h-4 text-emerald-400" />
                 <span>Operating Income Sources</span>
               </h2>
-              <span className="text-xs font-mono font-bold text-emerald-400">${reports.totalIncome}</span>
+              <span className="text-xs font-mono font-bold text-emerald-400 tabular-nums">{fmtMoney(reports.totalIncome)}</span>
             </div>
 
             {(!reports.incomeByCategory || reports.incomeByCategory.length === 0) ? (
@@ -182,7 +187,7 @@ export default function FinanceReportsPage() {
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-medium text-zinc-200">{cat.categoryName}</span>
                       <span className="font-mono text-emerald-400 font-semibold">
-                        ${cat.amount} ({cat.percentage}%)
+                        {fmtMoney(cat.amount)} ({cat.percentage}%)
                       </span>
                     </div>
                     <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
@@ -207,7 +212,7 @@ export default function FinanceReportsPage() {
                 <TrendingDown className="w-4 h-4 text-red-400" />
                 <span>Spending by Category</span>
               </h2>
-              <span className="text-xs font-mono font-bold text-red-400">${reports.totalExpenses}</span>
+              <span className="text-xs font-mono font-bold text-red-400 tabular-nums">{fmtMoney(reports.totalExpenses)}</span>
             </div>
 
             {(!reports.expenseByCategory || reports.expenseByCategory.length === 0) ? (
@@ -221,7 +226,7 @@ export default function FinanceReportsPage() {
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-medium text-zinc-200">{cat.categoryName}</span>
                       <span className="font-mono text-zinc-300 font-semibold">
-                        ${cat.amount} ({cat.percentage}%)
+                        {fmtMoney(cat.amount)} ({cat.percentage}%)
                       </span>
                     </div>
                     <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
