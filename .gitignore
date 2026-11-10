@@ -47,6 +47,8 @@ data/*.db-shm
 # runtime-generated protection artifacts (never commit operator data)
 data/backups/
 data/logs/
+# playwright run artifacts (CI uploads these; local traces are ephemeral)
+test-results/
 .vitest/
 
 .next-e2e/
