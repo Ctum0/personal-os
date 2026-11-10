@@ -49,6 +49,7 @@ data/backups/
 data/logs/
 # playwright run artifacts (CI uploads these; local traces are ephemeral)
 test-results/
+.artifacts/final-audit/e2e-html/
 .vitest/
 
 .next-e2e/
