@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
+  // Self-contained server bundle for the Dockerfile (no node_modules tree at runtime).
+  ...(process.env.NEXT_OUTPUT_STANDALONE === "1" ? { output: "standalone" as const } : {}),
   cacheComponents: true,
   partialPrefetching: true,
   // Local-first dev: allow the loopback host the dev overlay connects from
