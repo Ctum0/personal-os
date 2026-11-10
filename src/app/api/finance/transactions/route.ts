@@ -4,7 +4,7 @@ import { getCurrentSession } from '@/lib/auth';
 import { Decimal } from 'decimal.js';
 import { todayISO } from "@/lib/time";
 import { readJson } from '@/lib/db/validate';
-import { detectDuplicateTransaction } from '@/lib/finance/engine';
+import { detectDuplicateTransaction, transactionFingerprint } from '@/lib/finance/engine';
 
 export async function GET(request: Request) {
   try {
@@ -175,12 +175,40 @@ export async function POST(request: Request) {
     const tagsJson = Array.isArray(tags) ? JSON.stringify(tags) : (typeof tags === 'string' && tags.trim().startsWith('[') ? tags : JSON.stringify(tags ? [tags] : []));
     const currency = acc.currency || 'USD';
 
+    // Strict mode (?strict=1): hard-reject a byte-identical posted duplicate
+    // using the persisted v5 fingerprint. Advisory mode (default) keeps the
+    // B6 behavior: create anyway, return a duplicateWarning flag.
+    const fingerprint = transactionFingerprint(session.tenantId, {
+      accountId,
+      date: txDate,
+      transactionType: txType,
+      amount: decAmount,
+    });
+    const strictMode = new URL(request.url).searchParams.get('strict') === '1';
+    if (strictMode && txStatus === 'posted') {
+      const existing = db.prepare(
+        `SELECT id FROM journal_transactions
+         WHERE tenant_id = ? AND dup_fingerprint = ? AND status = 'posted'
+         LIMIT 1`
+      ).get(session.tenantId, fingerprint);
+      if (existing) {
+        return NextResponse.json(
+          {
+            error: 'Duplicate transaction rejected (strict mode)',
+            duplicateOf: (existing as { id: string }).id,
+            fingerprint,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     db.transaction(() => {
       // 1. Insert master transaction
       db.prepare(`
         INSERT INTO journal_transactions (
-          id, tenant_id, transaction_type, date, account_id, to_account_id, amount, currency, base_amount, payee_name, category_id, description, notes, tags, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          id, tenant_id, transaction_type, date, account_id, to_account_id, amount, currency, base_amount, payee_name, category_id, description, notes, tags, status, dup_fingerprint
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         txId,
         session.tenantId,
@@ -196,7 +224,8 @@ export async function POST(request: Request) {
         description.trim(),
         notes || null,
         tagsJson,
-        txStatus
+        txStatus,
+        fingerprint
       );
 
       // 2. Insert balanced ledger lines (debit / credit) when status is posted

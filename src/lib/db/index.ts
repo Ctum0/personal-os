@@ -5,6 +5,7 @@ import { todayISO } from "@/lib/time";
 import { mkdirSync as __mkdirSync } from "node:fs";
 import { dirname as __dirnameOf, join as __joinPath } from "node:path";
 import { maybeRunMaintenance, registerDbPath } from "./maintenance";
+import { maybeSnapshotNetWorth } from "@/lib/jobs/netWorth";
 
 // Database directory in project root; path is resolvable at call time so
 // sandboxed tests and isolated profiles can override PERSONAL_OS_DB_PATH
@@ -41,6 +42,13 @@ export function getDb(): Database.Database {
     dbInstancePath = dbPath;
     registerDbPath(dbPath);
     maybeRunMaintenance(dbInstance);
+    // Daily net-worth history job (idempotent upsert on UNIQUE(tenant_id,
+    // snapshot_date)); wrapped so boot never depends on finance compute.
+    try {
+      maybeSnapshotNetWorth(dbInstance);
+    } catch (err) {
+      console.error("[jobs] net-worth snapshot failed:", (err as Error).message);
+    }
   }
   return dbInstance;
 }
@@ -1127,6 +1135,29 @@ export type Migration = {
  * Migration 1 is the baseline: it runs the original DDL, which is idempotent,
  * so it is safe on a fresh database and on one created before versioning existed.
  */
+
+/**
+ * Migration v5 helper (also exported for test/tooling replay): adds dup_fingerprint
+ * to journal_transactions and backfills it, byte-compatible with
+ * transactionFingerprint() in src/lib/finance/engine.ts.
+ */
+export function backfillTransactionFingerprints(db: Database.Database): void {
+  const hasColumn = (db.prepare(`PRAGMA table_info(journal_transactions)`).all() as { name: string }[])
+    .some(c => c.name === 'dup_fingerprint');
+  if (!hasColumn) {
+    db.exec(`ALTER TABLE journal_transactions ADD COLUMN dup_fingerprint TEXT`);
+  }
+  db.exec(`
+    UPDATE journal_transactions
+       SET dup_fingerprint = tenant_id || '|' || coalesce(account_id, '') || '|'
+           || date || '|' || transaction_type || '|'
+           || printf('%.2f', CAST(amount AS REAL))
+     WHERE dup_fingerprint IS NULL
+       AND amount IS NOT NULL AND date IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_journal_tx_dupfp
+      ON journal_transactions(tenant_id, dup_fingerprint, status);
+  `);
+}
 const MIGRATIONS: Migration[] = [
   { version: 1, name: "baseline", up: (db) => initSchema(db) },
   {
@@ -1305,6 +1336,17 @@ const MIGRATIONS: Migration[] = [
         }
         db.prepare('UPDATE users SET preferences = ? WHERE id = ?').run(JSON.stringify(prefs), u.id);
       }
+    },
+  },
+  {
+    version: 5,
+    name: "transaction_duplicate_fingerprint",
+    up: (db) => {
+      // Persisted dedupe fingerprint: tenant + account + date + type + amount
+      // (amount normalized to 2dp so '10.0' and '10.00' collide). Backfills
+      // existing rows and indexes (tenant_id, fingerprint, status) so the
+      // ?strict=1 duplicate check on POST /api/finance/transactions is O(idx).
+      backfillTransactionFingerprints(db);
     },
   },
 ];

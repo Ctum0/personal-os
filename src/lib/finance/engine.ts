@@ -1028,6 +1028,19 @@ export function calculateDebtPayoffScenarios(
 }
 
 /**
+ * Canonical duplicate fingerprint: tenant + account + date + type + amount
+ * normalized to 2dp. Must stay byte-identical with the SQL backfill produced
+ * in migration v5 (see src/lib/db/index.ts).
+ */
+export function transactionFingerprint(
+  tenantId: string,
+  probe: { accountId: string; date: string; transactionType: string; amount: string }
+): string {
+  const normalized = new Decimal(probe.amount || '0').toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2);
+  return `${tenantId}|${probe.accountId}|${probe.date}|${probe.transactionType}|${normalized}`;
+}
+
+/**
  * Soft duplicate-warning (reconciliation-noise guard, advisory only — never blocks).
  * Detects prior posted transactions with the same (account, date, type, amount).
  * Used by POST /api/finance/transactions; the import flow has its own preview-time
