@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
 import { todayISO } from '@/lib/time';
+import { useTodayISO } from '@/lib/time/useTodayISO';
 import { fmtMoney } from '../_shared/format';
 import {
   ArrowRightLeft,
@@ -26,7 +27,8 @@ export default function RecurringBillsPage() {
   const [accountId, setAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
-  const today = todayISO();
+  // [defer] today's date via hook — synchronous todayISO() at render aborts prerender
+  const currentDate = useTodayISO();
 
   const loadRules = () => {
     fetch('/api/finance/recurring')
@@ -288,7 +290,7 @@ export default function RecurringBillsPage() {
                 <span className="text-zinc-500">
                   {rule.is_active === 1 || rule.is_active ? 'Active on ledger' : 'Inactive'}
                 </span>
-                {String(rule.next_due_date) < today ? (
+                {currentDate && String(rule.next_due_date) < currentDate ? (
                   <span className="text-[9px] uppercase px-1.5 py-0.5 rounded font-mono font-semibold bg-red-500/10 text-red-400 border border-red-500/20 flex items-center gap-1" title="This occurrence's projected due date is in the past. Safe-to-Spend reserves its amount immediately (schedule-aware projection) until it is posted; the persisted schedule is not modified.">
                     <AlertCircle className="w-2.5 h-2.5 shrink-0" />
                     Overdue — reserved immediately by Safe-to-Spend

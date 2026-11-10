@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
 import { todayISO } from '@/lib/time';
+import { useTodayISO } from '@/lib/time/useTodayISO';
 import {
   HelpCircle,
   ArrowRightLeft,
@@ -61,14 +62,18 @@ export default function FinanceDashboard() {
     return () => window.removeEventListener('personal-os:data-changed', loadDashboard);
   }, [loadDashboard]);
 
+  // [defer] Read today's date in an effect, not at render: a synchronous new Date()
+  // in a client component aborts route prerendering under Cache Components.
+  const currentDate = useTodayISO();
+
   const totalLiquid = sumDecimalParts(
     balances
       .filter(a => a.accountType === 'checking' || a.accountType === 'cash' || a.accountType === 'savings')
       .map(a => (parseFloat(a.currentBalance) > 0 ? a.currentBalance : 0))
   );
-  const today = todayISO();
-  const budgetIsArchived = budget ? today > budget.periodEnd : false;
-  const budgetIsUpcoming = budget ? today < budget.periodStart : false;
+  const today = currentDate;
+  const budgetIsArchived = Boolean(budget && today && today > budget.periodEnd);
+  const budgetIsUpcoming = Boolean(budget && today && today < budget.periodStart);
 
   return (
     <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">

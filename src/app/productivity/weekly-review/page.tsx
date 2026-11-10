@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
 import { todayISO, addDaysISO } from "@/lib/time";
+import { useTodayISO } from "@/lib/time/useTodayISO";
 import {
   CalendarCheck,
   CheckCircle2,
@@ -107,6 +108,7 @@ export default function WeeklyReviewPage() {
 
   // 7-day rolling review window (matches the explainer's "Active 7-day rolling evaluation window")
   const [windowStart, setWindowStart] = useState('');
+  const currentDate = useTodayISO();
 
   useEffect(() => {
     setWindowStart(addDaysISO(todayISO(), -7));
@@ -119,12 +121,13 @@ export default function WeeklyReviewPage() {
   const openTasks = tasks.filter(t => t.status !== 'completed');
   const blockedProjects = projects.filter(p => p.status === 'paused' || p.status === 'active');
   const upcomingDeadlines = useMemo(() => {
-    const today = todayISO();
-    const in7Days = addDaysISO(today, 7);
+    // [defer] today's read must not happen inside render (prerender-safe)
+    if (!currentDate) return [];
+    const in7Days = addDaysISO(currentDate, 7);
     return openTasks
-      .filter(t => t.due_date && t.due_date >= today && t.due_date <= in7Days)
+      .filter(t => t.due_date && t.due_date >= currentDate && t.due_date <= in7Days)
       .sort((a, b) => a.due_date.localeCompare(b.due_date));
-  }, [openTasks]);
+  }, [openTasks, currentDate]);
 
   const handleSaveReview = async () => {
     setIsSaving(true);
