@@ -3,8 +3,9 @@ import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { taskVisibleClause, isOperationallyVisibleTask } from '@/lib/db/visibility';
 import {matchesEnum, isISODateString, referenceExists, readJson } from "@/lib/db/validate";
+import { withApiLogging } from '@/lib/api/log';
 
-export async function GET(request: Request) {
+export const GET = withApiLogging(async function GET(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
@@ -81,9 +82,9 @@ export async function GET(request: Request) {
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withApiLogging(async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
@@ -160,7 +161,7 @@ export async function POST(request: Request) {
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-}
+});
 
 export async function PUT(request: Request) {
   try {

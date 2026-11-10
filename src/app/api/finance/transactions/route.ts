@@ -5,6 +5,7 @@ import { Decimal } from 'decimal.js';
 import { todayISO } from "@/lib/time";
 import { readJson } from '@/lib/db/validate';
 import { detectDuplicateTransaction, transactionFingerprint } from '@/lib/finance/engine';
+import { withApiLogging } from '@/lib/api/log';
 
 export async function GET(request: Request) {
   try {
@@ -85,7 +86,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+export const POST = withApiLogging(async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
@@ -310,7 +311,7 @@ export async function POST(request: Request) {
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-}
+});
 
 export async function DELETE(request: Request) {
   try {
