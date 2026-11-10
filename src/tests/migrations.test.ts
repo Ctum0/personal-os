@@ -5,11 +5,11 @@ import { initSchema, runMigrations, schemaVersion } from "@/lib/db";
 const fresh = () => new Database(":memory:");
 
 describe("schema migrations", () => {
-  it("stamps a fresh database at latest version (version 4)", () => {
+  it("stamps a fresh database at latest version (version 5)", () => {
     const db = fresh();
     const result = runMigrations(db);
-    expect(schemaVersion(db)).toBe(4);
-    expect(result.applied).toEqual([1, 2, 3, 4]);
+    expect(schemaVersion(db)).toBe(5);
+    expect(result.applied).toEqual([1, 2, 3, 4, 5]);
     expect(result.backup).toBeNull();
     db.close();
   });
@@ -19,7 +19,7 @@ describe("schema migrations", () => {
     runMigrations(db);
     const second = runMigrations(db);
     expect(second.applied).toEqual([]);
-    expect(schemaVersion(db)).toBe(4);
+    expect(schemaVersion(db)).toBe(5);
     db.close();
   });
 
@@ -37,7 +37,7 @@ describe("schema migrations", () => {
     expect(before).toBeGreaterThan(40);
     const result = runMigrations(db);
     expect(result.from).toBe(0);
-    expect(result.to).toBe(4);
+    expect(result.to).toBe(5);
     expect(countTables()).toBeGreaterThanOrEqual(before);
     db.close();
   });
@@ -46,8 +46,8 @@ describe("schema migrations", () => {
     const db = fresh();
     runMigrations(db);
     const again = runMigrations(db);
-    expect(again.from).toBe(4);
-    expect(again.to).toBe(4);
+    expect(again.from).toBe(5);
+    expect(again.to).toBe(5);
     expect(again.applied).toHaveLength(0);
     db.close();
   });

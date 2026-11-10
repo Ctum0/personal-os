@@ -67,9 +67,9 @@ describe('quarantine visibility policy', () => {
 // ---------------------------------------------------------------------------
 
 describe('weekly_reviews migration (v4)', () => {
-  it('reports schema version 4 and creates the table on a fresh db', () => {
+  it('reports schema version 5 and creates the table on a fresh db', () => {
     const db = freshMigrated();
-    expect(schemaVersion(db)).toBe(4);
+    expect(schemaVersion(db)).toBe(5);
     const table = db
       .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='weekly_reviews'`)
       .get();
@@ -105,7 +105,7 @@ describe('weekly_reviews migration (v4)', () => {
 
     const result = runMigrations(db);
     expect(result.from).toBe(0);
-    expect(result.to).toBe(4);
+    expect(result.to).toBe(5);
 
     const row = db
       .prepare(`SELECT * FROM weekly_reviews WHERE tenant_id = 'tenant_default' AND week_start = ?`)
