@@ -17,34 +17,44 @@ export async function GET(request: Request) {
     // operational listings unless explicitly requested (administrative recovery).
     const includeQuarantined = searchParams.get('includeQuarantined') === '1';
 
-    let query = `
-      SELECT t.*, p.name as project_name, p.color as project_color, s.name as space_name
-      FROM tasks t
-      LEFT JOIN projects p ON t.project_id = p.id
-      LEFT JOIN spaces s ON t.space_id = s.id
+    let whereSql = `
       WHERE t.tenant_id = ? AND t.is_deleted = 0
         ${includeQuarantined ? '' : `AND ${taskVisibleClause('t')}`}
     `;
     const params: any[] = [session.tenantId];
 
     if (spaceId && spaceId !== 'all') {
-      query += ' AND t.space_id = ?';
+      whereSql += ' AND t.space_id = ?';
       params.push(spaceId);
     }
     if (status) {
-      query += ' AND t.status = ?';
+      whereSql += ' AND t.status = ?';
       params.push(status);
     }
     if (priority) {
-      query += ' AND t.priority = ?';
+      whereSql += ' AND t.priority = ?';
       params.push(priority);
     }
     if (search) {
-      query += ' AND (t.title LIKE ? OR t.description LIKE ?)';
+      whereSql += ' AND (t.title LIKE ? OR t.description LIKE ?)';
       params.push(`%${search}%`, `%${search}%`);
     }
 
-    query += `
+    // Pagination: SQL-side LIMIT/OFFSET over the same filtered query. The
+    // default limit keeps existing callers (none send limit today) on
+    // identical single-window output while capping very large datasets.
+    const rawLimit = Number.parseInt(searchParams.get('limit') || '', 10);
+    const rawOffset = Number.parseInt(searchParams.get('offset') || '', 10);
+    const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(rawLimit, 1000)) : 1000;
+    const offset = Number.isFinite(rawOffset) ? Math.max(0, rawOffset) : 0;
+
+    const countSql = `SELECT COUNT(*) AS c FROM tasks t ${whereSql}`;
+    const listQuery = `
+      SELECT t.*, p.name as project_name, p.color as project_color, s.name as space_name
+      FROM tasks t
+      LEFT JOIN projects p ON t.project_id = p.id
+      LEFT JOIN spaces s ON t.space_id = s.id
+      ${whereSql}
       ORDER BY 
         CASE t.priority 
           WHEN 'urgent' THEN 1 
@@ -55,10 +65,19 @@ export async function GET(request: Request) {
         t.due_date ASC,
         t.sort_order ASC,
         t.created_at DESC
+      LIMIT ? OFFSET ?
     `;
 
-    const tasks = db.prepare(query).all(...params);
-    return NextResponse.json({ tasks });
+    const total = (db.prepare(countSql).get(...params) as { c: number }).c;
+    const tasks = db.prepare(listQuery).all(...params, limit, offset);
+
+    return NextResponse.json({
+      tasks,
+      total,
+      limit,
+      offset,
+      hasMore: offset + limit < total,
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

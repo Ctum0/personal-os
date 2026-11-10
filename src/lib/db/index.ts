@@ -5,23 +5,34 @@ import { todayISO } from "@/lib/time";
 import { mkdirSync as __mkdirSync } from "node:fs";
 import { dirname as __dirnameOf, join as __joinPath } from "node:path";
 
-// Database file path in project root
-const DB_DIR = path.join(process.cwd(), 'data');
-if (!fs.existsSync(DB_DIR)) {
-  fs.mkdirSync(DB_DIR, { recursive: true });
+// Database directory in project root; path is resolvable at call time so
+// sandboxed tests and isolated profiles can override PERSONAL_OS_DB_PATH
+// between invocations (used by backup/restore tooling too).
+function resolveDbPath(): string {
+  const configured = process.env.PERSONAL_OS_DB_PATH;
+  if (configured) {
+    __mkdirSync(__dirnameOf(configured), { recursive: true });
+    return configured;
+  }
+  const DB_DIR = path.join(process.cwd(), 'data');
+  if (!fs.existsSync(DB_DIR)) {
+    fs.mkdirSync(DB_DIR, { recursive: true });
+  }
+  return path.join(DB_DIR, 'personal_os.db');
 }
 
-const DB_PATH = path.join(DB_DIR, 'personal_os.db');
-
 let dbInstance: Database.Database | null = null;
+let dbInstancePath: string | null = null;
 
 export function getDb(): Database.Database {
-  if (!dbInstance) {
-    dbInstance = new Database(DB_PATH);
+  const dbPath = resolveDbPath();
+  if (!dbInstance || dbInstancePath !== dbPath) {
+    dbInstance = new Database(dbPath);
     dbInstance.pragma('journal_mode = WAL');
     dbInstance.pragma('busy_timeout = 5000');
     dbInstance.pragma('foreign_keys = ON');
     runMigrations(dbInstance);
+    dbInstancePath = dbPath;
   }
   return dbInstance;
 }
@@ -1296,7 +1307,7 @@ export function schemaVersion(db: Database.Database): number {
 
 /** Snapshot with VACUUM INTO (WAL-safe). A raw file copy can miss uncommitted WAL pages. */
 export function snapshotDatabase(db: Database.Database, version: number): string {
-  const dir = __joinPath(__dirnameOf(DB_PATH), "backups");
+  const dir = __joinPath(__dirnameOf(resolveDbPath()), "backups");
   __mkdirSync(dir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const file = __joinPath(dir, "personal_os-v" + version + "-" + stamp + ".db");

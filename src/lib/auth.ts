@@ -66,8 +66,15 @@ export function getCurrentSession(): UserSession {
 }
 
 /**
+ * @deprecated Prefer the middleware gate: `src/middleware.ts` +
+ * `gateRequest()` in `@/lib/api/gate`. This function was previously dead code —
+ * no route called it — which is why the middleware approach landed. Kept for
+ * route-level defense in depth only; it performs no constant-time comparison.
+ *
  * Validates request for local protection. If PERSONAL_OS_PIN is set in the environment,
  * requests must provide matching x-personal-os-pin header or personal_os_session cookie.
+ *
+ * TODO(post-A): delete once all routes rely solely on middleware (tracked in §7 of ACCEPTANCE-REPORT).
  */
 export function validateApiRequest(request?: Request): { authorized: boolean; reason?: string } {
   const pin = process.env.PERSONAL_OS_PIN;

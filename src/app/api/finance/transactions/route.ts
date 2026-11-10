@@ -56,8 +56,30 @@ export async function GET(request: Request) {
 
     query += ' ORDER BY t.date DESC, t.created_at DESC LIMIT 100';
 
-    const transactions = db.prepare(query).all(...params);
-    return NextResponse.json({ transactions });
+    // Opt-in pagination: default limit preserved (100, matching the historical
+    // cap) so page behavior is untouched; callers may send ?limit/?offset and
+    // now receive an accurate total for paging/count-based UI.
+    const rawLimit = Number.parseInt(searchParams.get('limit') || '', 10);
+    const rawOffset = Number.parseInt(searchParams.get('offset') || '', 10);
+    const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(rawLimit, 500)) : 100;
+    const offset = Number.isFinite(rawOffset) ? Math.max(0, rawOffset) : 0;
+
+    // Fanout check: LEFT JOINs are many-to-one (account, category) so the
+    // filtered base row count equals the joined row count and a plain COUNT is
+    // safe here.
+    const countSql = query.replace(/LIMIT \d+\s*$/, '').replace(/SELECT(.|\s)*?FROM/i, 'SELECT COUNT(*) AS c FROM');
+    const total = (db.prepare(countSql).get(...params) as { c: number }).c;
+
+    query = query.replace(/\sLIMIT\s+\d+\s*$/i, '') + ' LIMIT ? OFFSET ?';
+    const transactions = db.prepare(query).all(...params, limit, offset);
+
+    return NextResponse.json({
+      transactions,
+      total,
+      limit,
+      offset,
+      hasMore: offset + limit < total,
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
