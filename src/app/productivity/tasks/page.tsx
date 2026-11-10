@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import { guardOffline } from '@/lib/offline/queue';
 import {
   CheckSquare,
   Plus,
@@ -22,6 +23,8 @@ import { Button } from '@/components/ui/Button';
 export default function TasksPage() {
   const { activeSpaceId, setIsQuickAddOpen } = useWorkspace();
   const [tasks, setTasks] = useState<any[]>([]);
+  // Transient offline-status notice; null = hidden (DS-consistent, non-blocking)
+  const [statusBanner, setStatusBanner] = useState<string | null>(null);
   const [projects, setProjects] = useState<any[]>([]);
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
   const [categoryTab, setCategoryTab] = useState<'all' | 'scheduled' | 'backlog' | 'completed'>('all');
@@ -76,11 +79,12 @@ export default function TasksPage() {
     setTasks(prev =>
       prev.map(t => (t.id === taskId ? { ...t, status: nextStatus } : t))
     );
-    await fetch('/api/tasks', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: taskId, status: nextStatus }),
-    });
+    const { queuedOffline } = await guardOffline('complete_task', { id: taskId, status: nextStatus });
+    if (queuedOffline) {
+      // Optimistic flip stays; replay will make it durable. Minimal signal:
+      setStatusBanner('Offline — status change queued locally');
+      setTimeout(() => setStatusBanner(null), 3000);
+    }
   };
 
   const handleInlineAdd = async (e: React.FormEvent) => {
@@ -144,6 +148,11 @@ export default function TasksPage() {
 
   return (
     <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      {statusBanner && (
+        <div role="status" className="px-3.5 py-2 rounded-md bg-amber-500/10 border border-amber-500/25 text-xs text-amber-300">
+          {statusBanner}
+        </div>
+      )}
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/[0.06] pb-5">
         <div>

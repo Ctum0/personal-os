@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useWorkspace } from '../layout/WorkspaceContext';
+import { guardOffline } from '@/lib/offline/queue';
 import { todayISO } from "@/lib/time";
 import {
   X,
@@ -88,11 +89,14 @@ export function QuickAddModal() {
     setMessage(null);
 
     try {
+      let offlineNote: string | null = null;
+
       if (activeType === 'task' || activeType === 'idea') {
-        const res = await fetch('/api/tasks', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        // Offline-first: network failures park the record in the localStorage
+        // queue with an idempotency key (replayed by syncOfflineQueue).
+        const { queuedOffline, response } = await guardOffline(
+          activeType === 'idea' ? 'quick_capture' : 'create_task',
+          {
             title: title.trim(),
             description,
             priority,
@@ -100,23 +104,21 @@ export function QuickAddModal() {
             estimatedDuration: parseInt(duration, 10) || 0,
             status: activeType === 'idea' ? 'inbox' : 'next',
             spaceId: activeSpaceId !== 'all' ? activeSpaceId : 'space_personal',
-          }),
-        });
-        if (!res.ok) throw new Error('Failed to create task');
+          }
+        );
+        if (!queuedOffline && response && !response.ok) throw new Error('Failed to create task');
+        if (queuedOffline) offlineNote = 'Saved to offline queue — it will post when you are back online';
       } else if (activeType === 'transaction') {
-        const res = await fetch('/api/finance/transactions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            transactionType: txType,
-            accountId,
-            amount,
-            description: title.trim(),
-            notes: description,
-            date: dueDate || todayISO(),
-          }),
+        const { queuedOffline, response } = await guardOffline('create_transaction', {
+          transactionType: txType,
+          accountId,
+          amount,
+          description: title.trim(),
+          notes: description,
+          date: dueDate || todayISO(),
         });
-        if (!res.ok) throw new Error('Failed to record transaction');
+        if (!queuedOffline && response && !response.ok) throw new Error('Failed to record transaction');
+        if (queuedOffline) offlineNote = 'Saved to offline queue — it will post when you are back online';
       } else if (activeType === 'project') {
         const res = await fetch('/api/projects', {
           method: 'POST',
@@ -159,9 +161,18 @@ export function QuickAddModal() {
       }
 
       // Refresh active view's data without a hard reload (preserves client state)
-      router.refresh();
-      window.dispatchEvent(new Event('personal-os:data-changed'));
-      setIsQuickAddOpen(false);
+      if (offlineNote) {
+        setMessage(offlineNote);
+        // Give the user 1.5s to read the offline notice before closing.
+        setTimeout(() => {
+          setIsQuickAddOpen(false);
+          window.dispatchEvent(new Event('personal-os:data-changed'));
+        }, 1500);
+      } else {
+        router.refresh();
+        window.dispatchEvent(new Event('personal-os:data-changed'));
+        setIsQuickAddOpen(false);
+      }
     } catch (err: any) {
       setMessage(err.message || 'Operation failed');
     } finally {

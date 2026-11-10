@@ -1,4 +1,10 @@
-export type OfflineMutationType = 'create_task' | 'log_habit' | 'quick_capture';
+export type OfflineMutationType =
+  | 'create_task'
+  | 'quick_capture'
+  | 'complete_task'
+  | 'log_habit'
+  | 'create_calendar_event'
+  | 'create_transaction';
 
 export interface OfflineMutation {
   id: string;
@@ -66,6 +72,79 @@ export function removeSyncedMutations(): void {
   saveOfflineQueue(pending);
 }
 
+/** Endpoint + method per mutation type (all idempotency-keyed POST/PUT). */
+function routeFor(type: OfflineMutationType): { url: string; method: 'POST' | 'PUT' } {
+  switch (type) {
+    case 'complete_task':
+      return { url: '/api/tasks', method: 'PUT' };
+    case 'log_habit':
+      return { url: '/api/habits/log', method: 'POST' };
+    case 'create_calendar_event':
+      return { url: '/api/calendar', method: 'POST' };
+    case 'create_transaction':
+      return { url: '/api/finance/transactions', method: 'POST' };
+    case 'create_task':
+    case 'quick_capture':
+    default:
+      return { url: '/api/tasks', method: 'POST' };
+  }
+}
+
+export interface GuardOfflineResult {
+  /** true when the mutation was queued locally instead of delivered live */
+  queuedOffline: boolean;
+  /** server response when the mutation was delivered immediately */
+  response?: Response;
+  /** the queued mutation when queuedOffline */
+  mutation?: OfflineMutation;
+}
+
+/**
+ * Offline-first submit guard for UI mutation surfaces.
+ *
+ * Try the live request; if the network is down (browser offline OR the fetch
+ * itself throws — the local-first app is reachable without the localhost dev
+ * server in exotic setups), park the mutation in the localStorage queue with
+ * an idempotency key so replay (syncOfflineQueue) never double-posts.
+ * Callers show their own feedback based on `queuedOffline`.
+ */
+export async function guardOffline(
+  type: OfflineMutationType,
+  payload: any,
+  fetchImpl: typeof fetch = fetch
+): Promise<GuardOfflineResult> {
+  if (typeof window === 'undefined') {
+    // SSR safety: never queue during render — deliver responsibility to the client.
+    return { queuedOffline: false };
+  }
+
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    const mutation = enqueueOfflineMutation(type, payload);
+    return { queuedOffline: true, mutation };
+  }
+
+  try {
+    const { url, method } = routeFor(type);
+    const response = await fetchImpl(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Idempotency-Key': `idem_${type}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok && response.status >= 500) {
+      // Server is there but failing: park for replay instead of losing input.
+      const mutation = enqueueOfflineMutation(type, payload);
+      return { queuedOffline: true, mutation };
+    }
+    return { queuedOffline: false, response };
+  } catch {
+    const mutation = enqueueOfflineMutation(type, payload);
+    return { queuedOffline: true, mutation };
+  }
+}
+
 export async function syncOfflineQueue(): Promise<{ synced: number; failed: number }> {
   if (typeof window === 'undefined' || !navigator.onLine) {
     return { synced: 0, failed: 0 };
@@ -78,16 +157,10 @@ export async function syncOfflineQueue(): Promise<{ synced: number; failed: numb
   for (const item of pending) {
     try {
       markMutationStatus(item.id, 'syncing');
-      let url = '/api/tasks';
-
-      if (item.type === 'create_task' || item.type === 'quick_capture') {
-        url = '/api/tasks';
-      } else if (item.type === 'log_habit') {
-        url = '/api/habits/log';
-      }
+      const { url, method } = routeFor(item.type);
 
       const res = await fetch(url, {
-        method: 'POST',
+        method,
         headers: {
           'Content-Type': 'application/json',
           'X-Idempotency-Key': item.idempotencyKey,
