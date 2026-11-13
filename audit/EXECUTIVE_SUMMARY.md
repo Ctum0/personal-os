@@ -30,7 +30,8 @@ What is broken is narrower and more interesting. The palette advertised ten comm
 | *Category totals* | *3 + 7 + 2 + 2 = **14*** |
 | Resolved during the audit | **4** (`BUG-001`, `BUG-002`, `A11Y-008`, `A11Y-009`) |
 | Fixed with a proven regression gate | **3** — each gate was verified by reverting its fix and watching it fail |
-| Still open | **10** |
+| Still open | **9** |
+| Informational (no action) | **1** (`PERF-002`) |
 
 ---
 
@@ -42,7 +43,9 @@ What is broken is narrower and more interesting. The palette advertised ten comm
 
 **BUG-001 — typing in the palette destroyed the command list (P2, fixed).** Re-graded down from P1 during review: nothing was unreachable, since arrowing with an empty query still lists all ten commands and every destination is also in the sidebar. The defect is that type-to-filter didn't cover commands, which is friction. Fixed by merging commands and records into one filtered row list.
 
-## What is still open (10)
+## What is still open (9 open + 1 informational)
+
+The table lists every unresolved entry. `PERF-002` is a negative result (code splitting is healthy) and is carried for completeness, not as work.
 
 | ID | Severity | Finding |
 | --- | --- | --- |

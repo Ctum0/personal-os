@@ -30,7 +30,7 @@ No page produces a horizontal document scrollbar. That is genuinely good — the
 
 Horizontal scrolling *works* in these wrappers, so this is not breakage. The usability problem is discoverability: at 390px the table renders cleanly to the edge with no fade, shadow or scrollbar hint, so a user has no reason to suspect four more columns exist. On touch devices the scrollbar is typically invisible until touched.
 
-**Recommendation (shared):** one reusable table wrapper that (a) always scopes `overflow-x-auto`, (b) shows an edge fade when `scrollWidth > clientWidth`, and (c) is used by *every* table and the calendar. The calendar should adopt the same wrapper rather than a one-off fix — the inconsistency is the root cause of RESP-001.
+**Recommendation (shared):** one reusable table wrapper that (a) always scopes `overflow-x-auto`, (b) shows an edge fade when `scrollWidth > clientWidth`, and (c) is used by *every* table. The calendar has already adopted the pattern (see BUG-002, resolved with a 96px column floor), which is exactly why the remaining tables should use the same primitive rather than each author remembering — the inconsistency was the root cause.
 
 ## Viewport-specific observations
 
@@ -40,7 +40,7 @@ Horizontal scrolling *works* in these wrappers, so this is not breakage. The usa
 | 1366×768 | Layout intact; the sidebar collapses below `lg`. |
 | 1024×768 | Sidebar becomes a drawer; no overlap, no clipped controls. |
 | 768×1024 | Tablets: cards reflow to one column. No overlap. |
-| 390×844 | Shell adapts; the calendar column loss (RESP-001) and table scroll discoverability (RESP-004) are the failures. |
+| 390×844 | Shell adapts. The calendar column loss was `BUG-002` (now resolved and guarded); the remaining issue is table scroll discoverability (`RESP-004`). |
 
 ## Text size at narrow widths
 

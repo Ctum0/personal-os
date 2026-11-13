@@ -7,26 +7,30 @@ Last updated: 2026-11-13 · Audit build: `6dbb094`
 
 | Metric | Value | Source |
 | --- | --- | --- |
-| Routes discovered | 30 (29 app + `/login`) | `APPLICATION_INVENTORY.md` |
-| Routes loaded in a browser | 30 — 29 via the route scan, `/login` via the auth suite | route-scan.json + auth specs |
-| Routes returning 200 | 29/29 | same |
-| Routes with horizontal overflow at 1440 | 0/29 | same |
-| Routes with console errors on load | 0/29 | same |
+| Routes discovered | 30 (29 app routes + `/login`) | `APPLICATION_INVENTORY.md` |
+| Routes loaded in a browser | 30 — 29 via the route scan, `/login` via the auth suite | `route-scan.json` + auth specs |
+| Routes returning 200 | 29/29 scanned | `route-scan.json` |
+| Routes with horizontal document overflow at 1440 | 0/29 | same |
+| Routes with console errors on load | 0/29 (the insights redirect stub's aborted `_rsc` prefetch is expected) | same |
 | Buttons observed | 367 | same |
 | Inputs observed | 37 | same |
 | Tables observed | 4 | same |
-| Interaction tests written | 15 | `INTERACTION_TESTS.md` |
-| Interaction tests passing | 13 | same |
-| Interaction tests failing (confirmed defects) | 2 | `BUG-001`, `A11Y-008` |
-| Interaction tests invalidated by my own probe error | 1 | `DECISIONS_AND_ASSUMPTIONS.md` |
-| Dialogs audited with axe while open | 2 (Quick Add, command palette) | `evidence/reports/axe-command-palette.json` |
-| Static routes audited with axe | 10 | `evidence/reports/axe-static-routes.json` |
-| Viewports tested | 5 of 8 | `RESPONSIVE_TESTING.md` |
-| Confirmed defects | 5 | `BUG-001`, `BUG-002`, `BUG-003`, `A11Y-008`, `UX-001` |
-| Defects resolved during the audit | 3 | `BUG-001`, `BUG-002`, `A11Y-008` |
-| Defects still open | 2 | `BUG-003`, plus the UX/UI items |
-| Confirmed a11y findings | 3 | `A11Y-008` (3 violations) |
-| Performance findings | 1 informational | `PERFORMANCE_FINDINGS.md` |
+| Interaction tests recorded | 18 (INT-001..011, A11Y-001..007) | `INTERACTION_TESTS.md` |
+| Interaction tests passing | 16 | same |
+| Interaction tests failing at time of running | 2 (`BUG-001`, `A11Y-008`) — both since fixed | same |
+| Dialogs audited with axe while open | 2 (Quick Add, command palette) | `axe-command-palette.json` |
+| Static routes audited with axe | 10, plus the 28-route seeded sweep in CI | `axe-static-routes.json` |
+| Viewports tested | **8 of 8** (64 measurements = 8 × 8 routes) | `responsive.json` |
+| Findings recorded | **14** | the four findings files |
+| — confirmed defects | 3 | `FUNCTIONAL_BUGS.md` |
+| — usability / UI concerns | 7 | `UI_UX_FINDINGS.md` |
+| — accessibility findings | 2 | `ACCESSIBILITY_FINDINGS.md` |
+| — performance entries | 2 (one informational) | `PERFORMANCE_FINDINGS.md` |
+| Resolved during the audit | **4** (`BUG-001`, `BUG-002`, `A11Y-008`, `A11Y-009`) | with mutation-proven gates |
+| Still open | **9** | `EXECUTIVE_SUMMARY.md` |
+| Informational (not an action) | **1** (`PERF-002`, code splitting healthy) | `PERFORMANCE_FINDINGS.md` |
+
+Reconciliation: 4 resolved + 9 open + 1 informational = **14**.
 
 ## Page completion
 
@@ -59,14 +63,27 @@ filter).
 
 ## Current phase
 
-Phase 3 (interaction audit) and Phase 4 (visual/typography) in progress; Phase 5 (responsive) partially done; Phase 6 (accessibility) done for static pages + 2 dialogs.
+Phases 1–7 complete for the surfaces exercised. Phase 3 (interaction) and Phase 4
+(visual/typography) are **incomplete**: 26 of 30 routes were verified to render
+cleanly, but their controls were not driven.
 
 ## Exact next task
 
-1. Write the remaining findings files (`UI_UX_FINDINGS`, `FUNCTIONAL_BUGS`, `ACCESSIBILITY_FINDINGS`, `PERFORMANCE_FINDINGS`, `RESPONSIVE_TESTING`, `WORKFLOW_TESTING`) from the data already captured in `evidence/reports/`.
-2. Extend responsive testing to the three missing viewports (1600×900, 1280×720, 768×1024) — currently only 1920, 1366, 1024, 768-at-tasks, 390 were measured.
-3. Complete the visual/typography pass on the four finance pages with tables (`transactions`, `budgets`, `debts`, `net-worth`) — table density and numeric alignment were not inspected.
-4. Re-run the command-palette interaction immediately after the fix for `BUG-001` is attempted.
+1. **Interaction-test the 26 partially-audited routes.** Start with
+   `/productivity/calendar` and `/productivity/habits` (dense interactive grids),
+   then the four finance table pages (`transactions`, `budgets`, `debts`,
+   `net-worth`) for row actions and numeric formatting.
+2. **Drive the five untested workflows**: CSV import end-to-end (file input →
+   preview → commit), weekly review create/save/reopen, finance CRUD
+   (create → edit → delete with confirm), backup export → restore through the UI,
+   and the AI governance approval flow (needs a configured provider).
+3. **Run a production-build Lighthouse pass.** All timings so far came from
+   `next dev` and are explicitly not Core Web Vitals.
+4. Then `PERF-001` (palette debounce/abort) can be judged against real numbers
+   instead of dev-server ones.
+
+Everything else — findings files, the 8-viewport matrix, the palette
+verification, the three gates — is **done**. Do not redo it.
 
 ## Blockers
 

@@ -58,7 +58,7 @@ At 1024×768 it scrolls with 96px columns — legible, not squeezed.
 
 **Expected:** the month grid fits, or scrolls horizontally.
 
-**Actual:** the last column ("Sun 15") extends to x=438 in a 390px viewport and the ancestor chain has **no scroll container** (`overflow-x` is `visible` up to `main`, which is `overflow-x: hidden`). The content is permanently clipped — not scrollable, not reachable.
+**Actual:** the last column ("Sun 15") extends to x=438 in a 390px viewport and the ancestor chain has **no scroll container** (`overflow-x` is `visible` up to `main`, which is `overflow-x: hidden`). At the time of the audit the content was permanently clipped — not scrollable, not reachable. Fixed; see the resolution note above.
 
 **Contrast:** `/finance/transactions`, `/finance/budgets` and `/finance/net-worth` place tables inside `overflow-x-auto` wrappers, so their overflow *is* reachable. Only the calendar lacks the wrapper — an inconsistency in how overflow is handled, not a global design decision.
 
