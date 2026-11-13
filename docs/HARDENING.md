@@ -1,10 +1,10 @@
 # Personal OS — Hardening Record
 
 Baseline when this record started: 47 SQLite tables, 30 tests, `tsc` clean.
-Current state: **53 tables, schema v7, 27 unit/route suites (247 tests), 103
+Current state: **53 tables, schema v7, 27 unit/route suites (251 tests), 103
 Playwright specs across two projects (`open` + `authed`), zero lint problems,
-`tsc` clean, zero axe violations with seeded overflow data, and verified end to
-end as a deployed container.**
+`tsc` clean, zero axe violations with seeded overflow data, CI green, and
+verified end to end as a deployed container behind a sign-in gate.**
 
 This file is the durable record of *what was wrong and how it is now
 prevented*. Every row names a verification that fails if the defect returns.
@@ -95,6 +95,14 @@ recorded here with the guard that now prevents each one.
 | 56 | `pnpm install --frozen-lockfile` failed in Docker and CI | pnpm 12 reads build-script approvals from `pnpm-workspace.yaml` (`allowBuilds`), not the `pnpm` field in `package.json`; the Dockerfile did not copy the file | Settings live in `pnpm-workspace.yaml`; the Dockerfile copies it into the deps stage. Verified with a full image build |
 | 57 | The production image had never been built | The Dockerfile and `.dockerignore` were written but never exercised | Built and run: `/login` 200, unauthenticated API 401, correct credentials 200, data survives `docker restart`, 44 MB RSS idle under a 384 MB limit |
 | 58 | Coolify's build OOM'd at type-check | Coolify injects the runtime `NODE_OPTIONS=--max-old-space-size=256` into every stage; `next build` needs more | The build step sets `NODE_OPTIONS=--max-old-space-size=2048` inline and overrides the injected value for that RUN only |
+
+| 59 | The application shell rendered for signed-out visitors | The gate only matched `/api/*`, and the root layout rendered the navbar and sidebar for every route, so a visitor could browse the navigation while every data call failed | Routes moved into the `(app)` group so the root layout is document-only; `src/proxy.ts` now redirects signed-out page requests to `/login?next=` before rendering. `e2e/auth-gate.spec.ts` asserts the sign-in page has no navigation landmark |
+| 60 | The proxy rejected the sign-in route itself | The `/api/*` branch returned 401 without consulting the gate's answer, so the one exempt path was unreachable — sign-in was impossible on any credentialed deployment | The branch honours `gateRequest`'s answer; pinned by a unit test |
+| 61 | A partial credential set failed open | `readAuthConfig` returned `null` for both "nothing configured" and "some variables missing", and `null` means allow-everything | Auth configuration is three-way (`open` / `incomplete` / `configured`); `incomplete` returns 503 naming the missing variables from pages, API and the sign-in route alike |
+| 62 | The Docker image had never been built or scanned for size | The Dockerfile and pnpm settings were written but unexercised | Built and run repeatedly; `pnpm-workspace.yaml` carries the pnpm 12 `allowBuilds` setting (the `pnpm` field in package.json is ignored by pnpm 12), and the build stage sets its own heap ceiling because the runtime `NODE_OPTIONS` is too small to type-check |
+| 63 | The documented install did not work | `.env.example` was gitignored, its values were empty (so compose's `:?` guards failed on the template), and the healthcheck probed `/login`, which redirects 307 in open mode | The template is tracked with `REPLACE_ME` placeholders, and the healthcheck probes `/api/auth/session`, which answers 200 in both modes. Verified with a real `docker compose up`: healthy |
+| 64 | CI never ran | `pnpm/action-setup` declared `version: 12` while package.json declared `pnpm@12.11.2`; the action refuses to choose and fails before any step | The workflow specifies no version and lets the action read `packageManager`. First green run: 43443459568 |
+| 65 | Real ledger snapshots and credentials were in repository history | `data/backups/` (20 SQLite snapshots with operator data), `.agents/`, and a committed PBKDF2 digest | History rewritten: no `.db`, no `.agents/`, no credential value in any reachable commit; verified by scanning every commit before the repository was made public |
 
 ## Known open (not fixed, not covered by a gate)
 
