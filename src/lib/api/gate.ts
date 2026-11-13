@@ -34,6 +34,8 @@ export interface GateResult {
   misconfigured?: boolean;
   /** variable names the deployment is missing, for logging */
   missing?: string[];
+  /** variable names present but unusable (placeholders, wrong shape) */
+  invalid?: string[];
 }
 
 /** Extracts a named cookie from a raw `Cookie` header. */
@@ -53,12 +55,17 @@ export async function gateRequest(request: GateRequestLike, pathname?: string): 
   // Misconfiguration wins over every exemption: if the deployment cannot verify
   // sessions, it must not pretend to be open either.
   if (state.kind === 'incomplete') {
+    const broken = [...state.missing, ...(state.invalid ?? [])];
+    const detail = state.invalid?.length
+      ? `these values cannot work as configured: ${state.invalid.join(', ')}`
+      : `set ${state.missing.join(', ')}`;
     return {
       authorized: false,
       openMode: false,
       misconfigured: true,
       missing: state.missing,
-      reason: `Authentication is misconfigured: set ${state.missing.join(', ')} (or unset all four credential variables to run in open mode).`,
+      invalid: state.invalid,
+      reason: `Authentication is misconfigured: ${detail}. Unset all four credential variables to run in open mode (${broken.length} problem${broken.length === 1 ? '' : 's'}).`,
     };
   }
 

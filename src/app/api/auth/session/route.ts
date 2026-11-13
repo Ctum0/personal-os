@@ -36,7 +36,7 @@ export const POST = withApiLogging(async function POST(request: Request) {
       // Never treat a partial credential set as "open": refuse to authenticate
       // and say exactly what is missing.
       return NextResponse.json(
-        { error: 'Authentication is misconfigured', missing: state.missing },
+        { error: 'Authentication is misconfigured', missing: state.missing, invalid: state.invalid },
         { status: 503 }
       );
     }
@@ -91,7 +91,7 @@ export const GET = withApiLogging(async function GET() {
     const state = readAuthState();
     if (state.kind === 'incomplete') {
       return NextResponse.json(
-        { error: 'Authentication is misconfigured', missing: state.missing },
+        { error: 'Authentication is misconfigured', missing: state.missing, invalid: state.invalid },
         { status: 503 }
       );
     }
@@ -111,7 +111,7 @@ export const DELETE = withApiLogging(async function DELETE() {
     const state = readAuthState();
     if (state.kind === 'incomplete') {
       return NextResponse.json(
-        { error: 'Authentication is misconfigured', missing: state.missing },
+        { error: 'Authentication is misconfigured', missing: state.missing, invalid: state.invalid },
         { status: 503 }
       );
     }

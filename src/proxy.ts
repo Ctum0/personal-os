@@ -50,7 +50,10 @@ export async function proxy(request: NextRequest) {
       {
         error: "Authentication is misconfigured",
         missing: state.missing,
-        hint: `Set ${state.missing.join(", ")}, or unset all four credential variables to run in open mode.`,
+        invalid: state.invalid,
+        hint: state.invalid?.length
+          ? `${state.invalid.join(", ")} cannot work as configured (placeholder or wrong shape). Generate real values, or unset all four to run in open mode.`
+          : `Set ${state.missing.join(", ")}, or unset all four credential variables to run in open mode.`,
       },
       { status: 503 }
     );

@@ -202,6 +202,44 @@ describe('incomplete configuration fails closed', () => {
     expect(signIn.authorized).toBe(false);
   });
 
+  it('rejects the .env.example placeholders as unusable, not as configured', async () => {
+    // Copying the template verbatim produced an instance that announced itself
+    // as protected while no password could ever authenticate.
+    process.env.PERSONAL_OS_USERNAME = 'operator';
+    process.env.PERSONAL_OS_PASSWORD_SALT = 'REPLACE_ME';
+    process.env.PERSONAL_OS_PASSWORD_HASH = 'REPLACE_ME';
+    process.env.PERSONAL_OS_SESSION_SECRET = 'REPLACE_ME';
+
+    const result = await gateRequest(requestWith(), '/api/tasks');
+    expect(result.authorized).toBe(false);
+    expect(result.misconfigured).toBe(true);
+    expect(result.invalid).toEqual([
+      'PERSONAL_OS_PASSWORD_SALT',
+      'PERSONAL_OS_PASSWORD_HASH',
+      'PERSONAL_OS_SESSION_SECRET',
+    ]);
+    expect(result.reason).toMatch(/cannot work as configured/i);
+  });
+
+  it('rejects a digest or secret that is not the right shape', async () => {
+    process.env.PERSONAL_OS_USERNAME = USERNAME;
+    process.env.PERSONAL_OS_PASSWORD_SALT = SALT;
+    process.env.PERSONAL_OS_PASSWORD_HASH = 'deadbeef'; // too short to be a digest
+    process.env.PERSONAL_OS_SESSION_SECRET = 'too-short';
+
+    const result = await gateRequest(requestWith(), '/api/tasks');
+    expect(result.misconfigured).toBe(true);
+    expect(result.invalid).toContain('PERSONAL_OS_PASSWORD_HASH');
+    expect(result.invalid).toContain('PERSONAL_OS_SESSION_SECRET');
+  });
+
+  it('accepts the fixtures used by the rest of this suite', async () => {
+    configureAuth();
+    const result = await gateRequest(requestWith(), '/api/tasks');
+    expect(result.misconfigured).toBeUndefined();
+    expect(result.reason).toMatch(/sign in required/i);
+  });
+
   it('reports 503 from the session endpoint, not open mode', async () => {
     process.env.PERSONAL_OS_USERNAME = USERNAME;
     const res = await sessionPost(

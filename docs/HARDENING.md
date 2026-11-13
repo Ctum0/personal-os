@@ -109,6 +109,8 @@ recorded here with the guard that now prevents each one.
 
 | 68 | Auto-deploy silently stopped while reporting success | The GitHub webhook answers 200 and matches applications by repository URL form; after the app's source moved from `git@github.com:…` to `https://github.com/…`, the hook still answered 200 but matched nothing, so five commits sat undeployed | Deployment moved into CI: a `deploy` job with `needs: verify` calls `POST /api/v1/deploy?uuid=<app-uuid>` using repository secrets. UUID addressing cannot break when the git URL form changes, and a failing gate now blocks the deploy instead of racing it |
 
+| 69 | Copying `.env.example` produced a door with no key | Credentials were validated only for presence, so `REPLACE_ME` placeholders counted as configured: the instance announced itself as protected, answered 401 to every sign-in attempt, and no password could ever work | Credential values are shape-checked (salt ≥16 hex, digest exactly 64 hex, secret ≥32, no placeholders). An unusable value yields `incomplete` → 503 naming the variable, and `src/instrumentation.ts` logs the posture at startup. Verified against a running server with the template copied verbatim |
+
 ## Known open (not fixed, not covered by a gate)
 
 Each item is reproducible and none is a regression of the fixes above. They are

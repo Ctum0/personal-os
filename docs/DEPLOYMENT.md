@@ -48,13 +48,18 @@ the type-check step — a 256 MB heap is enough to *run* the app and not enough 
 All nine values are set on the Coolify application (`PERSONAL_OS_*`). None are
 baked into the image.
 
-| Key | Value |
-| --- | --- |
-| `PERSONAL_OS_USERNAME` | the operator account name |
-| `PERSONAL_OS_PASSWORD_SALT` | deployment salt (hex) |
-| `PERSONAL_OS_PASSWORD_ITERATIONS` | `210000` |
-| `PERSONAL_OS_PASSWORD_HASH` | PBKDF2-HMAC-SHA256 digest (hex) |
-| `PERSONAL_OS_SESSION_SECRET` | 32 random bytes (hex) — **deployment-specific** |
+Each value is shape-checked at startup, not just presence-checked. A value that
+is present but could never work (a placeholder, or the wrong shape) puts the
+service into `incomplete`, which answers `503` to everything and names the
+offending variable in the response body.
+
+| Key | Required shape | Value |
+| --- | --- | --- |
+| `PERSONAL_OS_USERNAME` | non-empty, not a placeholder | the operator account name |
+| `PERSONAL_OS_PASSWORD_SALT` | **≥16 lowercase hex chars** | deployment salt |
+| `PERSONAL_OS_PASSWORD_ITERATIONS` | integer ≥ 10000, default `210000` | PBKDF2 work factor |
+| `PERSONAL_OS_PASSWORD_HASH` | **exactly 64 hex chars** | PBKDF2-HMAC-SHA256 digest |
+| `PERSONAL_OS_SESSION_SECRET` | **≥32 chars** | 32 random bytes (hex) — deployment-specific |
 | `PERSONAL_OS_DB_PATH` | `/app/data/personal_os.db` |
 | `PERSONAL_OS_TZ` | `Asia/Colombo` |
 | `NODE_OPTIONS` | `--max-old-space-size=256` |
@@ -88,6 +93,14 @@ which is the intended effect of a rotation).
 `v1.<expiresAt>.<HMAC-SHA256(secret, "v1.<username>.<expiresAt>")>`; there is no
 session table and no per-request query. Five failed attempts from one address
 lock that address out for a minute, doubling to an hour.
+
+### If the instance suddenly answers 503 everywhere
+
+The credential set is present but unusable. The response body lists the
+offending variables (`missing` / `invalid`) — for example a salt that is not hex,
+a digest that is not 64 characters, or a secret shorter than 32. This is
+deliberate: a locked door with no key must not report itself as healthy. Fix the
+named variable, or unset all four to deliberately run in open mode.
 
 ### Backup
 

@@ -62,9 +62,9 @@ jobs:
           # deployment credential.
           E2E_USERNAME: e2e-operator
           E2E_PASSWORD: e2e-fixture-password
-          E2E_PASSWORD_SALT: e2e-salt-fixed-value
-          E2E_PASSWORD_HASH: dbc9f1b53b22dca0d62d2dfabc2ae442cd6c5996cd5a9e7a38c199136d7c6167
-          E2E_SESSION_SECRET: e2e-session-secret-fixed-value
+          E2E_PASSWORD_SALT: 0123456789abcdef0123456789abcdef
+          E2E_PASSWORD_HASH: 6a303efb7b786aed0bc0031f6967910732a8a30fd396b24343e9231afb3d9896
+          E2E_SESSION_SECRET: e2e-session-secret-fixed-value-0123456789
           E2E_DB_PATH: ${{ env.SCRATCH }}/e2e/profile.db
           E2E_AUTHED_DB_PATH: ${{ env.SCRATCH }}/e2e/profile-authed.db
 

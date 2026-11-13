@@ -21,10 +21,10 @@ const AUTHED_PORT = Number(process.env.E2E_AUTHED_PORT || 3458);
 const E2E_USERNAME = process.env.E2E_USERNAME || 'e2e-operator';
 const E2E_PASSWORD = process.env.E2E_PASSWORD || 'e2e-fixture-password';
 // Deterministic test-only digest for E2E_PASSWORD — never used by a deployment.
-const E2E_PASSWORD_SALT = process.env.E2E_PASSWORD_SALT || 'e2e-salt-fixed-value';
+const E2E_PASSWORD_SALT = process.env.E2E_PASSWORD_SALT || '0123456789abcdef0123456789abcdef';
 const E2E_PASSWORD_HASH =
-  process.env.E2E_PASSWORD_HASH || 'dbc9f1b53b22dca0d62d2dfabc2ae442cd6c5996cd5a9e7a38c199136d7c6167';
-const E2E_SESSION_SECRET = process.env.E2E_SESSION_SECRET || 'e2e-session-secret-fixed-value';
+  process.env.E2E_PASSWORD_HASH || '6a303efb7b786aed0bc0031f6967910732a8a30fd396b24343e9231afb3d9896';
+const E2E_SESSION_SECRET = process.env.E2E_SESSION_SECRET || 'e2e-session-secret-fixed-value-0123456789';
 const IS_CI = Boolean(process.env.CI);
 
 const openDb = process.env.E2E_DB_PATH || path.join(os.tmpdir(), 'personal-os-e2e', 'profile.db');

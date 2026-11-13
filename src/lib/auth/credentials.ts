@@ -45,8 +45,11 @@ export const REQUIRED_AUTH_ENV = [
 export type AuthConfigState =
   /** No credential variables present at all: an intentional local workstation. */
   | { kind: 'open' }
-  /** Some but not all present: a misconfiguration, and it must not open the app. */
-  | { kind: 'incomplete'; missing: string[] }
+  /**
+   * Present but unusable: missing variables, or values that could never work
+   * (the `.env.example` placeholders, a non-hex digest, a too-short secret).
+   */
+  | { kind: 'incomplete'; missing: string[]; invalid?: string[] }
   /** All present and usable. */
   | { kind: 'configured'; config: AuthConfig };
 
@@ -59,6 +62,13 @@ export type AuthConfigState =
  * unauthenticated with no error anywhere. So an incomplete set is its own state,
  * and the gate refuses every request for it.
  */
+/** A value that is present but could never authenticate. */
+const PLACEHOLDER = /^(replace[_-]?me|changeme|your[-_]?|todo|x{8,}|<.*>)$/i;
+
+function looksLikePlaceholder(value: string): boolean {
+  return PLACEHOLDER.test(value.trim());
+}
+
 export function readAuthState(env: Record<string, string | undefined> = process.env): AuthConfigState {
   const present = REQUIRED_AUTH_ENV.filter(key => (env[key] ?? '').trim().length > 0);
   if (present.length === 0) return { kind: 'open' };
@@ -70,6 +80,18 @@ export function readAuthState(env: Record<string, string | undefined> = process.
   const salt = env.PERSONAL_OS_PASSWORD_SALT!.trim();
   const passwordHash = env.PERSONAL_OS_PASSWORD_HASH!.trim().toLowerCase();
   const secret = env.PERSONAL_OS_SESSION_SECRET!.trim();
+
+  // Validate shape, not just presence. Copying .env.example verbatim used to
+  // produce an instance that announced itself as protected while no password
+  // could ever authenticate — a locked door with no key, reported as healthy.
+  const invalid: string[] = [];
+  if (looksLikePlaceholder(salt) || !/^[0-9a-f]{16,}$/.test(salt)) invalid.push('PERSONAL_OS_PASSWORD_SALT');
+  if (looksLikePlaceholder(passwordHash) || !/^[0-9a-f]{64}$/.test(passwordHash)) {
+    invalid.push('PERSONAL_OS_PASSWORD_HASH');
+  }
+  if (looksLikePlaceholder(secret) || secret.length < 32) invalid.push('PERSONAL_OS_SESSION_SECRET');
+  if (looksLikePlaceholder(username)) invalid.push('PERSONAL_OS_USERNAME');
+  if (invalid.length > 0) return { kind: 'incomplete', missing: [], invalid };
 
   const parsedIterations = Number.parseInt(env.PERSONAL_OS_PASSWORD_ITERATIONS ?? '', 10);
   const iterations =
