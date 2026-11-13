@@ -40,6 +40,12 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      # The audit package claims every number in it is derived from an evidence
+      # file. That is only true if something checks it; a gate that never runs is
+      # not a gate.
+      - name: Verify audit consistency
+        run: pnpm audit:docs
+
       - name: Unit tests
         run: pnpm test
         env:

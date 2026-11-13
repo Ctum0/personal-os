@@ -33,10 +33,14 @@ for (const stale of ['377/377', '5 of 8', 'ends the session server-side',
   const hits = Object.entries(docs).filter(([, text]) => text.includes(stale)).map(([n]) => n);
   check(`no stale claim: ${stale}`, hits.length === 0, hits.join(', '));
 }
+// A resolved finding must retain its historical reproduction, so the bare phrase
+// is legitimate there. What must not survive is a *present-tense* status claim in
+// the live findings documents.
 check('RESPONSIVE no longer calls the calendar clipped',
   !docs['RESPONSIVE_TESTING.md'].includes('permanently clipped'));
-check('BUG-002 keeps its history in past tense',
-  docs['FUNCTIONAL_BUGS.md'].includes('was permanently clipped'));
+check('BUG-002 keeps its history, in past tense',
+  !/\bis permanently clipped\b/.test(docs['FUNCTIONAL_BUGS.md'])
+  && docs['FUNCTIONAL_BUGS.md'].includes('was permanently clipped'));
 
 // 2. Measured figures must match their evidence files.
 check('route scan covered 29 routes', scan.length === 29, String(scan.length));
@@ -53,6 +57,17 @@ for (const [label, pattern] of [['resolved 4', /\| \*\*4\*\*/], ['findings 14', 
 }
 check('master agrees with the summary',
   [/\| \*\*4\*\*/, /\| \*\*14\*\*/, /\| \*\*9\*\*/].every(p => p.test(master)));
+
+// Bug 3: the summary's table deliberately carries one informational row. The
+// framing is 4 resolved + 9 open + 1 informational = 14, so an informational
+// entry is expected, not an open action item.
+const openRows = [...summary.matchAll(/^\| `([A-Z]+-\d+)` \| [^|]+ \| ([^|]+)\|/gm)]
+  .map(m => ({ id: m[1], text: m[2] }));
+const informational = openRows.filter(r => /informational/i.test(r.text)).map(r => r.id);
+const actionable = openRows.filter(r => !/informational/i.test(r.text)).map(r => r.id);
+check('informational rows are exactly {PERF-002}',
+  informational.length === 1 && informational[0] === 'PERF-002', informational.join(','));
+check('actionable open rows = 9', actionable.length === 9, String(actionable.length));
 
 // 4. Every finding ID must be either open in the table or explicitly resolved.
 const openIds = new Set([...summary.matchAll(/^\| `([A-Z]+-\d+)`/gm)].map(m => m[1]));
