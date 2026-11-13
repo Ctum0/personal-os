@@ -134,7 +134,9 @@ user). `.dockerignore` keeps `data/`, `.artifacts/`, `.next/` and `node_modules/
 out of the build context, and only the traced standalone output is copied into
 the runtime image — the build-time `node_modules` tree and your database never
 ship. SQLite data persists in `/app/data`; see
-`docs/adr/0001-deployment-strategy.md`.
+`docs/adr/0001-deployment-strategy.md`. Production deployment (Coolify, Caddy
+ingress, resource limits, credential rotation, backup/restore) is documented in
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## API surface
 

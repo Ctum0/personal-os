@@ -1,9 +1,10 @@
 # Personal OS — Hardening Record
 
 Baseline when this record started: 47 SQLite tables, 30 tests, `tsc` clean.
-Current state: **53 tables, schema v7, 27 unit/route suites (235 tests), 103
-Playwright specs across two projects (`open` + `pin`), zero lint problems, `tsc`
-clean, zero axe violations with seeded overflow data.**
+Current state: **53 tables, schema v7, 27 unit/route suites (247 tests), 103
+Playwright specs across two projects (`open` + `authed`), zero lint problems,
+`tsc` clean, zero axe violations with seeded overflow data, deployed and verified
+at https://os.ctum.org.**
 
 This file is the durable record of *what was wrong and how it is now
 prevented*. Every row names a verification that fails if the defect returns.
@@ -87,6 +88,13 @@ recorded here with the guard that now prevents each one.
 | 49 | Planner fixes were untested (how they rotted once) | `planner-intelligence.test.ts` only asserted enabled/quarantined, so deleting the whole bills query still passed | Tests pin real obligations (aliased `amount`/`dueDate`, ±7-day window), computed streaks (3 vs 0), minute-axis block placement, and the work-day/capacity ceiling |
 | 50 | The axe sweep could not see two containers it was credited with guarding | Weekly reviews and the CSV preview are React state, so an API-only seed left both scroll containers absent from the DOM | The sweep seeds 12 reviews via the API and drives the real import file-input flow, asserting the preview table renders before auditing |
 | 51 | The axe seed was non-deterministic | Soft-deleted rows accumulated across runs and changed the DOM (dense clusters appeared after run 2) | Cleanup deletes sweep rows directly in the isolated profile; verified two consecutive runs both 29/29 with zero residue |
+| 52 | The PIN gate was a single shared secret with no account identity | A short numeric PIN compared as an unsalted digest, no username, no attempt limiting | Replaced by a single configured operator account: PBKDF2-HMAC-SHA256 (210k iterations) over a per-deployment salt, length-independent comparison, HMAC-signed session cookie whose expiry is inside the signature, and per-address throttling (5 failures → 1 min, doubling to 1 h). No registration route exists. `src/tests/gate.test.ts` (21 tests) + `e2e/auth-gate.spec.ts` (6 specs) |
+| 53 | Restore dropped ten of the exported domains | The restore route was written before recurring rules, savings goals, debts, payees, calendar events, focus sessions, daily plans, plan items, import batches and safe-to-spend settings were added to the export | Every exported domain now has a restore step; `defer_foreign_keys` makes cross-referenced rows legal in any order; the tenant lookup map covers all tables. A test imports a real export into a genuinely fresh database |
+| 54 | Restored rows broke FK ordering | Tasks reference spaces/projects/goals that are restored later in the payload | `db.pragma('defer_foreign_keys = ON')` inside the restore transaction, checked at COMMIT |
+| 55 | `?strict=1` could not see CSV-imported rows | The CSV commit path omitted `dup_fingerprint`, so imported statements never matched the duplicate gate | `csv-import.ts` now writes `transactionFingerprint(...)` per row; a test commits a CSV then posts the same transaction and expects 409 |
+| 56 | `pnpm install --frozen-lockfile` failed in Docker and CI | pnpm 12 reads build-script approvals from `pnpm-workspace.yaml` (`allowBuilds`), not the `pnpm` field in `package.json`; the Dockerfile did not copy the file | Settings live in `pnpm-workspace.yaml`; the Dockerfile copies it into the deps stage. Verified with a full image build |
+| 57 | The production image had never been built | The Dockerfile and `.dockerignore` were written but never exercised | Built and run: `/login` 200, unauthenticated API 401, correct credentials 200, data survives `docker restart`, 44 MB RSS idle under a 384 MB limit |
+| 58 | Coolify's build OOM'd at type-check | Coolify injects the runtime `NODE_OPTIONS=--max-old-space-size=256` into every stage; `next build` needs more | The build step sets `NODE_OPTIONS=--max-old-space-size=2048` inline and overrides the injected value for that RUN only |
 
 ## Known open (not fixed, not covered by a gate)
 
@@ -98,7 +106,7 @@ listed so "all gates green" is not read as "no defects":
 | Routines tab is a local-only preview | `src/app/productivity/habits/page.tsx` | Step checkboxes are labelled as a preview and are not persisted; the `routines`/`routine_steps` tables have no write path yet. |
 | Multi-currency amounts are summed as one currency | `src/lib/finance/engine.ts` | `base_amount`/`exchange_rate` exist but no calculation reads them, so mixed-currency ledgers add units. |
 | AI approval drafts are single-operator | `src/lib/ai/tools.ts` | `applyAiActionDraft` requires the draft's owner, so a second operator cannot approve. Acceptable for the single-operator product, wrong for multi-user. |
-| PIN has no attempt throttling | `src/app/api/auth/session/route.ts` | A short PIN is brute-forceable online; the session cookie is an unsalted SHA-256 of the PIN. |
+| Multi-tenant isolation is enforced per query, not by the engine | `src/lib/db/*` | Every query filters `tenant_id` explicitly; a new query that forgets the filter would leak across tenants. Single-operator today, so no data exists to leak. |
 
 ## Git history note (operator decision required)
 
