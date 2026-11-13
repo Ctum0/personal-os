@@ -1,3 +1,10 @@
+# A contributor's .env (the README tells them to create one) must never enter the
+# build context: Next loads .env during `next build`, which would bake credential
+# values into the standalone output. The template carries no secrets.
+.env
+.env.*
+!.env.example
+
 # Never ship the operator's data or local build state into an image.
 data/
 .artifacts/
