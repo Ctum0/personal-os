@@ -1,0 +1,27 @@
+{
+  "note": "Trimmed extract of the Lighthouse run against the standalone production server (NEXT_OUTPUT_STANDALONE build served by node .next/standalone/server.js, with .next/static and public staged as the Dockerfile does), / at 1440x900, default mobile-throttled preset. The full report is ~584 KB of trace payload; the raw file is gitignored and only the figures the audit cites are kept here. Chromium-only and machine-specific: order-of-magnitude, not a Core Web Vitals guarantee.",
+  "measured": "production standalone build",
+  "route": "/",
+  "viewport": "1440x900",
+  "categories": {
+    "performance": 97,
+    "accessibility": 100,
+    "best-practices": 100,
+    "seo": 100
+  },
+  "metrics": {
+    "first-contentful-paint": "0.9\u00a0s",
+    "largest-contentful-paint": "0.9\u00a0s",
+    "total-blocking-time": "210\u00a0ms",
+    "cumulative-layout-shift": "0.012",
+    "speed-index": "0.9\u00a0s",
+    "server-response-time": "Root document took 10\u00a0ms"
+  },
+  "accessibilityAuditsOfInterest": {
+    "button-name": 1,
+    "heading-order": 1,
+    "color-contrast": 1,
+    "label-content-name-mismatch": 1
+  },
+  "provenance": "This is the run taken AFTER fixing the two defects it originally surfaced (A11Y-010 button-name, A11Y-011 heading-order), which is why accessibility reads 100 and those audits score 1. The earlier run that exposed them recorded accessibility 93 with button-name and heading-order both 0; its raw output was not retained, so that figure is cited from the session record and not from a file in this directory."
+}

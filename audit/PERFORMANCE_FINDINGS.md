@@ -6,7 +6,10 @@ the figures below come from Lighthouse against the **standalone production
 server** (`NEXT_OUTPUT_STANDALONE=1` build, `node .next/standalone/server.js`),
 with `.next/static` and `public/` staged as the Dockerfile does.
 
-Raw report: `evidence/reports/lighthouse-home.json`.
+Evidence: `evidence/reports/lighthouse-home-summary.json` — a trimmed extract
+(categories, six metrics, audits of interest). The raw Lighthouse report is ~584 KB
+of trace payload and is gitignored rather than committed; regenerate it with the
+command below.
 
 ## Lighthouse — `/` at 1440×900 (mobile-throttled default preset)
 
@@ -68,6 +71,26 @@ defects that axe-core's WCAG tag set does not check:
 
 Both verified at 412px: zero unnamed buttons, valid heading sequence, and the
 Lighthouse accessibility score moved 93 → **100**.
+
+## Regenerating these numbers
+
+```bash
+NEXT_OUTPUT_STANDALONE=1 PERSONAL_OS_DB_PATH=/tmp/lh/p.db npx next build
+cp -r .next/static .next/standalone/.next/static   # standalone serves no assets otherwise
+cp -r public .next/standalone/public
+PERSONAL_OS_DB_PATH=/tmp/lh/run.db PORT=3600 node .next/standalone/server.js &
+pnpm add -D lighthouse   # temporary; remove afterwards
+npx lighthouse http://127.0.0.1:3600/ --quiet \
+  --chrome-flags="--headless=new --no-sandbox" \
+  --only-categories=performance,accessibility,best-practices,seo \
+  --output=json --output-path=/tmp/lh.json
+pnpm remove lighthouse
+```
+
+The two `cp` lines are not optional: a bare `node .next/standalone/server.js`
+serves no `/_next/static` or `public` assets, so every chunk 404s and the scores
+describe a broken page rather than the app. My first run made exactly that
+mistake and reported six asset 404s plus an accessibility score of 93.
 
 ## Not measured
 

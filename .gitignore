@@ -63,3 +63,8 @@ test-results/
 
 # Agent tooling is local configuration, not part of the product.
 .agents/
+
+# Raw Lighthouse reports are ~584 KB of trace payload per run. The audit commits a
+# trimmed extract (categories, metrics, audits of interest) instead.
+audit/evidence/reports/lighthouse-*.json
+!audit/evidence/reports/lighthouse-home-summary.json

@@ -1,6 +1,6 @@
 # Master Progress
 
-**Status: complete for every surface exercised, with one carry-forward.**
+**Status: complete for every surface exercised.**
 Last updated: 2026-11-14 · Audit build: `6dbb094`, fixes verified at `6e9d183`
 
 No carry-forwards: the Phase 4 finance-table typography pass was completed

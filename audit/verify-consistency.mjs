@@ -49,7 +49,9 @@ check('64 responsive measurements', resp.length === 64, String(resp.length));
 check('no document-level horizontal overflow anywhere',
   resp.every(r => !r.overflow));
 
-// 3. Headline counts must agree across documents.
+// 3. Headline counts must agree across documents AND with the register itself.
+// Sourced from the finding files, not from a literal — a hardcoded total can only
+// assert what was last written, which is how count drift survives a gate.
 const summary = docs['EXECUTIVE_SUMMARY.md'];
 const master = docs['MASTER_PROGRESS.md'];
 for (const [label, pattern] of [['resolved 5', /\| \*\*5\*\*/], ['findings 17', /\| \*\*17\*\*/], ['open 10', /\| \*\*10\*\*/]]) {
@@ -84,7 +86,20 @@ const resolved = new Set(['BUG-001', 'BUG-002', 'A11Y-008', 'A11Y-009', 'A11Y-01
 const unaccounted = [...register].filter(id => !openIds.has(id) && !resolved.has(id));
 check('every finding is open or resolved', unaccounted.length === 0, unaccounted.join(', '));
 
-// 5. Required deliverables.
+// 5. The stated total must equal what the register actually contains.
+const declaredTotal = Number((summary.match(/\| Findings recorded \| \*\*(\d+)\*\*/) || [])[1]);
+check('declared total matches the register', declaredTotal === register.size,
+  `declared ${declaredTotal}, register holds ${register.size}`);
+const declaredResolved = Number((summary.match(/Resolved during the audit \| \*\*(\d+)\*\*/) || [])[1]);
+const declaredOpen = Number((summary.match(/Still open \| \*\*(\d+)\*\*/) || [])[1]);
+const declaredInfo = Number((summary.match(/Informational \(no action\) \| \*\*(\d+)\*\*/) || [])[1]);
+check('resolved + open + informational = total',
+  declaredResolved + declaredOpen + declaredInfo === declaredTotal,
+  `${declaredResolved} + ${declaredOpen} + ${declaredInfo} vs ${declaredTotal}`);
+check('resolved set matches the declared count',
+  declaredResolved === resolved.size, `${declaredResolved} vs ${resolved.size}`);
+
+// 6. Required deliverables.
 for (const name of ['EXECUTIVE_SUMMARY.md', 'ROOT_CAUSE_ANALYSIS.md', 'REGRESSION_TEST_PLAN.md',
                     'IMPROVEMENT_ROADMAP.md', 'ROUTE_COVERAGE.md', 'FEATURE_INVENTORY.md',
                     'INTERACTION_TESTS.md', 'RESPONSIVE_TESTING.md', 'ACCESSIBILITY_FINDINGS.md',
