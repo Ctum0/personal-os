@@ -76,3 +76,39 @@ jobs:
             test-results/
             .artifacts/e2e-html/
           retention-days: 7
+
+  # Deploy only what passed. A push that fails any gate above never reaches the
+  # server, which a provider-side webhook cannot guarantee.
+  #
+  # Deployment is addressed by application UUID rather than by repository URL on
+  # purpose: URL-based webhooks match on the exact git remote form, so changing
+  # the app's source URL (ssh vs https) silently stops deploys while the webhook
+  # still answers 200.
+  deploy:
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Coolify deployment
+        env:
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+          COOLIFY_APP_UUID: ${{ secrets.COOLIFY_APP_UUID }}
+          COOLIFY_URL: ${{ vars.COOLIFY_URL || 'https://coolify.ctum.org' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${COOLIFY_TOKEN:-}" ] || [ -z "${COOLIFY_APP_UUID:-}" ]; then
+            echo "::error::COOLIFY_TOKEN and COOLIFY_APP_UUID secrets must be set"
+            exit 1
+          fi
+          response=$(curl -sS -w '\n%{http_code}' -X POST \
+            -H "Authorization: Bearer $COOLIFY_TOKEN" \
+            -H 'Accept: application/json' \
+            "$COOLIFY_URL/api/v1/deploy?uuid=$COOLIFY_APP_UUID")
+          body=$(printf '%s' "$response" | sed '$d')
+          code=$(printf '%s' "$response" | tail -n1)
+          echo "$body"
+          if [ "$code" != "200" ]; then
+            echo "::error::Coolify returned HTTP $code"
+            exit 1
+          fi
+          echo "Deployment queued for $COOLIFY_APP_UUID" 

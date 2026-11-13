@@ -107,6 +107,8 @@ recorded here with the guard that now prevents each one.
 | 66 | PWA icons redirected to the sign-in page | The gate's static-asset check enumerated filenames (`/icon.svg`, `/icon.png`), and the manifest also ships `/icon-512.png` — signed out, that request was redirected to `/login`, silently breaking installability | The check is now an asset-extension test, so any icon added later stays public. `e2e/auth-gate.spec.ts` asserts every manifest asset returns 200 unauthenticated |
 | 67 | A contributor's `.env` could be baked into the image | `.dockerignore` had no `.env` rule, `COPY . .` sent it into the build, and Next loads `.env` during `next build` | `.dockerignore` excludes `.env*` but keeps `.env.example`; verified with a canary value present in a real `.env` |
 
+| 68 | Auto-deploy silently stopped while reporting success | The GitHub webhook answers 200 and matches applications by repository URL form; after the app's source moved from `git@github.com:…` to `https://github.com/…`, the hook still answered 200 but matched nothing, so five commits sat undeployed | Deployment moved into CI: a `deploy` job with `needs: verify` calls `POST /api/v1/deploy?uuid=<app-uuid>` using repository secrets. UUID addressing cannot break when the git URL form changes, and a failing gate now blocks the deploy instead of racing it |
+
 ## Known open (not fixed, not covered by a gate)
 
 Each item is reproducible and none is a regression of the fixes above. They are

@@ -115,7 +115,12 @@ on first boot and are forward-only.
   `https://<coolify-host>/webhooks/source/github/events/manual` (the target must
   be the *manual* webhook route; `/api/v1/webhooks/deploy/...` does not exist and
   returns 404).
-- Deploys are triggered with `POST /api/v1/deploy?uuid=<app-uuid>`.
+- Deploys are triggered by CI, not by a provider webhook: the `deploy` job in
+  `.github/workflows/ci.yml` runs only after `verify` passes on `main` and calls
+  `POST /api/v1/deploy?uuid=<app-uuid>` with `COOLIFY_TOKEN` /
+  `COOLIFY_APP_UUID` repository secrets. A URL-matching webhook was removed
+  because it silently stopped deploying when the app's git URL changed form
+  (ssh → https) while still answering 200.
 - `health_check_path` is `/login` — it is unauthenticated, so it distinguishes
   "app is up" from "proxy can reach it" without depending on data.
 - The Docker build publishes the image only locally; nothing is pushed to a
