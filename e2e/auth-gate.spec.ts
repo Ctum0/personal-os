@@ -94,6 +94,37 @@ test.describe('sign-in gate', () => {
     expect(new URL(page.url()).pathname).toBe('/login');
   });
 
+  test('signing out ends the session, not just the page', async ({ page }) => {
+    await page.goto('/login');
+    await signIn(page);
+    await page.waitForURL(url => !url.pathname.startsWith('/login'), { timeout: 20_000 });
+
+    // The API works while signed in.
+    expect((await page.request.get('/api/tasks')).status()).toBe(200);
+
+    await page.getByRole('button', { name: /account menu/i }).click();
+    await page.getByRole('menuitem', { name: /sign out/i }).click();
+
+    await page.waitForURL(url => url.pathname.startsWith('/login'), { timeout: 20_000 });
+    // The cookie must be gone server-side: a reload of a deep link cannot restore it.
+    expect((await page.request.get('/api/tasks')).status()).toBe(401);
+    await page.goto('/finance/transactions');
+    await page.waitForURL(url => url.pathname.startsWith('/login'), { timeout: 20_000 });
+  });
+
+  test('the account menu is keyboard reachable and Escape closes it', async ({ page }) => {
+    await page.goto('/login');
+    await signIn(page);
+    await page.waitForURL(url => !url.pathname.startsWith('/login'), { timeout: 20_000 });
+
+    const trigger = page.getByRole('button', { name: /account menu/i });
+    await trigger.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('menu', { name: 'Account' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menu', { name: 'Account' })).toBeHidden();
+  });
+
   test('a deep link survives the sign-in round trip', async ({ page }) => {
     // The API 401 sends the operator to /login?next=…; after signing in they must
     // land on the page they asked for, not on Today.

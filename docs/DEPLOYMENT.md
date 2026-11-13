@@ -160,19 +160,22 @@ on first boot and are forward-only.
 
 ## Coolify notes
 
-- The application builds from this repository on a branch using a deploy-key
-  source, and auto-deploys on push via a GitHub webhook pointed at
-  `https://<coolify-host>/webhooks/source/github/events/manual` (the target must
-  be the *manual* webhook route; `/api/v1/webhooks/deploy/...` does not exist and
-  returns 404).
+- The application builds from this public repository over HTTPS; no deploy key is
+  required or held.
 - Deploys are triggered by CI, not by a provider webhook: the `deploy` job in
   `.github/workflows/ci.yml` runs only after `verify` passes on `main` and calls
   `POST /api/v1/deploy?uuid=<app-uuid>` with `COOLIFY_TOKEN` /
   `COOLIFY_APP_UUID` repository secrets. A URL-matching webhook was removed
   because it silently stopped deploying when the app's git URL changed form
   (ssh → https) while still answering 200.
-- `health_check_path` is `/login` — it is unauthenticated, so it distinguishes
-  "app is up" from "proxy can reach it" without depending on data.
+- The health check probes `/api/auth/session`, which returns 200 whenever the app
+  is up (open mode or configured) and 503 when the credential set is unusable —
+  so "app is down" and "app is misconfigured" stay distinguishable. Do not point
+  it at `/login`: in open mode that route redirects, so a healthy container would
+  report unhealthy.
+- SQLite has a single writer. Run exactly one replica, mount `/app/data` as a
+  named volume, and let Coolify replace the container rather than scale it —
+  two containers against one database file is corruption, not redundancy.
 - The Docker build publishes the image only locally; nothing is pushed to a
   registry, so no registry credential is stored in the deployment.
 

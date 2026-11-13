@@ -6,6 +6,7 @@ import { CommandPaletteModal } from '@/components/modals/CommandPaletteModal';
 import { ExplainerDrawer } from '@/components/modals/ExplainerDrawer';
 import { AiAssistantDrawer } from '@/components/modals/AiAssistantDrawer';
 import { HydrationMarker } from '@/components/layout/HydrationMarker';
+import { readAuthConfig } from '@/lib/auth/credentials';
 
 /**
  * Authenticated application shell.
@@ -16,6 +17,11 @@ import { HydrationMarker } from '@/components/layout/HydrationMarker';
  * so the sign-in page has no navbar or sidebar to browse from.
  */
 export default function AppLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  // Read on the server so the account menu can name the operator without an
+  // extra round trip; the config is env-only and contains no secret material
+  // that is exposed here (just the account name).
+  const operatorName = readAuthConfig()?.username;
+
   return (
     <WorkspaceProvider>
       <HydrationMarker />
@@ -27,7 +33,7 @@ export default function AppLayout({ children }: Readonly<{ children: React.React
         Skip to main content
       </a>
       <div className="min-h-screen flex flex-col">
-        <TopNavbar />
+        <TopNavbar operatorName={operatorName} />
         <div className="flex flex-1">
           <AppSidebar />
           <main

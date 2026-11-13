@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useWorkspace } from './WorkspaceContext';
 import { apiFetch } from '@/lib/api/client';
 import { Activity, BookOpen, Briefcase, ChevronDown, Compass, Folder, Landmark, Menu, Plus, Search, Terminal, User, Wifi, WifiOff } from 'lucide-react';
+import { OperatorMenu } from './OperatorMenu';
 
 interface SpaceRow {
   id: string;
@@ -55,7 +56,7 @@ function spaceIcon(icon: string) {
   }
 }
 
-export function TopNavbar() {
+export function TopNavbar({ operatorName }: { operatorName?: string } = {}) {
   const {
     workspace,
     switchWorkspace,
@@ -329,14 +330,7 @@ export function TopNavbar() {
           {offlinePendingCount > 0 && <span className="text-[10px] tabular-nums">{offlinePendingCount}</span>}
         </div>
 
-        <Link
-          href="/overview/settings"
-          className="hidden sm:flex w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 items-center justify-center text-[10px] font-semibold text-zinc-300 hover:border-zinc-500 transition-colors"
-          aria-label="Operator settings — AM"
-          title="Operator settings"
-        >
-          <span aria-hidden="true">AM</span>
-        </Link>
+        <OperatorMenu username={operatorName} />
       </div>
     </header>
   );
