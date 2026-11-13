@@ -56,6 +56,25 @@ Visible text is the scope chip (e.g. "productivity"); the accessible name is a s
 
 ---
 
+## A11Y-010 — Two defects axe's WCAG tag set does not check
+
+**Severity: P2** · Discovered by: Lighthouse, production build · **Status: RESOLVED**
+
+Both were invisible to the project's axe sweep and to this audit's axe runs,
+because they are audits Lighthouse performs outside the WCAG tag bundles.
+
+| Audit | Defect | Fix |
+| --- | --- | --- |
+| `button-name` | The Productivity workspace toggle's only text was `hidden sm:inline`, so below `sm` it had **no accessible name at all** — a sighted mobile user sees a compass icon and a screen reader hears "button" | `aria-label="Productivity"` |
+| `heading-order` | `/` jumped `h1 → h3` at the "one big thing" card before any `h2` | Promoted to `h2`; the page now reads `H1 → H2 → H2…` |
+
+Verified at 412×900: zero unnamed buttons, valid heading sequence. Lighthouse
+accessibility on `/`: **93 → 100**.
+
+**Why the existing gate missed it:** `e2e/axe-sweep.spec.ts` runs axe with the
+`wcag2a..wcag22aa` tag set, and neither rule lives there. The lesson is the same
+as A11Y-009 — a gate only covers the checks it names.
+
 ## Manual checks that passed
 
 | Check | Result |

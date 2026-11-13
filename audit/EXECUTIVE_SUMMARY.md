@@ -22,13 +22,13 @@ What is broken is narrower and more interesting. The palette advertised ten comm
 | Interactive controls measured | **367 buttons, 37 inputs, 4 tables** |
 | Interaction tests written and run | **18** (11 behavioural + 7 accessibility) |
 | Viewport measurements | **64** (8 viewports × 8 routes) |
-| Findings recorded | **14** |
+| Findings recorded | **15** |
 | Confirmed defects | **3** (`BUG-001..003`) |
 | Usability / UI concerns | **7** (`UX-001..003`, `UI-001..004`) |
-| Accessibility findings | **2** (`A11Y-008`, containing 3 violations; `A11Y-009`) |
-| Performance findings | **2**, neither a measured defect |
-| *Category totals* | *3 + 7 + 2 + 2 = **14*** |
-| Resolved during the audit | **4** (`BUG-001`, `BUG-002`, `A11Y-008`, `A11Y-009`) |
+| Accessibility findings | **3** (`A11Y-008` with 3 violations, `A11Y-009`, `A11Y-010`) |
+| Performance findings | **2**; Lighthouse on the production build scores 97/100/100/100 |
+| *Category totals* | *3 + 7 + 3 + 2 = **15*** |
+| Resolved during the audit | **5** (`BUG-001`, `BUG-002`, `A11Y-008`, `A11Y-009`, `A11Y-010`) |
 | Fixed with a proven regression gate | **3** — each gate was verified by reverting its fix and watching it fail |
 | Still open | **9** |
 | Informational (no action) | **1** (`PERF-002`) |

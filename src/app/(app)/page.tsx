@@ -370,9 +370,11 @@ export default function ProductivityExecutionDashboard() {
                   <Circle className="w-4 h-4 text-zinc-500 hover:text-zinc-300" />
                 </button>
                 <div className="min-w-0 flex-1">
-                  <h3 className="text-sm font-medium text-zinc-100 leading-snug">
+                  {/* h2, not h3: this list sits directly under the page h1, and
+                      an h1 -> h3 jump fails Lighthouse's heading-order audit. */}
+                  <h2 className="text-sm font-medium text-zinc-100 leading-snug">
                     {oneBigThing.title}
-                  </h3>
+                  </h2>
                   <div className="flex items-center gap-3 mt-1.5 text-[11px] text-zinc-500 font-mono">
                     {oneBigThing.due_date && <span>Due Today</span>}
                     {(oneBigThing.estimated_duration ?? 0) > 0 && (

@@ -189,6 +189,11 @@ export function TopNavbar({ operatorName }: { operatorName?: string } = {}) {
             type="button"
             onClick={() => switchWorkspace('productivity')}
             aria-pressed={workspace !== 'finance'}
+            // The visible label is hidden below `sm`, which left this control with
+            // no accessible name at narrow widths — the one case Lighthouse's
+            // button-name audit caught. The visible text still has to appear in
+            // the name (WCAG 2.5.3), so it leads.
+            aria-label="Productivity"
             className={`flex items-center gap-1.5 px-2 py-1 rounded transition-colors ${
               workspace !== 'finance' ? 'bg-zinc-800 text-zinc-100 shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
             }`}

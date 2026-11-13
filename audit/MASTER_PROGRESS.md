@@ -21,16 +21,16 @@ Last updated: 2026-11-13 · Audit build: `6dbb094`
 | Dialogs audited with axe while open | 2 (Quick Add, command palette) | `axe-command-palette.json` |
 | Static routes audited with axe | 10, plus the 28-route seeded sweep in CI | `axe-static-routes.json` |
 | Viewports tested | **8 of 8** (64 measurements = 8 × 8 routes) | `responsive.json` |
-| Findings recorded | **14** | the four findings files |
+| Findings recorded | **15** | the four findings files |
 | — confirmed defects | 3 | `FUNCTIONAL_BUGS.md` |
 | — usability / UI concerns | 7 | `UI_UX_FINDINGS.md` |
-| — accessibility findings | 2 | `ACCESSIBILITY_FINDINGS.md` |
+| — accessibility findings | 3 | `ACCESSIBILITY_FINDINGS.md` |
 | — performance entries | 2 (one informational) | `PERFORMANCE_FINDINGS.md` |
-| Resolved during the audit | **4** (`BUG-001`, `BUG-002`, `A11Y-008`, `A11Y-009`) | with mutation-proven gates |
+| Resolved during the audit | **5** (`BUG-001`, `BUG-002`, `A11Y-008`, `A11Y-009`, `A11Y-010`) | with mutation-proven gates |
 | Still open | **9** | `EXECUTIVE_SUMMARY.md` |
 | Informational (not an action) | **1** (`PERF-002`, code splitting healthy) | `PERFORMANCE_FINDINGS.md` |
 
-Reconciliation: 4 resolved + 9 open + 1 informational = **14**.
+Reconciliation: 5 resolved + 9 open + 1 informational = **15**.
 
 ## Page completion
 

@@ -52,11 +52,11 @@ check('no document-level horizontal overflow anywhere',
 // 3. Headline counts must agree across documents.
 const summary = docs['EXECUTIVE_SUMMARY.md'];
 const master = docs['MASTER_PROGRESS.md'];
-for (const [label, pattern] of [['resolved 4', /\| \*\*4\*\*/], ['findings 14', /\| \*\*14\*\*/], ['open 9', /\| \*\*9\*\*/]]) {
+for (const [label, pattern] of [['resolved 5', /\| \*\*5\*\*/], ['findings 15', /\| \*\*15\*\*/], ['open 9', /\| \*\*9\*\*/]]) {
   check(`summary states ${label}`, pattern.test(summary));
 }
 check('master agrees with the summary',
-  [/\| \*\*4\*\*/, /\| \*\*14\*\*/, /\| \*\*9\*\*/].every(p => p.test(master)));
+  [/\| \*\*5\*\*/, /\| \*\*15\*\*/, /\| \*\*9\*\*/].every(p => p.test(master)));
 
 // Bug 3: the summary's table deliberately carries one informational row. The
 // framing is 4 resolved + 9 open + 1 informational = 14, so an informational
@@ -79,7 +79,7 @@ const register = new Set();
 for (const [file, pattern] of sources) {
   for (const match of docs[file].matchAll(pattern)) register.add(match[1]);
 }
-const resolved = new Set(['BUG-001', 'BUG-002', 'A11Y-008', 'A11Y-009']);
+const resolved = new Set(['BUG-001', 'BUG-002', 'A11Y-008', 'A11Y-009', 'A11Y-010']);
 const unaccounted = [...register].filter(id => !openIds.has(id) && !resolved.has(id));
 check('every finding is open or resolved', unaccounted.length === 0, unaccounted.join(', '));
 
