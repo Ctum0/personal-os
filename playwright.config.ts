@@ -18,12 +18,12 @@ import path from 'node:path';
  */
 const OPEN_PORT = Number(process.env.E2E_PORT || 3457);
 const PIN_PORT = Number(process.env.E2E_PIN_PORT || 3458);
-const E2E_USERNAME = process.env.E2E_USERNAME || 'ctum';
-const E2E_PASSWORD = process.env.E2E_PASSWORD || '<redacted-password>';
+const E2E_USERNAME = process.env.E2E_USERNAME || 'e2e-operator';
+const E2E_PASSWORD = process.env.E2E_PASSWORD || 'e2e-fixture-password';
 // Deterministic test-only digest for E2E_PASSWORD — never used by a deployment.
 const E2E_PASSWORD_SALT = process.env.E2E_PASSWORD_SALT || 'e2e-salt-fixed-value';
 const E2E_PASSWORD_HASH =
-  process.env.E2E_PASSWORD_HASH || '5d9f8e9c1f0e408a3d9308c0f66e96b89b31138fcbfb19ea6c1edf7e065e5712';
+  process.env.E2E_PASSWORD_HASH || 'dbc9f1b53b22dca0d62d2dfabc2ae442cd6c5996cd5a9e7a38c199136d7c6167';
 const E2E_SESSION_SECRET = process.env.E2E_SESSION_SECRET || 'e2e-session-secret-fixed-value';
 const IS_CI = Boolean(process.env.CI);
 

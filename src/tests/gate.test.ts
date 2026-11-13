@@ -26,11 +26,13 @@ import { POST as sessionPost, DELETE as sessionDelete } from '@/app/api/auth/ses
  * the real endpoint rather than a mock.
  */
 
-const USERNAME = 'ctum';
-const PASSWORD = '<redacted-password>';
-const SALT = '<redacted-salt>';
+// Fixtures only. A real deployment's salt/hash never appear in this repository:
+// committing them would hand an attacker an offline target.
+const USERNAME = 'operator';
+const PASSWORD = 'test-only-password-not-a-credential';
+const SALT = '6f2772fcab134dc3a9535628805f561c';
 const ITERATIONS = 210_000;
-const HASH = '<redacted-digest>';
+const HASH = '12a9efa383ec03afcd77f1a4c01b6136884aa4188ab9cb73057669d4d5de92a6';
 const SECRET = 'test-session-secret-0123456789abcdef';
 
 const ENV_KEYS = [
@@ -83,7 +85,7 @@ describe('password derivation', () => {
   it('rejects a different password and a different username', async () => {
     const config = readAuthConfig({ ...process.env, PERSONAL_OS_USERNAME: USERNAME, PERSONAL_OS_PASSWORD_SALT: SALT, PERSONAL_OS_PASSWORD_HASH: HASH, PERSONAL_OS_SESSION_SECRET: SECRET })!;
     expect(await verifyCredentials(config, USERNAME, PASSWORD)).toBe(true);
-    expect(await verifyCredentials(config, USERNAME, 'VillAiN@2002')).toBe(false);
+    expect(await verifyCredentials(config, USERNAME, 'test-only-password-not-a-credentiaL')).toBe(false);
     expect(await verifyCredentials(config, 'someone-else', PASSWORD)).toBe(false);
     expect(await verifyCredentials(config, USERNAME, '')).toBe(false);
   });

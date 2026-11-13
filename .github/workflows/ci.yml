@@ -61,10 +61,10 @@ jobs:
           # Credentials for the `authed` project. The digest is PBKDF2 of the
           # fixture password over the fixture salt — test-only values, never a
           # deployment credential.
-          E2E_USERNAME: ctum
-          E2E_PASSWORD: "<redacted-password>"
+          E2E_USERNAME: e2e-operator
+          E2E_PASSWORD: e2e-fixture-password
           E2E_PASSWORD_SALT: e2e-salt-fixed-value
-          E2E_PASSWORD_HASH: 5d9f8e9c1f0e408a3d9308c0f66e96b89b31138fcbfb19ea6c1edf7e065e5712
+          E2E_PASSWORD_HASH: dbc9f1b53b22dca0d62d2dfabc2ae442cd6c5996cd5a9e7a38c199136d7c6167
           E2E_SESSION_SECRET: e2e-session-secret-fixed-value
           E2E_DB_PATH: ${{ env.SCRATCH }}/e2e/profile.db
           E2E_PIN_DB_PATH: ${{ env.SCRATCH }}/e2e/profile-pin.db

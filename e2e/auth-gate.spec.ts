@@ -12,8 +12,8 @@ import { test, expect } from '@playwright/test';
  * credentials configured, so these specs always run; a skip would report
  * authentication coverage that does not exist.
  */
-const USERNAME = process.env.E2E_USERNAME || 'ctum';
-const PASSWORD = process.env.E2E_PASSWORD || '<redacted-password>';
+const USERNAME = process.env.E2E_USERNAME || 'e2e-operator';
+const PASSWORD = process.env.E2E_PASSWORD || 'e2e-fixture-password';
 
 async function signIn(page: import('@playwright/test').Page) {
   await page.getByLabel('Username').fill(USERNAME);
