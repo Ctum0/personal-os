@@ -3,8 +3,8 @@
 Baseline when this record started: 47 SQLite tables, 30 tests, `tsc` clean.
 Current state: **53 tables, schema v7, 27 unit/route suites (247 tests), 103
 Playwright specs across two projects (`open` + `authed`), zero lint problems,
-`tsc` clean, zero axe violations with seeded overflow data, deployed and verified
-at https://os.ctum.org.**
+`tsc` clean, zero axe violations with seeded overflow data, and verified end to
+end as a deployed container.**
 
 This file is the durable record of *what was wrong and how it is now
 prevented*. Every row names a verification that fails if the defect returns.
