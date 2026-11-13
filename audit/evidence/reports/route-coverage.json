@@ -1,0 +1,152 @@
+[
+ {
+  "n": 1,
+  "route": "`/`",
+  "status": "**Complete**"
+ },
+ {
+  "n": 2,
+  "route": "`/productivity/today`",
+  "status": "Partially tested"
+ },
+ {
+  "n": 3,
+  "route": "`/productivity/plan`",
+  "status": "Partially tested"
+ },
+ {
+  "n": 4,
+  "route": "`/productivity/tasks`",
+  "status": "**Complete**"
+ },
+ {
+  "n": 5,
+  "route": "`/productivity/projects`",
+  "status": "Partially tested"
+ },
+ {
+  "n": 6,
+  "route": "`/productivity/inbox`",
+  "status": "Partially tested"
+ },
+ {
+  "n": 7,
+  "route": "`/productivity/calendar`",
+  "status": "Partially tested (responsive defect confirmed)"
+ },
+ {
+  "n": 8,
+  "route": "`/productivity/habits`",
+  "status": "Partially tested"
+ },
+ {
+  "n": 9,
+  "route": "`/productivity/goals`",
+  "status": "Partially tested"
+ },
+ {
+  "n": 10,
+  "route": "`/productivity/focus`",
+  "status": "Partially tested"
+ },
+ {
+  "n": 11,
+  "route": "`/productivity/analytics`",
+  "status": "Partially tested"
+ },
+ {
+  "n": 12,
+  "route": "`/productivity/insights`",
+  "status": "**Complete** (redirect verified)"
+ },
+ {
+  "n": 13,
+  "route": "`/productivity/weekly-review`",
+  "status": "**Interaction verified**"
+ },
+ {
+  "n": 14,
+  "route": "`/finance`",
+  "status": "Partially tested"
+ },
+ {
+  "n": 15,
+  "route": "`/finance/accounts`",
+  "status": "Partially tested"
+ },
+ {
+  "n": 16,
+  "route": "`/finance/transactions`",
+  "status": "**Interaction verified**"
+ },
+ {
+  "n": 17,
+  "route": "`/finance/budgets`",
+  "status": "Partially tested"
+ },
+ {
+  "n": 18,
+  "route": "`/finance/recurring`",
+  "status": "Partially tested"
+ },
+ {
+  "n": 19,
+  "route": "`/finance/savings`",
+  "status": "Partially tested"
+ },
+ {
+  "n": 20,
+  "route": "`/finance/debts`",
+  "status": "Partially tested"
+ },
+ {
+  "n": 21,
+  "route": "`/finance/net-worth`",
+  "status": "Partially tested"
+ },
+ {
+  "n": 22,
+  "route": "`/finance/import`",
+  "status": "**Interaction verified**"
+ },
+ {
+  "n": 23,
+  "route": "`/finance/reports`",
+  "status": "Partially tested"
+ },
+ {
+  "n": 24,
+  "route": "`/overview`",
+  "status": "Partially tested"
+ },
+ {
+  "n": 25,
+  "route": "`/overview/metrics`",
+  "status": "Partially tested"
+ },
+ {
+  "n": 26,
+  "route": "`/overview/settings`",
+  "status": "**Complete** (save semantics verified by the project suite)"
+ },
+ {
+  "n": 27,
+  "route": "`/overview/ai-governance`",
+  "status": "**Interaction verified** (chat path needs a provider)"
+ },
+ {
+  "n": 28,
+  "route": "`/overview/backup`",
+  "status": "**Export verified**; restore untested"
+ },
+ {
+  "n": 29,
+  "route": "`/overview/formulas`",
+  "status": "Partially tested"
+ },
+ {
+  "n": 30,
+  "route": "`/login`",
+  "status": "**Complete** (auth suite + KB checks)"
+ }
+]

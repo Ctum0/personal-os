@@ -17,8 +17,11 @@ What is broken is narrower and more interesting. The palette advertised ten comm
 | --- | --- |
 | Routes discovered | **30** (29 application routes + `/login`) |
 | Routes loaded in a real browser | **30/30** |
-| Routes fully audited (UI + interaction) | **30** (controls swept on all; behaviour verified where a workflow applies) |
-| Routes with controls swept but no record-level assertions | — (sweep covers all 26; see INTERACTION_TESTS) |
+| Routes **complete** (UI + interaction + named workflow) | **5** |
+| Routes **interaction-verified** by a workflow | **4** |
+| Routes **export-verified** | **1** |
+| Routes **partially tested** (controls swept, no workflow) | **20** |
+| Total routes discovered | **30** |
 | Interactive controls measured | **367 buttons, 37 inputs, 4 tables** |
 | Interaction tests written and run | **18** (11 behavioural + 7 accessibility) |
 | Viewport measurements | **64** (8 viewports × 8 routes) |

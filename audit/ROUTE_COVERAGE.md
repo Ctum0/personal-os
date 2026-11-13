@@ -41,22 +41,35 @@
 ## Button-sweep coverage
 
 Every route in rows 2–29 was additionally swept by clicking each enabled visible
-button (reloading between clicks) — 251 clicks, zero console errors, zero dead
-controls. That sweep verifies "the control responds", not "the feature is
-complete": it does not create real records or assert resulting data. Rows whose
-*behavior* was established only by the sweep are therefore still "partially
-tested", but their controls are no longer unexercised.
+button, reloading between clicks: **251 clicks, zero console errors**. That sweep
+verifies "the control responds", not "the feature is complete" — it does not create
+real records or assert resulting data.
+
+Its detector keys only on URL change or `role="dialog"`, so 86 of those clicks
+produced neither. Those break down as 23 workspace switches, 8 Next.js dev-overlay
+buttons, and 55 others; 6 of the 55 were re-checked by hand and all worked. The
+remaining 49 are **unclassified**, not proven dead or proven alive. Rows whose
+behaviour rests only on the sweep are therefore still "partially tested".
 
 ## Totals
 
-- Routes discovered: **30**
-- Loaded in a real browser: **30/30**
-- Axe-scanned: **11** (10 static + palette; Quick Add scanned separately as a dialog)
-- Interaction-tested: **5** (`/`, `/productivity/tasks`, `/overview/settings`, `/login`, plus global dialogs)
-- In the responsive matrix: **8**
-- Fully complete: **4**
-- Partially tested: **26**
-- Blocked: **0**
-- Not tested: **0**
+Derived by counting the Status column above. `audit/verify-consistency.mjs` reads
+`evidence/reports/route-coverage.json` and fails if these figures stop matching the
+table, so they cannot drift by hand-editing.
 
-**No route is claimed as fully audited without interaction evidence.** The 26 partially-tested routes now have their controls swept (251 clicks, zero console errors; no dead control in the 6 re-checked individually — see `INTERACTION_TESTS.md`), so their controls are exercised; their *record-level* behaviour is verified only where a named workflow covers it. Deductions about a functionality being correct still require a workflow, not a click.
+| Bucket | Count | Meaning |
+| --- | --- | --- |
+| **Complete** | **5** | UI + interaction verified with a named workflow: `/`, `/productivity/tasks`, `/productivity/insights`, `/overview/settings`, `/login` |
+| **Interaction verified** | **4** | A named workflow drove the primary capability: `/productivity/weekly-review` (WF-H), `/finance/transactions` (WF-G), `/finance/import` (WF-F), `/overview/ai-governance` (WF-J) |
+| **Export verified** | **1** | `/overview/backup` — export verified (WF-I); restore remains untested |
+| **Partially tested** | **20** | Controls swept, rendered, no console errors; record-level behaviour not asserted |
+| **Total** | **30** | Every discovered route |
+
+No route is marked complete without interaction evidence. The 20 partials are not
+failures — they are routes whose controls respond correctly but whose *data*
+behaviour no workflow has asserted yet. Rule 10 applies: this audit is not 100%,
+and says so.
+
+Supplementary figures: axe-scanned **11** (10 static routes + the command palette;
+Quick Add scanned separately as a dialog) · in the responsive matrix **8** ·
+blocked **0** · not tested **0**.

@@ -43,8 +43,11 @@ A page counts as complete only when its UI, interactions and applicable function
 
 | Status | Count | Routes |
 | --- | --- | --- |
-| Fully audited (UI + interaction) | 4 | `/`, `/productivity/tasks`, `/overview/settings`, `/productivity/insights` |
-| Controls swept (251 clicks, 0 console errors), behaviour verified where a workflow applies | 26 | all remaining app routes, including `/login`. Control-response verified; record-level behaviour only where a named workflow covers it |
+| **Complete** (UI + interaction + named workflow) | 5 | `/`, `/productivity/tasks`, `/productivity/insights`, `/overview/settings`, `/login` |
+| **Interaction verified** by a named workflow | 4 | `/productivity/weekly-review` (WF-H), `/finance/transactions` (WF-G), `/finance/import` (WF-F), `/overview/ai-governance` (WF-J) |
+| **Export verified** | 1 | `/overview/backup` (WF-I); restore untested |
+| **Partially tested** (controls swept, no workflow) | 20 | remaining routes: rendered, controls respond, no console errors |
+| **Total** | 30 | every discovered route |
 | Not audited | 0 | — |
 | Blocked | 0 | — |
 
