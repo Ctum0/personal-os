@@ -23,15 +23,19 @@ import { readCookie } from "@/lib/api/gate";
 /** Reachable without a session: the sign-in page and its own endpoint. */
 const PUBLIC_PAGES = new Set(["/login"]);
 
+/** Extensions served from `public/` that must never require a session. */
+const ASSET_EXTENSION = /\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|woff2?|ttf|otf|txt|xml|json|webmanifest)$/i;
+
+/**
+ * True for static files that a signed-out browser legitimately requests.
+ *
+ * This is an extension check rather than a list of filenames on purpose: the PWA
+ * manifest names `/icon-512.png`, and an enumerated list silently broke
+ * installability the first time an icon was added (it redirected to `/login`).
+ * No page route in this app ends in an asset extension, so the check is safe.
+ */
 function isStaticAsset(pathname: string): boolean {
-  return (
-    pathname.startsWith("/_next/") ||
-    pathname === "/favicon.ico" ||
-    pathname === "/manifest.json" ||
-    pathname === "/icon.svg" ||
-    pathname === "/icon.png" ||
-    pathname === "/robots.txt"
-  );
+  return pathname.startsWith("/_next/") || ASSET_EXTENSION.test(pathname);
 }
 
 export async function proxy(request: NextRequest) {

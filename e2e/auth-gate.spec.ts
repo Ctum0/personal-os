@@ -58,6 +58,15 @@ test.describe('sign-in gate', () => {
     await expect(page.getByLabel('Password')).toBeVisible();
   });
 
+  test('static assets referenced by the manifest stay public', async ({ request }) => {
+    // A signed-out browser still fetches the PWA icons; redirecting them to
+    // /login silently breaks installability.
+    for (const asset of ['/icon.png', '/icon-512.png', '/icon.svg', '/manifest.json']) {
+      const res = await request.get(asset, { maxRedirects: 0 });
+      expect(res.status(), `${asset} must not be gated`).toBe(200);
+    }
+  });
+
   test('the sign-in form reaches the dashboard', async ({ page }) => {
     await page.goto('/login');
     await expect(page.getByLabel('Username')).toBeVisible();

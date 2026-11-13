@@ -104,6 +104,9 @@ recorded here with the guard that now prevents each one.
 | 64 | CI never ran | `pnpm/action-setup` declared `version: 12` while package.json declared `pnpm@12.11.2`; the action refuses to choose and fails before any step | The workflow specifies no version and lets the action read `packageManager`. First green run: 43443459568 |
 | 65 | Real ledger snapshots and credentials were in repository history | `data/backups/` (20 SQLite snapshots with operator data), `.agents/`, and a committed PBKDF2 digest | History rewritten: no `.db`, no `.agents/`, no credential value in any reachable commit; verified by scanning every commit before the repository was made public |
 
+| 66 | PWA icons redirected to the sign-in page | The gate's static-asset check enumerated filenames (`/icon.svg`, `/icon.png`), and the manifest also ships `/icon-512.png` — signed out, that request was redirected to `/login`, silently breaking installability | The check is now an asset-extension test, so any icon added later stays public. `e2e/auth-gate.spec.ts` asserts every manifest asset returns 200 unauthenticated |
+| 67 | A contributor's `.env` could be baked into the image | `.dockerignore` had no `.env` rule, `COPY . .` sent it into the build, and Next loads `.env` during `next build` | `.dockerignore` excludes `.env*` but keeps `.env.example`; verified with a canary value present in a real `.env` |
+
 ## Known open (not fixed, not covered by a gate)
 
 Each item is reproducible and none is a regression of the fixes above. They are
