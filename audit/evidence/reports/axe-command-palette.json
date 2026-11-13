@@ -1,0 +1,37 @@
+[
+ {
+  "id": "color-contrast",
+  "impact": "serious",
+  "help": "Elements must meet minimum color contrast ratio thresholds",
+  "nodes": [
+   {
+    "target": [
+     "#command-palette-row-0 > .gap-2\\.5.min-w-0.flex > .min-w-0 > .block.text-\\[11px\\].truncate"
+    ],
+    "html": "<span class=\"block text-[11px] text-zinc-500 truncate\">Interview-driven scheduling with a visual timeline</span>",
+    "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.49 (foreground color: #8b8d94, background color: #27272a, font size: 8.3pt (11px), font weight: normal). Expected contrast rati"
+   },
+   {
+    "target": [
+     "span:nth-child(3) > .px-1"
+    ],
+    "html": "<kbd class=\"px-1 py-0.5 bg-zinc-800 rounded border border-zinc-700\">ESC</kbd>",
+    "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.49 (foreground color: #8b8d94, background color: #27272a, font size: 8.3pt (11px), font weight: normal). Expected contrast rati"
+   }
+  ]
+ },
+ {
+  "id": "label-content-name-mismatch",
+  "impact": "serious",
+  "help": "Elements must have their visible text as part of their accessible name",
+  "nodes": [
+   {
+    "target": [
+     ".py-0\\.5.border-zinc-700.px-2"
+    ],
+    "html": "<button type=\"button\" aria-label=\"Search scope: productivity. Activate to switch.\" class=\"px-2 py-0.5 rounded text-[10px] font-medium border shrink-0 transition",
+    "summary": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+   }
+  ]
+ }
+]

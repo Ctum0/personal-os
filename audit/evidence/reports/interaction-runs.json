@@ -1,0 +1,107 @@
+[
+ {
+  "id": "INT-001",
+  "name": "Quick capture: empty Enter does nothing",
+  "expected": "input stays empty, no crash",
+  "actual": "value=\"\"",
+  "ok": true
+ },
+ {
+  "id": "INT-002",
+  "name": "Quick capture creates a visible task",
+  "expected": "task appears",
+  "actual": "1 matches",
+  "ok": true
+ },
+ {
+  "id": "INT-003",
+  "name": "Rapid Enter x3 does not duplicate a task",
+  "expected": "1 occurrence",
+  "actual": "1 occurrences",
+  "ok": true
+ },
+ {
+  "id": "INT-004",
+  "name": "Task search narrows the list",
+  "expected": "alpha visible, others hidden",
+  "actual": "alpha=1 other=0",
+  "ok": true
+ },
+ {
+  "id": "INT-005",
+  "name": "Search with no matches shows an explanation",
+  "expected": "empty state text",
+  "actual": "empty state present",
+  "ok": true
+ },
+ {
+  "id": "INT-006",
+  "name": "Ctrl+K opens command palette",
+  "expected": "dialog visible",
+  "actual": "true",
+  "ok": true
+ },
+ {
+  "id": "INT-007",
+  "name": "Palette search yields options and keeps one selected",
+  "expected": ">0 options, first selected",
+  "actual": "13 options, selected=null",
+  "ok": false
+ },
+ {
+  "id": "INT-008",
+  "name": "Escape closes palette",
+  "expected": "closed",
+  "actual": "true",
+  "ok": true
+ },
+ {
+  "id": "INT-009",
+  "name": "Ctrl+N opens Quick Add dialog",
+  "expected": "dialog visible",
+  "actual": "true",
+  "ok": true
+ },
+ {
+  "id": "INT-010",
+  "name": "Quick Add fields are labelled",
+  "expected": "every control labelled",
+  "actual": "4 labels: Title / Summary, Due / Target Date, Priority, Notes / Context",
+  "ok": true
+ },
+ {
+  "id": "RESP-1920",
+  "name": "No horizontal overflow at 1920",
+  "expected": "scrollWidth <= clientWidth",
+  "actual": "1920 vs 1920",
+  "ok": true
+ },
+ {
+  "id": "RESP-1366",
+  "name": "No horizontal overflow at 1366",
+  "expected": "scrollWidth <= clientWidth",
+  "actual": "1366 vs 1366",
+  "ok": true
+ },
+ {
+  "id": "RESP-1024",
+  "name": "No horizontal overflow at 1024",
+  "expected": "scrollWidth <= clientWidth",
+  "actual": "1024 vs 1024",
+  "ok": true
+ },
+ {
+  "id": "RESP-768",
+  "name": "No horizontal overflow at 768",
+  "expected": "scrollWidth <= clientWidth",
+  "actual": "768 vs 768",
+  "ok": true
+ },
+ {
+  "id": "RESP-390",
+  "name": "No horizontal overflow at 390",
+  "expected": "scrollWidth <= clientWidth",
+  "actual": "390 vs 390",
+  "ok": true
+ }
+]

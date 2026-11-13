@@ -1,0 +1,737 @@
+[
+ {
+  "viewport": "1920x1080",
+  "route": "/",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Primary Commitment (On",
+   "SPAN[9px] urgent",
+   "SPAN[10px] urgent",
+   "SPAN[10px] 60m"
+  ]
+ },
+ {
+  "viewport": "1920x1080",
+  "route": "/productivity/tasks",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Personal OS System Imp",
+   "SPAN[10px] urgent",
+   "SPAN[10px] Personal OS System Imp",
+   "SPAN[10px] high"
+  ]
+ },
+ {
+  "viewport": "1920x1080",
+  "route": "/productivity/calendar",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "DIV[10px] 07:00",
+   "DIV[10px] 08:00",
+   "DIV[10px] 09:00",
+   "DIV[10px] 10:00"
+  ]
+ },
+ {
+  "viewport": "1920x1080",
+  "route": "/finance/transactions",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "TH[10px] Date",
+   "TH[10px] Payee & Description",
+   "TH[10px] Account Movement",
+   "TH[10px] Category"
+  ]
+ },
+ {
+  "viewport": "1920x1080",
+  "route": "/finance/net-worth",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Total Assets",
+   "SPAN[10px] Total Liabilities",
+   "P[10px] savings",
+   "P[10px] cash"
+  ]
+ },
+ {
+  "viewport": "1920x1080",
+  "route": "/overview/settings",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Hard ceiling for plann",
+   "SPAN[10px] Liquid funds held back",
+   "SPAN[10px] Off by default: planni"
+  ]
+ },
+ {
+  "viewport": "1920x1080",
+  "route": "/finance/import",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": []
+ },
+ {
+  "viewport": "1920x1080",
+  "route": "/productivity/weekly-review",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Done",
+   "SPAN[10px] active",
+   "P[10px] Due: 2026-11-13 • Prio",
+   "P[10px] Due: 2026-11-13 • Prio"
+  ]
+ },
+ {
+  "viewport": "1600x900",
+  "route": "/",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Primary Commitment (On",
+   "SPAN[9px] urgent",
+   "SPAN[10px] urgent",
+   "SPAN[10px] 60m"
+  ]
+ },
+ {
+  "viewport": "1600x900",
+  "route": "/productivity/tasks",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Personal OS System Imp",
+   "SPAN[10px] urgent",
+   "SPAN[10px] Personal OS System Imp",
+   "SPAN[10px] high"
+  ]
+ },
+ {
+  "viewport": "1600x900",
+  "route": "/productivity/calendar",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "DIV[10px] 07:00",
+   "DIV[10px] 08:00",
+   "DIV[10px] 09:00",
+   "DIV[10px] 10:00"
+  ]
+ },
+ {
+  "viewport": "1600x900",
+  "route": "/finance/transactions",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "TH[10px] Date",
+   "TH[10px] Payee & Description",
+   "TH[10px] Account Movement",
+   "TH[10px] Category"
+  ]
+ },
+ {
+  "viewport": "1600x900",
+  "route": "/finance/net-worth",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Total Assets",
+   "SPAN[10px] Total Liabilities",
+   "P[10px] savings",
+   "P[10px] cash"
+  ]
+ },
+ {
+  "viewport": "1600x900",
+  "route": "/overview/settings",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Hard ceiling for plann",
+   "SPAN[10px] Liquid funds held back",
+   "SPAN[10px] Off by default: planni"
+  ]
+ },
+ {
+  "viewport": "1600x900",
+  "route": "/finance/import",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": []
+ },
+ {
+  "viewport": "1600x900",
+  "route": "/productivity/weekly-review",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Done",
+   "SPAN[10px] active",
+   "P[10px] Due: 2026-11-13 • Prio",
+   "P[10px] Due: 2026-11-13 • Prio"
+  ]
+ },
+ {
+  "viewport": "1440x900",
+  "route": "/",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Primary Commitment (On",
+   "SPAN[9px] urgent",
+   "SPAN[10px] urgent",
+   "SPAN[10px] 60m"
+  ]
+ },
+ {
+  "viewport": "1440x900",
+  "route": "/productivity/tasks",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Personal OS System Imp",
+   "SPAN[10px] urgent",
+   "SPAN[10px] Personal OS System Imp",
+   "SPAN[10px] high"
+  ]
+ },
+ {
+  "viewport": "1440x900",
+  "route": "/productivity/calendar",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "DIV[10px] 07:00",
+   "DIV[10px] 08:00",
+   "DIV[10px] 09:00",
+   "DIV[10px] 10:00"
+  ]
+ },
+ {
+  "viewport": "1440x900",
+  "route": "/finance/transactions",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "TH[10px] Date",
+   "TH[10px] Payee & Description",
+   "TH[10px] Account Movement",
+   "TH[10px] Category"
+  ]
+ },
+ {
+  "viewport": "1440x900",
+  "route": "/finance/net-worth",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Total Assets",
+   "SPAN[10px] Total Liabilities",
+   "P[10px] savings",
+   "P[10px] cash"
+  ]
+ },
+ {
+  "viewport": "1440x900",
+  "route": "/overview/settings",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Hard ceiling for plann",
+   "SPAN[10px] Liquid funds held back",
+   "SPAN[10px] Off by default: planni"
+  ]
+ },
+ {
+  "viewport": "1440x900",
+  "route": "/finance/import",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": []
+ },
+ {
+  "viewport": "1440x900",
+  "route": "/productivity/weekly-review",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Done",
+   "SPAN[10px] active",
+   "P[10px] Due: 2026-11-13 • Prio",
+   "P[10px] Due: 2026-11-13 • Prio"
+  ]
+ },
+ {
+  "viewport": "1366x768",
+  "route": "/",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Primary Commitment (On",
+   "SPAN[9px] urgent",
+   "SPAN[10px] urgent",
+   "SPAN[10px] 60m"
+  ]
+ },
+ {
+  "viewport": "1366x768",
+  "route": "/productivity/tasks",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Personal OS System Imp",
+   "SPAN[10px] urgent",
+   "SPAN[10px] Personal OS System Imp",
+   "SPAN[10px] high"
+  ]
+ },
+ {
+  "viewport": "1366x768",
+  "route": "/productivity/calendar",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "DIV[10px] 07:00",
+   "DIV[10px] 08:00",
+   "DIV[10px] 09:00",
+   "DIV[10px] 10:00"
+  ]
+ },
+ {
+  "viewport": "1366x768",
+  "route": "/finance/transactions",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "TH[10px] Date",
+   "TH[10px] Payee & Description",
+   "TH[10px] Account Movement",
+   "TH[10px] Category"
+  ]
+ },
+ {
+  "viewport": "1366x768",
+  "route": "/finance/net-worth",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Total Assets",
+   "SPAN[10px] Total Liabilities",
+   "P[10px] savings",
+   "P[10px] cash"
+  ]
+ },
+ {
+  "viewport": "1366x768",
+  "route": "/overview/settings",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Hard ceiling for plann",
+   "SPAN[10px] Liquid funds held back",
+   "SPAN[10px] Off by default: planni"
+  ]
+ },
+ {
+  "viewport": "1366x768",
+  "route": "/finance/import",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": []
+ },
+ {
+  "viewport": "1366x768",
+  "route": "/productivity/weekly-review",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Done",
+   "SPAN[10px] active",
+   "P[10px] Due: 2026-11-13 • Prio",
+   "P[10px] Due: 2026-11-13 • Prio"
+  ]
+ },
+ {
+  "viewport": "1280x720",
+  "route": "/",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Primary Commitment (On",
+   "SPAN[9px] urgent",
+   "SPAN[10px] urgent",
+   "SPAN[10px] 60m"
+  ]
+ },
+ {
+  "viewport": "1280x720",
+  "route": "/productivity/tasks",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Personal OS System Imp",
+   "SPAN[10px] urgent",
+   "SPAN[10px] Personal OS System Imp",
+   "SPAN[10px] high"
+  ]
+ },
+ {
+  "viewport": "1280x720",
+  "route": "/productivity/calendar",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "DIV[10px] 07:00",
+   "DIV[10px] 08:00",
+   "DIV[10px] 09:00",
+   "DIV[10px] 10:00"
+  ]
+ },
+ {
+  "viewport": "1280x720",
+  "route": "/finance/transactions",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "TH[10px] Date",
+   "TH[10px] Payee & Description",
+   "TH[10px] Account Movement",
+   "TH[10px] Category"
+  ]
+ },
+ {
+  "viewport": "1280x720",
+  "route": "/finance/net-worth",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Total Assets",
+   "SPAN[10px] Total Liabilities",
+   "P[10px] savings",
+   "P[10px] cash"
+  ]
+ },
+ {
+  "viewport": "1280x720",
+  "route": "/overview/settings",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Hard ceiling for plann",
+   "SPAN[10px] Liquid funds held back",
+   "SPAN[10px] Off by default: planni"
+  ]
+ },
+ {
+  "viewport": "1280x720",
+  "route": "/finance/import",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": []
+ },
+ {
+  "viewport": "1280x720",
+  "route": "/productivity/weekly-review",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Done",
+   "SPAN[10px] active",
+   "P[10px] Due: 2026-11-13 • Prio",
+   "P[10px] Due: 2026-11-13 • Prio"
+  ]
+ },
+ {
+  "viewport": "1024x768",
+  "route": "/",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Primary Commitment (On",
+   "SPAN[9px] urgent",
+   "SPAN[10px] urgent",
+   "SPAN[10px] 60m"
+  ]
+ },
+ {
+  "viewport": "1024x768",
+  "route": "/productivity/tasks",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Personal OS System Imp",
+   "SPAN[10px] urgent",
+   "SPAN[10px] Personal OS System Imp",
+   "SPAN[10px] high"
+  ]
+ },
+ {
+  "viewport": "1024x768",
+  "route": "/productivity/calendar",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "DIV[10px] 07:00",
+   "DIV[10px] 08:00",
+   "DIV[10px] 09:00",
+   "DIV[10px] 10:00"
+  ]
+ },
+ {
+  "viewport": "1024x768",
+  "route": "/finance/transactions",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "TH[10px] Date",
+   "TH[10px] Payee & Description",
+   "TH[10px] Account Movement",
+   "TH[10px] Category"
+  ]
+ },
+ {
+  "viewport": "1024x768",
+  "route": "/finance/net-worth",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Total Assets",
+   "SPAN[10px] Total Liabilities",
+   "P[10px] savings",
+   "P[10px] cash"
+  ]
+ },
+ {
+  "viewport": "1024x768",
+  "route": "/overview/settings",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Hard ceiling for plann",
+   "SPAN[10px] Liquid funds held back",
+   "SPAN[10px] Off by default: planni"
+  ]
+ },
+ {
+  "viewport": "1024x768",
+  "route": "/finance/import",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": []
+ },
+ {
+  "viewport": "1024x768",
+  "route": "/productivity/weekly-review",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Done",
+   "SPAN[10px] active",
+   "P[10px] Due: 2026-11-13 • Prio",
+   "P[10px] Due: 2026-11-13 • Prio"
+  ]
+ },
+ {
+  "viewport": "768x1024",
+  "route": "/",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Primary Commitment (On",
+   "SPAN[9px] urgent",
+   "SPAN[10px] urgent",
+   "SPAN[10px] 60m"
+  ]
+ },
+ {
+  "viewport": "768x1024",
+  "route": "/productivity/tasks",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Personal OS System Imp",
+   "SPAN[10px] urgent",
+   "SPAN[10px] Personal OS System Imp",
+   "SPAN[10px] high"
+  ]
+ },
+ {
+  "viewport": "768x1024",
+  "route": "/productivity/calendar",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "DIV[10px] 07:00",
+   "DIV[10px] 08:00",
+   "DIV[10px] 09:00",
+   "DIV[10px] 10:00"
+  ]
+ },
+ {
+  "viewport": "768x1024",
+  "route": "/finance/transactions",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "TH[10px] Date",
+   "TH[10px] Payee & Description",
+   "TH[10px] Account Movement",
+   "TH[10px] Category"
+  ]
+ },
+ {
+  "viewport": "768x1024",
+  "route": "/finance/net-worth",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Total Assets",
+   "SPAN[10px] Total Liabilities",
+   "P[10px] savings",
+   "P[10px] cash"
+  ]
+ },
+ {
+  "viewport": "768x1024",
+  "route": "/overview/settings",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Hard ceiling for plann",
+   "SPAN[10px] Liquid funds held back",
+   "SPAN[10px] Off by default: planni"
+  ]
+ },
+ {
+  "viewport": "768x1024",
+  "route": "/finance/import",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": []
+ },
+ {
+  "viewport": "768x1024",
+  "route": "/productivity/weekly-review",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Done",
+   "SPAN[10px] active",
+   "P[10px] Due: 2026-11-13 • Prio",
+   "P[10px] Due: 2026-11-13 • Prio"
+  ]
+ },
+ {
+  "viewport": "390x844",
+  "route": "/",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Primary Commitment (On",
+   "SPAN[9px] urgent",
+   "SPAN[10px] urgent",
+   "SPAN[10px] 60m"
+  ]
+ },
+ {
+  "viewport": "390x844",
+  "route": "/productivity/tasks",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Personal OS System Imp",
+   "SPAN[10px] urgent",
+   "SPAN[10px] Personal OS System Imp",
+   "SPAN[10px] high"
+  ]
+ },
+ {
+  "viewport": "390x844",
+  "route": "/productivity/calendar",
+  "overflow": "",
+  "clipped": [
+   "DIV.p-3",
+   "DIV.text-[11px]",
+   "DIV.mt-1",
+   "SPAN.text-sm"
+  ],
+  "tinyText": [
+   "DIV[10px] 07:00",
+   "DIV[10px] 08:00",
+   "DIV[10px] 09:00",
+   "DIV[10px] 10:00"
+  ]
+ },
+ {
+  "viewport": "390x844",
+  "route": "/finance/transactions",
+  "overflow": "",
+  "clipped": [
+   "TABLE.w-full",
+   "THEAD.bg-zinc-900/60",
+   "TR.",
+   "TH.py-2.5"
+  ],
+  "tinyText": [
+   "TH[10px] Date",
+   "TH[10px] Payee & Description",
+   "TH[10px] Account Movement",
+   "TH[10px] Category"
+  ]
+ },
+ {
+  "viewport": "390x844",
+  "route": "/finance/net-worth",
+  "overflow": "",
+  "clipped": [
+   "TABLE.w-full",
+   "THEAD.bg-zinc-950",
+   "TR.",
+   "TH.py-2.5"
+  ],
+  "tinyText": [
+   "SPAN[10px] Total Assets",
+   "SPAN[10px] Total Liabilities",
+   "P[10px] savings",
+   "P[10px] cash"
+  ]
+ },
+ {
+  "viewport": "390x844",
+  "route": "/overview/settings",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Hard ceiling for plann",
+   "SPAN[10px] Liquid funds held back",
+   "SPAN[10px] Off by default: planni"
+  ]
+ },
+ {
+  "viewport": "390x844",
+  "route": "/finance/import",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": []
+ },
+ {
+  "viewport": "390x844",
+  "route": "/productivity/weekly-review",
+  "overflow": "",
+  "clipped": [],
+  "tinyText": [
+   "SPAN[10px] Done",
+   "SPAN[10px] active",
+   "P[10px] Due: 2026-11-13 • Prio",
+   "P[10px] Due: 2026-11-13 • Prio"
+  ]
+ }
+]

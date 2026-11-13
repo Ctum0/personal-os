@@ -1,0 +1,42 @@
+[
+ {
+  "route": "/",
+  "violations": []
+ },
+ {
+  "route": "/productivity/tasks",
+  "violations": []
+ },
+ {
+  "route": "/finance/transactions",
+  "violations": []
+ },
+ {
+  "route": "/overview/settings",
+  "violations": []
+ },
+ {
+  "route": "/productivity/calendar",
+  "violations": []
+ },
+ {
+  "route": "/finance/import",
+  "violations": []
+ },
+ {
+  "route": "/overview/backup",
+  "violations": []
+ },
+ {
+  "route": "/productivity/habits",
+  "violations": []
+ },
+ {
+  "route": "/productivity/focus",
+  "violations": []
+ },
+ {
+  "route": "/finance/accounts",
+  "violations": []
+ }
+]
