@@ -1094,8 +1094,15 @@ export default function CalendarPage() {
       {/* VIEW: WEEK VIEW */}
       {calendarView === 'week' && (
         <div className="bg-zinc-950 border border-white/[0.08] rounded-xl overflow-hidden shadow-sm flex flex-col">
+          {/*
+            Seven day columns plus a 70px gutter cannot fit a 390px viewport. The
+            week grid is therefore horizontally scrollable; without this the last
+            column was clipped outright — no ancestor had a scroller, so Sunday
+            was unreachable on a phone.
+          */}
+          <div className="overflow-x-auto">
           {/* Day Columns Header */}
-          <div className="grid grid-cols-[70px_repeat(7,1fr)] border-b border-white/[0.08] bg-zinc-900/60 sticky top-0 z-20">
+          <div className="grid grid-cols-[70px_repeat(7,minmax(96px,1fr))] min-w-[742px] border-b border-white/[0.08] bg-zinc-900/60 sticky top-0 z-20">
             <div className="p-3 text-[11px] font-mono text-zinc-500 border-r border-white/[0.08] flex items-center justify-center">
               GMT
             </div>
@@ -1137,7 +1144,7 @@ export default function CalendarPage() {
             aria-label="Weekly time grid"
           >
             <div
-              className="grid grid-cols-[70px_repeat(7,1fr)] relative"
+              className="grid grid-cols-[70px_repeat(7,minmax(96px,1fr))] min-w-[742px] relative"
               style={{ height: `${hours.length * ROW_HEIGHT}px` }}
             >
               {/* Left Time Gutter */}
@@ -1284,6 +1291,7 @@ export default function CalendarPage() {
                 );
               })}
             </div>
+          </div>
           </div>
         </div>
       )}

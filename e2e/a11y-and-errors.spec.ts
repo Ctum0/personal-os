@@ -206,6 +206,32 @@ test.describe('keyboard and dialog semantics', () => {
     await expect(dialog).toBeHidden();
   });
 
+  test('command palette still finds its own commands when you type', async ({ page }) => {
+    // Regression: the palette switched to record search on the first keystroke,
+    // so typing "settings" returned nothing and the Settings command became
+    // unreachable by name.
+    await gotoApp(page);
+    await page.keyboard.press('Control+k');
+    const dialog = page.getByRole('dialog', { name: 'Command palette' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('option')).toHaveCount(10);
+
+    const input = dialog.locator('input').first();
+    await input.fill('settings');
+    await expect(dialog.getByRole('option').first()).toContainText(/Settings/i);
+    await dialog.getByRole('option').first().click();
+    await page.waitForURL(url => url.pathname === '/overview/settings', { timeout: 15_000 });
+  });
+
+  test('command palette reports when nothing matches', async ({ page }) => {
+    await gotoApp(page);
+    await page.keyboard.press('Control+k');
+    const dialog = page.getByRole('dialog', { name: 'Command palette' });
+    const input = dialog.locator('input').first();
+    await input.fill('zzzz-no-such-command-zzzz');
+    await expect(dialog.getByText(/No commands or records match/i)).toBeVisible();
+  });
+
   test('quick add is a labelled dialog that clears between opens', async ({ page }) => {
     await gotoApp(page);
     await page.keyboard.press('Control+n');
