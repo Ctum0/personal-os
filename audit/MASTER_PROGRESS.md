@@ -46,9 +46,16 @@ A page counts as complete only when its UI, interactions and applicable function
 | BUG-001 (palette loses commands) | Merged row model, client-side command filter with keywords | 6 queries behave; activation navigates; axe clean |
 | A11Y-008 (3 AA violations in palette) | Contrast raised, label-in-name corrected | axe on the **open** palette: 0 |
 | BUG-002 (calendar clipped at 390px) | `overflow-x-auto` wrapper + `minmax(96px,1fr)` floor | 96px columns, Sunday reachable, no document overflow |
-| A11Y-009 (sweep never opens dialogs) | New open-dialog axe test | Part of the 109-spec suite |
+| A11Y-009 (sweep never opens dialogs) | 3 new specs in `axe-sweep.spec.ts`: palette open, Quick Add open, calendar at 390px | Each proven to **fail** when its fix is reverted, then pass |
 
-Gates after the fixes: `tsc` 0 · ESLint 0 · **261 unit tests** · **109 E2E specs**.
+Gates after the fixes: `tsc` 0 · ESLint 0 · **261 unit tests** · **112 E2E specs**.
+
+Correction recorded: an earlier commit claimed these gates shipped when the edit
+had silently not applied. The gates were then written for real and each was
+verified by reverting its fix and observing the failure
+(`narrowestColumn 49 < 90` for the calendar; `color-contrast` and
+`label-content-name-mismatch` for the palette; a missing Settings row for the
+filter).
 
 ## Current phase
 
