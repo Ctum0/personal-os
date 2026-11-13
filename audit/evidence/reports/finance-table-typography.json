@@ -1,0 +1,131 @@
+[
+ {
+  "route": "/finance/transactions",
+  "tables": 1,
+  "rows": 2,
+  "cols": 8,
+  "numericCols": 1,
+  "align": [
+   "left",
+   "right",
+   "center"
+  ],
+  "thAlign": [
+   "left",
+   "right",
+   "center"
+  ],
+  "fontSizes": [
+   11,
+   12,
+   10
+  ],
+  "rowHeight": 52,
+  "tableWidth": 1134,
+  "scrollerWidth": 1134,
+  "headerText": [
+   "Date",
+   "Payee & Descri",
+   "Account Moveme",
+   "Category",
+   "Type",
+   "Amount",
+   "Status",
+   "Actions"
+  ]
+ },
+ {
+  "route": "/finance/budgets",
+  "tables": 1,
+  "rows": 6,
+  "cols": 7,
+  "numericCols": 6,
+  "align": [
+   "left",
+   "right",
+   "center"
+  ],
+  "thAlign": [
+   "left",
+   "right",
+   "center"
+  ],
+  "fontSizes": [
+   12
+  ],
+  "rowHeight": 41,
+  "tableWidth": 1134,
+  "scrollerWidth": 1134,
+  "headerText": [
+   "Category",
+   "Allocated",
+   "Rollover",
+   "Total Budgeted",
+   "Actual Spent",
+   "Remaining",
+   "Status"
+  ]
+ },
+ {
+  "route": "/finance/debts",
+  "tables": 1,
+  "rows": 1,
+  "cols": 6,
+  "numericCols": 3,
+  "align": [
+   "left",
+   "right",
+   "center"
+  ],
+  "thAlign": [
+   "left",
+   "right",
+   "center"
+  ],
+  "fontSizes": [
+   12,
+   11
+  ],
+  "rowHeight": 106,
+  "tableWidth": 1134,
+  "scrollerWidth": 1134,
+  "headerText": [
+   "Liability & Li",
+   "Principal Bala",
+   "APR",
+   "Minimum Monthl",
+   "Due Day",
+   "Next Payment S"
+  ]
+ },
+ {
+  "route": "/finance/net-worth",
+  "tables": 1,
+  "rows": 1,
+  "cols": 5,
+  "numericCols": 2,
+  "align": [
+   "left",
+   "right",
+   "center"
+  ],
+  "thAlign": [
+   "left",
+   "right",
+   "center"
+  ],
+  "fontSizes": [
+   12
+  ],
+  "rowHeight": 37,
+  "tableWidth": 1094,
+  "scrollerWidth": 1094,
+  "headerText": [
+   "Snapshot Date",
+   "Total Assets",
+   "Total Liabilit",
+   "Net Worth",
+   "Status"
+  ]
+ }
+]

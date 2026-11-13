@@ -3,9 +3,10 @@
 **Status: complete for every surface exercised, with one carry-forward.**
 Last updated: 2026-11-14 · Audit build: `6dbb094`, fixes verified at `6e9d183`
 
-Carried forward: the **Phase 4 finance-table typography pass** — table density
-and numeric alignment on `transactions`, `budgets`, `debts`, `net-worth` — has
-never been run. Everything else below is done or explicitly declared untested.
+No carry-forwards: the Phase 4 finance-table typography pass was completed
+(alignment, decimal consistency, density and size measured on all four recognised
+tables — `UI-005`, `UI-006`). Everything below is done or explicitly declared
+untested.
 
 ## Quantitative state (evidence-derived)
 
@@ -25,16 +26,16 @@ never been run. Everything else below is done or explicitly declared untested.
 | Dialogs audited with axe while open | 2 (Quick Add, command palette) | `axe-command-palette.json` |
 | Static routes audited with axe | 10, plus the 28-route seeded sweep in CI | `axe-static-routes.json` |
 | Viewports tested | **8 of 8** (64 measurements = 8 × 8 routes) | `responsive.json` |
-| Findings recorded | **15** | the four findings files |
+| Findings recorded | **17** | the four findings files |
 | — confirmed defects | 3 | `FUNCTIONAL_BUGS.md` |
-| — usability / UI concerns | 7 | `UI_UX_FINDINGS.md` |
+| — usability / UI concerns | 9 | `UI_UX_FINDINGS.md` |
 | — accessibility findings | 3 | `ACCESSIBILITY_FINDINGS.md` |
 | — performance entries | 2 (one informational) | `PERFORMANCE_FINDINGS.md` |
 | Resolved during the audit | **5** (`BUG-001`, `BUG-002`, `A11Y-008`, `A11Y-009`, `A11Y-010`) | with mutation-proven gates |
-| Still open | **9** | `EXECUTIVE_SUMMARY.md` |
-| Informational (not an action) | **1** (`PERF-002`, code splitting healthy) | `PERFORMANCE_FINDINGS.md` |
+| Still open | **10** | `EXECUTIVE_SUMMARY.md` |
+| Informational (not an action) | **2** (`PERF-002` code splitting healthy; `UI-006` finance tables correctly aligned) | `PERFORMANCE_FINDINGS.md`, `UI_UX_FINDINGS.md` |
 
-Reconciliation: 5 resolved + 9 open + 1 informational = **15**.
+Reconciliation: 5 resolved + 10 open + 2 informational = **17**.
 
 ## Page completion
 
@@ -71,22 +72,18 @@ Phase 3 (interaction): **done for the surfaces exercised** — every route's
 controls were swept (251 clicks, zero console errors, zero dead controls
 identified), and all five previously-untested workflows are verified end to end.
 
-Phase 4 (visual/typography): **one carry-forward**. Typography and layout were
-inspected per page and measured across 8 viewports, but the recognised finance
-tables were never assessed for density or numeric alignment. Lighthouse does not
-substitute: it measures contrast and heading order, not whether a 745px-wide
-numeric table reads well.
+Phase 4 (visual/typography): **done.** Typography and layout were inspected per
+page and measured across 8 viewports, and the four recognised finance tables were
+assessed column by column: numeric right-alignment is correct and consistent,
+money formats to exactly two decimals, and headers match their cells. One
+typographic inconsistency was found and recorded (`UI-005`: three font sizes in a
+single ledger row).
 
 ## Exact next task
 
-1. **Phase 4 carry-forward: the finance-table typography pass.** Open
-   `/finance/transactions`, `/budgets`, `/debts`, `/net-worth` at 1440×900 and
-   assess: right-aligned numeric columns, consistent decimal places, row density
-   (is 745px of table readable?), header/label contrast, and whether amounts are
-   scannable down a column. Record findings as `UI-*`.
-2. **Backup restore through the UI** (export is verified; restore is covered only
+1. **Backup restore through the UI** (export is verified; restore is covered only
    by unit tests).
-3. **Assistant chat path**, which needs a configured model provider.
+2. **Assistant chat path**, which needs a configured model provider.
 
 Do not redo: the route sweep, the five workflows, the 8-viewport matrix, the
 palette verification, or the production Lighthouse pass. All are recorded with

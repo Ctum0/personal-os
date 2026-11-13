@@ -22,16 +22,16 @@ What is broken is narrower and more interesting. The palette advertised ten comm
 | Interactive controls measured | **367 buttons, 37 inputs, 4 tables** |
 | Interaction tests written and run | **18** (11 behavioural + 7 accessibility) |
 | Viewport measurements | **64** (8 viewports × 8 routes) |
-| Findings recorded | **15** |
+| Findings recorded | **17** |
 | Confirmed defects | **3** (`BUG-001..003`) |
-| Usability / UI concerns | **7** (`UX-001..003`, `UI-001..004`) |
+| Usability / UI concerns | **9** (`UX-001..003`, `UI-001..006`) |
 | Accessibility findings | **3** (`A11Y-008` with 3 violations, `A11Y-009`, `A11Y-010`) |
 | Performance findings | **2**; Lighthouse on the production build scores 97/100/100/100 |
-| *Category totals* | *3 + 7 + 3 + 2 = **15*** |
+| *Category totals* | *3 + 9 + 3 + 2 = **17*** |
 | Resolved during the audit | **5** (`BUG-001`, `BUG-002`, `A11Y-008`, `A11Y-009`, `A11Y-010`) |
 | Fixed with a proven regression gate | **3** — each gate was verified by reverting its fix and watching it fail |
-| Still open | **9** |
-| Informational (no action) | **1** (`PERF-002`) |
+| Still open | **10** |
+| Informational (no action) | **2** (`PERF-002`, `UI-006`) |
 
 ---
 
@@ -43,9 +43,9 @@ What is broken is narrower and more interesting. The palette advertised ten comm
 
 **BUG-001 — typing in the palette destroyed the command list (P2, fixed).** Re-graded down from P1 during review: nothing was unreachable, since arrowing with an empty query still lists all ten commands and every destination is also in the sidebar. The defect is that type-to-filter didn't cover commands, which is friction. Fixed by merging commands and records into one filtered row list.
 
-## What is still open (9 open + 1 informational)
+## What is still open (10 open + 2 informational)
 
-The table lists every unresolved entry. `PERF-002` is a negative result (code splitting is healthy) and is carried for completeness, not as work.
+The table lists every unresolved entry. `PERF-002` and `UI-006` are negative/positive *measurements* — code splitting is healthy, finance tables are correctly aligned — carried for completeness, not as work.
 
 | ID | Severity | Finding |
 | --- | --- | --- |
@@ -58,7 +58,9 @@ The table lists every unresolved entry. `PERF-002` is a negative result (code sp
 | `UI-003` | P3 | Destructive archive control is icon-only and adjacent to a benign toggle |
 | `UI-004` | P3 | Large empty band above the fold on `/productivity/plan` and `/focus` |
 | `PERF-001` | P3 | Palette issues one request per keystroke (150ms debounce, no abort) — latent, not measured as a problem |
+| `UI-005` | P3 | Three font sizes (10/11/12px) inside a single ledger table row |
 | `PERF-002` | P3 | *Informational*: route-level code splitting is healthy; no action recommended |
+| `UI-006` | P3 | *Informational*: finance tables are correctly aligned with 2-decimal money; recorded as a verified positive |
 
 ## Root causes, not symptoms
 

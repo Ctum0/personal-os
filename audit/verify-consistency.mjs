@@ -52,11 +52,11 @@ check('no document-level horizontal overflow anywhere',
 // 3. Headline counts must agree across documents.
 const summary = docs['EXECUTIVE_SUMMARY.md'];
 const master = docs['MASTER_PROGRESS.md'];
-for (const [label, pattern] of [['resolved 5', /\| \*\*5\*\*/], ['findings 15', /\| \*\*15\*\*/], ['open 9', /\| \*\*9\*\*/]]) {
+for (const [label, pattern] of [['resolved 5', /\| \*\*5\*\*/], ['findings 17', /\| \*\*17\*\*/], ['open 10', /\| \*\*10\*\*/]]) {
   check(`summary states ${label}`, pattern.test(summary));
 }
 check('master agrees with the summary',
-  [/\| \*\*5\*\*/, /\| \*\*15\*\*/, /\| \*\*9\*\*/].every(p => p.test(master)));
+  [/\| \*\*5\*\*/, /\| \*\*17\*\*/, /\| \*\*10\*\*/].every(p => p.test(master)));
 
 // Bug 3: the summary's table deliberately carries one informational row. The
 // framing is 4 resolved + 9 open + 1 informational = 14, so an informational
@@ -65,9 +65,10 @@ const openRows = [...summary.matchAll(/^\| `([A-Z]+-\d+)` \| [^|]+ \| ([^|]+)\|/
   .map(m => ({ id: m[1], text: m[2] }));
 const informational = openRows.filter(r => /informational/i.test(r.text)).map(r => r.id);
 const actionable = openRows.filter(r => !/informational/i.test(r.text)).map(r => r.id);
-check('informational rows are exactly {PERF-002}',
-  informational.length === 1 && informational[0] === 'PERF-002', informational.join(','));
-check('actionable open rows = 9', actionable.length === 9, String(actionable.length));
+check('informational rows are exactly {PERF-002, UI-006}',
+  informational.length === 2 && informational.includes('PERF-002') && informational.includes('UI-006'),
+  informational.join(','));
+check('actionable open rows = 10', actionable.length === 10, String(actionable.length));
 
 // 4. Every finding ID must be either open in the table or explicitly resolved.
 const openIds = new Set([...summary.matchAll(/^\| `([A-Z]+-\d+)`/gm)].map(m => m[1]));

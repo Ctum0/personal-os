@@ -36,6 +36,45 @@ Visually, a two-letter avatar in the top-right is the universal "this is your ac
 
 ---
 
+## UI-005 — Mixed font sizes inside one table row
+
+**Severity: P3** · `/finance/transactions` · Category: typography · Measured
+
+The ledger table renders five different functional roles at **three** sizes in a
+single row: `Date` 11px, `Type` 10px, everything else 12px. At 1440×900 a row is
+52px tall, so the 10px type badge is the smallest text in the densest row on the
+most-used finance page.
+
+**Why it matters:** size is the only thing distinguishing a type tag from a date
+here, and both read as secondary metadata. Two steps of size inside one row
+looks like an accident rather than hierarchy.
+
+**Recommendation:** one size for row metadata (12px), with weight or colour
+carrying the distinction. This is the same fix as `UI-002` — see
+`evidence/reports/finance-table-typography.json`.
+
+---
+
+## UI-006 — Numeric tables are correctly aligned (negative finding, recorded)
+
+**Informational — no action.** Measured on all four recognised finance tables:
+
+| Table | Columns | Numeric columns | Header/cell alignment |
+| --- | --- | --- | --- |
+| `/finance/transactions` | 8 | 1 (`Amount`) | every header matches its cells; numerics right, text left, status centred |
+| `/finance/budgets` | 7 | 6 | all right-aligned, headers matching |
+| `/finance/debts` | 6 | 3 | all right-aligned, headers matching |
+| `/finance/net-worth` | 5 | 2 | consistent |
+
+Money renders with **exactly 2 decimal places** throughout (`decimal places: [2]`),
+and `APR` is correctly right-aligned as a number while `Due Day` is centred as a
+label. Row density is 37–52px except debts at 106px (it carries a payoff summary
+per row). This is the thing that most often goes wrong in a financial table and it
+is right here — stated so the positive result is on the record, not just the
+complaints.
+
+---
+
 ## UI-002 — Sub-11px text is used for meaningful labels
 
 **Severity: P3** · Multiple routes · Category: typography
