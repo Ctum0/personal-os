@@ -10,11 +10,23 @@ own outright.
 > export it. See [docs/adr/0001-deployment-strategy.md](docs/adr/0001-deployment-strategy.md)
 > for the deployment direction (local-first now, optional encrypted sync relay later).
 
-## Quick start
+## Try it in one command
+
+```bash
+git clone https://github.com/Ctum0/personal-os.git
+cd personal-os
+cp .env.example .env      # then fill in the four credential values
+docker compose up -d      # http://localhost:3000
+```
+
+The app is one Node process with SQLite on a named volume: no database server, no
+cache, no external services. It idles at roughly 45 MB of memory.
+
+### Local development
 
 ```bash
 pnpm install
-pnpm dev            # http://localhost:3000
+pnpm dev            # http://localhost:3000, open mode (no sign-in)
 ```
 
 First boot creates and migrates `data/personal_os.db` automatically (current
@@ -27,7 +39,7 @@ By default the app assumes a single trusted operator on loopback (open mode).
 Set the four operator variables to require sign-in:
 
 ```bash
-PERSONAL_OS_USERNAME=ctum
+PERSONAL_OS_USERNAME=<your-username>
 PERSONAL_OS_PASSWORD_SALT=<hex salt>
 PERSONAL_OS_PASSWORD_HASH=<pbkdf2 hex digest>
 PERSONAL_OS_PASSWORD_ITERATIONS=210000
@@ -79,7 +91,7 @@ A plain `pnpm build` therefore cannot migrate, snapshot, or ship your database.
 | `PERSONAL_OS_DB_PATH` | `data/personal_os.db` | Database file override (sandboxed tests/E2E/CI, containers). |
 | `PERSONAL_OS_TZ` | `Asia/Colombo` | Timezone used for calendar-day formatting (`src/lib/time`). |
 | `E2E_CHROMIUM_PATH` | *(Playwright default)* | Distribution chromium for E2E (e.g. `/usr/bin/chromium`). |
-| `E2E_USERNAME` / `E2E_PASSWORD` | `ctum` / fixture password | Credentials the `authed` E2E project signs in with. |
+| `E2E_USERNAME` / `E2E_PASSWORD` | fixture values | Credentials the `authed` E2E project signs in with. |
 | `E2E_PASSWORD_SALT` / `E2E_PASSWORD_HASH` / `E2E_SESSION_SECRET` | fixed test values | Deterministic test-only auth config for the `authed` E2E project. |
 
 ## Testing
@@ -123,7 +135,7 @@ docker build -t personal-os .
 docker run -p 3000:3000 -v personal-os-data:/app/data personal-os
 # exposed deployments:
 docker run -p 3000:3000 -v personal-os-data:/app/data \
-  -e PERSONAL_OS_USERNAME=ctum \
+  -e PERSONAL_OS_USERNAME=<your-username> \
   -e PERSONAL_OS_PASSWORD_SALT=... -e PERSONAL_OS_PASSWORD_HASH=... \
   -e PERSONAL_OS_SESSION_SECRET=... \
   personal-os

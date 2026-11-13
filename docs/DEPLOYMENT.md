@@ -6,17 +6,17 @@ server to administer. This document covers the Coolify deployment on the VPS, th
 resource envelope, and the two operational procedures that matter (credential
 rotation and backup).
 
-Live instance: **https://os.ctum.org**
+Live instance: `https://<your-domain>`
 
 ## What runs where
 
 | Piece | Location |
 | --- | --- |
 | Image | Built by Coolify from `Dockerfile` on the VPS (multi-stage, `node:22-alpine`) |
-| Container | Coolify application `personal-os`, uuid `9jjkzuavevs91lpezsx1dnew` |
+| Container | Coolify application `personal-os` |
 | Data | Docker named volume mounted at `/app/data` (`PERSONAL_OS_DB_PATH=/app/data/personal_os.db`) |
 | Container port | `3000`, published to `127.0.0.1:3011` on the host |
-| Ingress | Caddy on the host (`:80`/`:443`) reverse-proxies `os.ctum.org` → `127.0.0.1:3011` |
+| Ingress | A reverse proxy on the host (`:80`/`:443`) forwards the domain to `127.0.0.1:3011` |
 
 Coolify's own Traefik proxy is **not** the ingress on this host — Caddy owns
 `:80`/`:443`. That is why the application sets `ports_mappings` rather than
@@ -50,7 +50,7 @@ baked into the image.
 
 | Key | Value |
 | --- | --- |
-| `PERSONAL_OS_USERNAME` | `ctum` |
+| `PERSONAL_OS_USERNAME` | the operator account name |
 | `PERSONAL_OS_PASSWORD_SALT` | deployment salt (hex) |
 | `PERSONAL_OS_PASSWORD_ITERATIONS` | `210000` |
 | `PERSONAL_OS_PASSWORD_HASH` | PBKDF2-HMAC-SHA256 digest (hex) |
@@ -110,9 +110,11 @@ on first boot and are forward-only.
 
 ## Coolify notes
 
-- The application is built from `Ctum0/personal-os` on branch
-  `hermes/hardening` using a `private-deploy-key` source (the repository is
-  private).
+- The application builds from this repository on a branch using a deploy-key
+  source, and auto-deploys on push via a GitHub webhook pointed at
+  `https://<coolify-host>/webhooks/source/github/events/manual` (the target must
+  be the *manual* webhook route; `/api/v1/webhooks/deploy/...` does not exist and
+  returns 404).
 - Deploys are triggered with `POST /api/v1/deploy?uuid=<app-uuid>`.
 - `health_check_path` is `/login` — it is unauthenticated, so it distinguishes
   "app is up" from "proxy can reach it" without depending on data.
@@ -134,7 +136,7 @@ on first boot and are forward-only.
 ### Caddy block to append to `/etc/caddy/Caddyfile`
 
 ```caddy
-os.ctum.org {
+your-domain.example {
 	reverse_proxy localhost:3011
 }
 ```

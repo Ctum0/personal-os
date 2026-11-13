@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, "hermes/**"]
+    branches: [main]
   pull_request:
 
 concurrency:
@@ -52,12 +52,10 @@ jobs:
       - name: Install Playwright chromium
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: E2E tests (open mode + PIN gate)
+      - name: E2E tests (open mode + sign-in gate)
         run: pnpm exec playwright test
         env:
           CI: "true"
-          # The `pin` project boots its own server with this PIN, so the gate
-          # specs run instead of skipping.
           # Credentials for the `authed` project. The digest is PBKDF2 of the
           # fixture password over the fixture salt — test-only values, never a
           # deployment credential.
@@ -67,7 +65,7 @@ jobs:
           E2E_PASSWORD_HASH: dbc9f1b53b22dca0d62d2dfabc2ae442cd6c5996cd5a9e7a38c199136d7c6167
           E2E_SESSION_SECRET: e2e-session-secret-fixed-value
           E2E_DB_PATH: ${{ env.SCRATCH }}/e2e/profile.db
-          E2E_PIN_DB_PATH: ${{ env.SCRATCH }}/e2e/profile-pin.db
+          E2E_AUTHED_DB_PATH: ${{ env.SCRATCH }}/e2e/profile-authed.db
 
       - uses: actions/upload-artifact@v4
         if: always()

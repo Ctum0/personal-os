@@ -17,7 +17,7 @@ import path from 'node:path';
  * environment variable can never silently skip authentication coverage.
  */
 const OPEN_PORT = Number(process.env.E2E_PORT || 3457);
-const PIN_PORT = Number(process.env.E2E_PIN_PORT || 3458);
+const AUTHED_PORT = Number(process.env.E2E_AUTHED_PORT || 3458);
 const E2E_USERNAME = process.env.E2E_USERNAME || 'e2e-operator';
 const E2E_PASSWORD = process.env.E2E_PASSWORD || 'e2e-fixture-password';
 // Deterministic test-only digest for E2E_PASSWORD — never used by a deployment.
@@ -28,7 +28,7 @@ const E2E_SESSION_SECRET = process.env.E2E_SESSION_SECRET || 'e2e-session-secret
 const IS_CI = Boolean(process.env.CI);
 
 const openDb = process.env.E2E_DB_PATH || path.join(os.tmpdir(), 'personal-os-e2e', 'profile.db');
-const pinDb = process.env.E2E_PIN_DB_PATH || path.join(os.tmpdir(), 'personal-os-e2e', 'profile-pin.db');
+const authedDb = process.env.E2E_AUTHED_DB_PATH || path.join(os.tmpdir(), 'personal-os-e2e', 'profile-authed.db');
 
 export default defineConfig({
   testDir: './e2e',
@@ -57,10 +57,10 @@ export default defineConfig({
     },
     {
       name: 'authed',
-      // The PIN gate is the app's only authentication surface; its specs must
-      // run in every CI pass, not be skipped behind an unset variable.
+      // Sign-in is the app's only authentication surface; its specs must run in
+      // every CI pass, not be skipped behind an unset variable.
       testMatch: /auth-gate\.spec\.ts$/,
-      use: { baseURL: `http://localhost:${PIN_PORT}` },
+      use: { baseURL: `http://localhost:${AUTHED_PORT}` },
     },
   ],
   webServer: [
@@ -85,13 +85,13 @@ export default defineConfig({
       },
     },
     {
-      command: `npx next dev --port ${PIN_PORT}`,
-      url: `http://localhost:${PIN_PORT}`,
+      command: `npx next dev --port ${AUTHED_PORT}`,
+      url: `http://localhost:${AUTHED_PORT}`,
       reuseExistingServer: false,
       timeout: 180_000,
       env: {
         E2E_DIST_DIR: '.next-e2e-pin',
-        PERSONAL_OS_DB_PATH: pinDb,
+        PERSONAL_OS_DB_PATH: authedDb,
         PERSONAL_OS_USERNAME: E2E_USERNAME,
         PERSONAL_OS_PASSWORD_SALT: E2E_PASSWORD_SALT,
         PERSONAL_OS_PASSWORD_HASH: E2E_PASSWORD_HASH,
