@@ -1,9 +1,25 @@
-import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
-import { readJson } from '@/lib/db/validate';
+import { withApiLogging } from '@/lib/api/log';
+import { conflict, ok, readBody, routeError } from '@/lib/api/http';
+import { optionalString, requiredString } from '@/lib/api/fields';
 
-export async function GET() {
+/**
+ * Slug normalization: lowercase, ASCII letters/digits kept, everything else
+ * collapsed to a single dash. A fully non-ASCII name (e.g. "健康") normalizes to
+ * an empty string, which would collide on `UNIQUE(tenant_id, slug)` for every
+ * such name — the caller falls back to a random suffix in that case.
+ */
+function normalizeSlug(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+}
+
+export const GET = withApiLogging(async function GET() {
   try {
     const session = getCurrentSession();
     const db = getDb();
@@ -14,27 +30,34 @@ export async function GET() {
       ORDER BY is_default DESC, name ASC
     `).all(session.tenantId);
 
-    return NextResponse.json({ spaces });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ok({ spaces });
+  } catch (err) {
+    return routeError(err);
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withApiLogging(async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const parsedBody = await readJson(request);
-    if ("error" in parsedBody) {
-      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
-    }
-    const body = parsedBody.data;
+    const body = await readBody(request);
 
-    if (!body.name || !body.name.trim()) {
-      return NextResponse.json({ error: 'Space name is required' }, { status: 400 });
-    }
+    const name = requiredString(body.name, 'name', 200);
+    const description = optionalString(body.description, 'description', 2000) ?? '';
+    const icon = optionalString(body.icon, 'icon', 50) ?? 'Folder';
+    const color = optionalString(body.color, 'color', 30) ?? '#6366f1';
 
-    const slug = body.slug || body.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    const requestedSlug = optionalString(body.slug, 'slug', 100);
+    const baseSlug = normalizeSlug(requestedSlug ?? name);
+    // Non-ASCII names normalize to nothing; a random suffix keeps the slug
+    // unique instead of letting the insert fail on the UNIQUE constraint.
+    const slug = baseSlug || `space-${Math.random().toString(36).substring(2, 8)}`;
+
+    const slugTaken = db
+      .prepare('SELECT id FROM spaces WHERE tenant_id = ? AND slug = ?')
+      .get(session.tenantId, slug);
+    if (slugTaken) conflict('A space with this name already exists');
+
     const spaceId = `space_${slug}_${Date.now().toString(36).substring(4)}`;
 
     db.prepare(`
@@ -43,16 +66,16 @@ export async function POST(request: Request) {
     `).run(
       spaceId,
       session.tenantId,
-      body.name.trim(),
+      name,
       slug,
-      body.icon || 'Folder',
-      body.color || '#6366f1',
-      body.description || ''
+      icon,
+      color,
+      description
     );
 
     const space = db.prepare('SELECT * FROM spaces WHERE id = ? AND tenant_id = ?').get(spaceId, session.tenantId);
-    return NextResponse.json({ space }, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ok({ space }, 201);
+  } catch (err) {
+    return routeError(err);
   }
-}
+});

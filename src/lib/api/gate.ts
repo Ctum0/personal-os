@@ -1,19 +1,23 @@
 /**
  * Edge-safe request gate for the Personal OS API.
  *
- * This module must stay importable from middleware (Edge runtime), so it must
- * NOT import anything Node-only (better-sqlite3, node:fs, etc.).
+ * This module is imported by `src/proxy.ts`, which runs on the Edge runtime, so it
+ * must never import Node-only modules (better-sqlite3, node:fs, …). The crypto
+ * helpers it uses are WebCrypto-based for exactly that reason.
  *
- * Security model (see docs/adr/0001-deployment-strategy.md):
- * - No PERSONAL_OS_PIN in the environment → open mode: the app assumes a single
- *   trusted user on a loopback workstation and allows everything.
- * - PERSONAL_OS_PIN set → every /api/* request must prove session possession:
- *   either an `x-personal-os-pin: <raw pin>` header, or a
- *   `personal_os_session: <sha256(pin)>` cookie (set by POST /api/auth/session).
- * - Comparison is constant-time over SHA-256 digests.
+ * Security model
+ *  - No credentials configured → open mode: a single trusted operator on a local
+ *    workstation. Intended for `pnpm dev`; never for a public deployment.
+ *  - Credentials configured → every `/api/*` request must carry a valid,
+ *    unexpired, HMAC-signed session cookie. The login route is the only exempt
+ *    path, and it can only ever authenticate the single configured account.
+ *  - One account, no registration. Adding a second user is not a supported
+ *    operation, so "who may act" has exactly one answer.
  */
 
-const GATE_EXEMPT_PATHS = ["/api/auth/session"];
+import { SESSION_COOKIE, readAuthConfig, verifySessionToken } from '@/lib/auth/credentials';
+
+const GATE_EXEMPT_PATHS = ['/api/auth/session'];
 
 export interface GateRequestLike {
   headers: { get(name: string): string | null };
@@ -22,69 +26,44 @@ export interface GateRequestLike {
 export interface GateResult {
   authorized: boolean;
   reason?: string;
-  /** true when the app runs open (no pin configured) */
+  /** true when no credentials are configured */
   openMode: boolean;
 }
 
-function toHex(buffer: ArrayBuffer): string {
-  return Array.from(new Uint8Array(buffer))
-    .map(b => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-export async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return toHex(digest);
-}
-
-/** Constant-time byte comparison for equal-length inputs (hex digests here). */
-function constantTimeEqualHex(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+/** Extracts a named cookie from a raw `Cookie` header. */
+export function readCookie(cookieHeader: string, name: string): string | undefined {
+  for (const part of cookieHeader.split(';')) {
+    const index = part.indexOf('=');
+    if (index === -1) continue;
+    if (part.slice(0, index).trim() !== name) continue;
+    return decodeURIComponent(part.slice(index + 1).trim());
   }
-  return diff === 0;
+  return undefined;
 }
 
 export async function gateRequest(request: GateRequestLike, pathname?: string): Promise<GateResult> {
-  const pin = process.env.PERSONAL_OS_PIN;
-
-  if (pathname && GATE_EXEMPT_PATHS.some(p => pathname === p || pathname.startsWith(`${p}?`))) {
-    return { authorized: true, openMode: !pin };
+  if (pathname && GATE_EXEMPT_PATHS.some(path => pathname === path)) {
+    return { authorized: true, openMode: !readAuthConfig() };
   }
 
-  if (!pin) {
-    // Local workstation mode: open on loopback by default.
+  const config = readAuthConfig();
+  if (!config) {
     return { authorized: true, openMode: true };
   }
 
   if (!request) {
-    return { authorized: false, openMode: false, reason: "Missing request" };
+    return { authorized: false, openMode: false, reason: 'Missing request' };
   }
 
-  const cookieHeader = request.headers.get("cookie") || "";
-  const headerPin = request.headers.get("x-personal-os-pin");
-  const sessionCookie = /personal_os_session\s*=\s*([A-Za-z0-9]+)/.exec(cookieHeader)?.[1];
-
-  const expectedDigest = await sha256Hex(pin);
-
-  if (headerPin) {
-    const headerDigest = await sha256Hex(headerPin);
-    if (constantTimeEqualHex(headerDigest, expectedDigest)) {
-      return { authorized: true, openMode: false };
-    }
-  }
-
-  if (sessionCookie) {
-    if (constantTimeEqualHex(sessionCookie, expectedDigest)) {
-      return { authorized: true, openMode: false };
-    }
+  const cookieHeader = request.headers.get('cookie') ?? '';
+  const token = readCookie(cookieHeader, SESSION_COOKIE);
+  if (await verifySessionToken(config, token)) {
+    return { authorized: true, openMode: false };
   }
 
   return {
     authorized: false,
     openMode: false,
-    reason: "Invalid or missing Personal OS session (set via POST /api/auth/session or x-personal-os-pin header)",
+    reason: 'Sign in required: this instance is protected. POST /api/auth/session with your credentials.',
   };
 }

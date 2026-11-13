@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * System workflows: backup export, weekly review via API contract,
- * unlock surface in open mode (no PERSONAL_OS_PIN in the E2E environment).
+ * System workflows: backup export, weekly review via API contract, and the
+ * sign-in surface in open mode (no operator credentials in the E2E environment).
  */
 
 test.describe('system', () => {
@@ -15,16 +15,19 @@ test.describe('system', () => {
     expect(download.suggestedFilename()).toMatch(/\.json$/);
   });
 
-  test('unlock page renders and open-mode session reports openMode:true', async ({ page }) => {
-    // Open mode: /api/auth/session must not set cookies, but the page must render.
-    await page.goto('/unlock');
-    await expect(page.getByText(/Personal OS is locked/i)).toBeVisible();
+  test('sign-in page renders and open mode reports openMode:true', async ({ page }) => {
+    // Open mode: the page must render and the endpoint must report that no
+    // credential is configured, without setting a session cookie.
+    await page.goto('/login');
+    await expect(page.getByLabel('Username')).toBeVisible();
+    await expect(page.getByLabel('Password')).toBeVisible();
     const res = await page.request.post('/api/auth/session', {
-      data: { pin: 'anything' },
+      data: { username: 'anything', password: 'anything' },
     });
     expect(res.status()).toBe(200);
     const body = await res.json();
     expect(body.openMode).toBe(true);
+    expect(res.headers()['set-cookie']).toBeUndefined();
   });
 
   test('system API health contract: key list endpoints respond 200', async ({ request }) => {

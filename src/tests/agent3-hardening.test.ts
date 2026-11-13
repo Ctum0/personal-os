@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import Database from 'better-sqlite3';
-import { runMigrations, schemaVersion, initSchema } from '@/lib/db';
+import { runMigrations, schemaVersion, initSchema, LATEST_SCHEMA_VERSION } from '@/lib/db';
 import { taskVisibleClause, isOperationallyVisibleTask } from '@/lib/db/visibility';
 import {
   isISODateString,
@@ -37,8 +37,10 @@ describe('quarantine visibility policy', () => {
   });
 
   it('builds a SQL clause that excludes quarantined rows for any alias', () => {
-    expect(taskVisibleClause()).toBe(`(t.status != 'quarantined')`);
+    expect(taskVisibleClause('t')).toBe(`(t.status != 'quarantined')`);
     expect(taskVisibleClause('ta')).toBe(`(ta.status != 'quarantined')`);
+    // Unaliased callers must pass the table name, never rely on a default.
+    expect(taskVisibleClause('tasks')).toBe(`(tasks.status != 'quarantined')`);
   });
 
   it('keeps a quarantined task out of list queries while a normal task passes', () => {
@@ -52,7 +54,7 @@ describe('quarantine visibility policy', () => {
     ).run(tenantId);
 
     const rows = db
-      .prepare(`SELECT id FROM tasks t WHERE t.tenant_id = ? AND ${taskVisibleClause()}`)
+      .prepare(`SELECT id FROM tasks t WHERE t.tenant_id = ? AND ${taskVisibleClause('t')}`)
       .all(tenantId) as Array<{ id: string }>;
 
     const ids = rows.map(r => r.id);
@@ -67,9 +69,9 @@ describe('quarantine visibility policy', () => {
 // ---------------------------------------------------------------------------
 
 describe('weekly_reviews migration (v4)', () => {
-  it('reports schema version 5 and creates the table on a fresh db', () => {
+  it('reports the latest schema version and creates the table on a fresh db', () => {
     const db = freshMigrated();
-    expect(schemaVersion(db)).toBe(5);
+    expect(schemaVersion(db)).toBe(LATEST_SCHEMA_VERSION);
     const table = db
       .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='weekly_reviews'`)
       .get();
@@ -105,7 +107,7 @@ describe('weekly_reviews migration (v4)', () => {
 
     const result = runMigrations(db);
     expect(result.from).toBe(0);
-    expect(result.to).toBe(5);
+    expect(result.to).toBe(LATEST_SCHEMA_VERSION);
 
     const row = db
       .prepare(`SELECT * FROM weekly_reviews WHERE tenant_id = 'tenant_default' AND week_start = ?`)

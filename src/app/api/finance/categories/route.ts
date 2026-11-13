@@ -1,8 +1,9 @@
-import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
+import { withApiLogging } from '@/lib/api/log';
+import { ok, routeError } from '@/lib/api/http';
 
-export async function GET() {
+export const GET = withApiLogging(async function GET() {
   try {
     const session = getCurrentSession();
     const db = getDb();
@@ -11,8 +12,8 @@ export async function GET() {
       WHERE tenant_id = ?
       ORDER BY type ASC, name ASC
     `).all(session.tenantId);
-    return NextResponse.json({ categories });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ok({ categories });
+  } catch (err) {
+    return routeError(err);
   }
-}
+});

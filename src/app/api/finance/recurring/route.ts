@@ -1,14 +1,22 @@
-import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
-import { todayISO } from "@/lib/time";
-import { Decimal } from 'decimal.js';
-import {isISODateString, matchesEnum, readJson } from "@/lib/db/validate";
+import { todayISO } from '@/lib/time';
+import { withApiLogging } from '@/lib/api/log';
+import { notFound, ok, readBody, routeError } from '@/lib/api/http';
+import {
+  optionalEnum,
+  optionalInt,
+  optionalISODate,
+  optionalString,
+  requiredISODate,
+  requiredMoney,
+  requiredString,
+} from '@/lib/api/fields';
 
-const VALID_FREQUENCIES = ['daily', 'weekly', 'biweekly', 'monthly', 'quarterly', 'yearly'];
-const VALID_AUTO_ACTIONS = ['reminder_only', 'auto_post', 'draft_transaction'];
+const VALID_FREQUENCIES = ['daily', 'weekly', 'biweekly', 'monthly', 'quarterly', 'yearly'] as const;
+const VALID_AUTO_ACTIONS = ['reminder_only', 'auto_post', 'draft_transaction'] as const;
 
-export async function GET() {
+export const GET = withApiLogging(async function GET() {
   try {
     const session = getCurrentSession();
     const db = getDb();
@@ -22,72 +30,43 @@ export async function GET() {
       ORDER BY r.is_active DESC, r.next_due_date ASC
     `).all(session.tenantId);
 
-    return NextResponse.json({ recurringRules: rules });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ok({ recurringRules: rules });
+  } catch (err) {
+    return routeError(err);
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withApiLogging(async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const parsedBody = await readJson(request);
-    if ("error" in parsedBody) {
-      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
-    }
-    const body = parsedBody.data;
+    const body = await readBody(request);
 
-    if (!body.name || !body.name.trim() || body.expectedAmount === undefined || !body.accountId || !body.nextDueDate) {
-      return NextResponse.json({ error: 'Name, expectedAmount, accountId, and nextDueDate are required' }, { status: 400 });
-    }
+    const name = requiredString(body.name, 'name', 200);
+    const amount = requiredMoney(body.expectedAmount, 'expectedAmount');
+    const accountId = requiredString(body.accountId, 'accountId', 100);
+    const nextDueDate = requiredISODate(body.nextDueDate, 'nextDueDate');
+    const frequency = optionalEnum(body.frequency, 'frequency', VALID_FREQUENCIES) ?? 'monthly';
+    const autoAction = optionalEnum(body.autoAction, 'autoAction', VALID_AUTO_ACTIONS) ?? 'reminder_only';
+    const intervalCount = optionalInt(body.intervalCount, 'intervalCount', 1, 3650) ?? 1;
+    const dayOfMonth = optionalInt(body.dayOfMonth, 'dayOfMonth', 1, 31) ?? 1;
+    const startDate = optionalISODate(body.startDate, 'startDate') ?? todayISO();
+    const ruleType = optionalString(body.ruleType, 'ruleType', 40) ?? 'bill';
+    const categoryId = optionalString(body.categoryId, 'categoryId', 100);
 
-    if (!isISODateString(body.nextDueDate)) {
-      return NextResponse.json({ error: 'nextDueDate must be in YYYY-MM-DD format' }, { status: 400 });
-    }
-    if (body.startDate !== undefined && body.startDate !== null && !isISODateString(body.startDate)) {
-      return NextResponse.json({ error: 'startDate must be in YYYY-MM-DD format' }, { status: 400 });
-    }
-    if (!matchesEnum(body.frequency, VALID_FREQUENCIES)) {
-      return NextResponse.json({ error: `Invalid frequency. Must be one of: ${VALID_FREQUENCIES.join(', ')}` }, { status: 400 });
-    }
-    if (!matchesEnum(body.autoAction, VALID_AUTO_ACTIONS)) {
-      return NextResponse.json({ error: `Invalid autoAction. Must be one of: ${VALID_AUTO_ACTIONS.join(', ')}` }, { status: 400 });
-    }
-    const intervalCount = body.intervalCount !== undefined ? Number(body.intervalCount) : 1;
-    if (!Number.isInteger(intervalCount) || intervalCount < 1) {
-      return NextResponse.json({ error: 'intervalCount must be a positive integer' }, { status: 400 });
-    }
-    const dayOfMonth = body.dayOfMonth !== undefined ? Number(body.dayOfMonth) : 1;
-    if (!Number.isInteger(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31) {
-      return NextResponse.json({ error: 'dayOfMonth must be an integer between 1 and 31' }, { status: 400 });
-    }
+    const account = db
+      .prepare('SELECT id FROM finance_accounts WHERE id = ? AND tenant_id = ?')
+      .get(accountId, session.tenantId);
+    if (!account) notFound('Account');
 
-    let amountDec: Decimal;
-    try {
-      amountDec = new Decimal(body.expectedAmount);
-      if (!amountDec.isFinite() || amountDec.lte(0)) {
-        return NextResponse.json({ error: 'expectedAmount must be a positive number' }, { status: 400 });
-      }
-    } catch {
-      return NextResponse.json({ error: 'Invalid expectedAmount' }, { status: 400 });
-    }
-
-    const account = db.prepare('SELECT id FROM finance_accounts WHERE id = ? AND tenant_id = ?').get(body.accountId, session.tenantId);
-    if (!account) {
-      return NextResponse.json({ error: 'Account not found' }, { status: 404 });
-    }
-
-    if (body.categoryId) {
-      const cat = db.prepare('SELECT id FROM categories WHERE id = ? AND tenant_id = ?').get(body.categoryId, session.tenantId);
-      if (!cat) {
-        return NextResponse.json({ error: 'Category not found' }, { status: 404 });
-      }
+    if (categoryId) {
+      const cat = db
+        .prepare('SELECT id FROM categories WHERE id = ? AND tenant_id = ?')
+        .get(categoryId, session.tenantId);
+      if (!cat) notFound('Category');
     }
 
     const ruleId = `rec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const amount = amountDec.toFixed(2);
-    const today = todayISO();
 
     db.prepare(`
       INSERT INTO recurring_financial_rules (
@@ -96,22 +75,24 @@ export async function POST(request: Request) {
     `).run(
       ruleId,
       session.tenantId,
-      body.name.trim(),
-      body.ruleType || 'bill',
-      body.frequency || 'monthly',
+      name,
+      ruleType,
+      frequency,
       intervalCount,
       dayOfMonth,
-      body.startDate || today,
+      startDate,
       amount,
-      body.accountId,
-      body.categoryId || null,
-      body.autoAction || 'reminder_only',
-      body.nextDueDate
+      accountId,
+      categoryId ?? null,
+      autoAction,
+      nextDueDate
     );
 
-    const created = db.prepare('SELECT * FROM recurring_financial_rules WHERE id = ? AND tenant_id = ?').get(ruleId, session.tenantId);
-    return NextResponse.json({ recurringRule: created }, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const created = db
+      .prepare('SELECT * FROM recurring_financial_rules WHERE id = ? AND tenant_id = ?')
+      .get(ruleId, session.tenantId);
+    return ok({ recurringRule: created }, 201);
+  } catch (err) {
+    return routeError(err);
   }
-}
+});

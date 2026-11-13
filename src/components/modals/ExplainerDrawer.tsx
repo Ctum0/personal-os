@@ -1,21 +1,45 @@
 'use client';
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { useWorkspace } from '../layout/WorkspaceContext';
-import { X, Info, HelpCircle, CheckCircle, AlertTriangle, Layers, Calendar } from 'lucide-react';
+import { X, HelpCircle, CheckCircle, AlertTriangle } from 'lucide-react';
 
 export function ExplainerDrawer() {
   const { selectedExplainer, setSelectedExplainer } = useWorkspace();
+  const panelRef = useRef<HTMLDivElement>(null);
 
+  // Escape closes; focus moves into the panel and returns to the trigger on close.
   React.useEffect(() => {
     if (!selectedExplainer) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    panelRef.current?.querySelector<HTMLElement>('button')?.focus();
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        e.preventDefault();
         setSelectedExplainer(null);
+        return;
+      }
+      if (e.key !== 'Tab' || !panelRef.current) return;
+      const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      } else if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+    };
   }, [selectedExplainer, setSelectedExplainer]);
 
   if (!selectedExplainer) return null;
@@ -26,10 +50,11 @@ export function ExplainerDrawer() {
       onClick={() => setSelectedExplainer(null)}
       role="dialog"
       aria-modal="true"
-      aria-label="Calculation Transparency Explainer"
+      aria-label="Calculation transparency explainer"
     >
       <div
-        className="w-full max-w-md bg-zinc-950 border-l border-zinc-800 h-full overflow-y-auto p-6 shadow-2xl flex flex-col justify-between animate-in slide-in-from-right duration-200"
+        ref={panelRef}
+        className="w-full max-w-md bg-zinc-950 border-l border-zinc-800 h-full overflow-y-auto p-6 shadow-2xl flex flex-col justify-between"
         onClick={(e) => e.stopPropagation()}
       >
         <div>

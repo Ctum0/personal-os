@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import type { ExplainerPayload } from '@/components/layout/WorkspaceContext';
 import { toISODate } from "@/lib/time";
+import { apiFetch, errorText } from '@/lib/api/client';
 import { fmtMoney } from '../_shared/format';
 import {
   Sliders,
@@ -10,32 +12,63 @@ import {
   TrendingDown,
   PieChart,
   HelpCircle,
-  Calendar,
 } from 'lucide-react';
+
+interface ReportCategoryRow {
+  categoryId: string;
+  categoryName: string;
+  amount: string;
+  percentage: string;
+  color: string;
+}
+
+interface ReportRow {
+  totalIncome: string;
+  totalExpenses: string;
+  netSavings: string;
+  savingsRatePercent: string;
+  periodLabel: string;
+  incomeByCategory: ReportCategoryRow[];
+  expenseByCategory: ReportCategoryRow[];
+  explainer: ExplainerPayload;
+}
 
 export default function FinanceReportsPage() {
   const { setSelectedExplainer } = useWorkspace();
-  const [reports, setReports] = useState<any | null>(null);
+  const [reports, setReports] = useState<ReportRow | null>(null);
   const [startDate, setStartDate] = useState('2026-10-01');
   const [endDate, setEndDate] = useState('2026-10-31');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const now = new Date();
-    // toISODate respects the app timezone (Asia/Colombo); raw toISOString() is UTC and
-    // can produce the wrong month for the first hours of a local month.
-    setStartDate(toISODate(now).slice(0, 7) + '-01');
-    setEndDate(toISODate(now));
+    void (async () => {
+      const now = new Date();
+      // toISODate respects the app timezone (Asia/Colombo); raw toISOString() is UTC and
+      // can produce the wrong month for the first hours of a local month.
+      const today = toISODate(now);
+      setStartDate(`${today.slice(0, 7)}-01`);
+      setEndDate(today);
+    })();
   }, []);
 
-  const loadReports = () => {
-    fetch(`/api/finance/reports?startDate=${startDate}&endDate=${endDate}`)
-      .then(r => r.json())
-      .then(data => setReports(data.reports));
-  };
+  const loadReports = useCallback(async () => {
+    setError(null);
+    try {
+      const params = new URLSearchParams({ startDate, endDate });
+      const data = await apiFetch<{ reports: ReportRow | null }>(
+        `/api/finance/reports?${params.toString()}`
+      );
+      setReports(data.reports ?? null);
+    } catch (err) {
+      setError(errorText(err));
+    }
+  }, [startDate, endDate]);
 
   useEffect(() => {
-    loadReports();
-  }, [startDate, endDate]);
+    void (async () => {
+      await loadReports();
+    })();
+  }, [loadReports]);
 
   return (
     <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -60,6 +93,22 @@ export default function FinanceReportsPage() {
           </button>
         )}
       </div>
+
+      {error && (
+        <div
+          role="alert"
+          className="p-3 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-3"
+        >
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="text-[11px] underline opacity-80 hover:opacity-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Date Filter & Preset Bar */}
       <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
@@ -182,7 +231,7 @@ export default function FinanceReportsPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {reports.incomeByCategory.map((cat: any) => (
+                {reports.incomeByCategory.map(cat => (
                   <div key={cat.categoryId} className="space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-medium text-zinc-200">{cat.categoryName}</span>
@@ -221,7 +270,7 @@ export default function FinanceReportsPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {reports.expenseByCategory.map((cat: any) => (
+                {reports.expenseByCategory.map(cat => (
                   <div key={cat.categoryId} className="space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-medium text-zinc-200">{cat.categoryName}</span>

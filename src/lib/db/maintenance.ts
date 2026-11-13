@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import type { Database } from "better-sqlite3";
+import Database from "better-sqlite3";
 
 /**
  * Scheduled maintenance: automatic SQLite snapshots + integrity checks.
@@ -31,7 +31,7 @@ function autoBackupsDir(): string {
   return path.join(path.dirname(dbFileRef.path), "backups", "auto");
 }
 
-let dbFileRef: { path: string } = { path: "" };
+const dbFileRef: { path: string } = { path: "" };
 
 /** Registers the live DB path (called from db/index.ts getDb). */
 export function registerDbPath(filePath: string): void {
@@ -55,25 +55,33 @@ export function listAutoBackups(): { file: string; name: string; mtimeMs: number
 }
 
 /** Non-blocking guard: runs at most once per process, then honors staleness. */
-export function maybeRunMaintenance(db: Database): void {
+export function maybeRunMaintenance(db: Database.Database): void {
   if (maintenanceRunThisProcess) return;
-  maintenanceRunThisProcess = true;
   try {
     runMaintenance(db, dbFileRef.path || "");
+    // Only latch after a successful run so a transient failure (locked DB,
+    // permissions) retries on the next boot instead of skipping backups forever.
+    maintenanceRunThisProcess = true;
   } catch (err) {
     // Maintenance must never block app boot; degrade to console only.
     console.error("[maintenance] auto-backup failed:", (err as Error).message);
   }
 }
 
-export function runMaintenance(db: Database, liveDbPath: string, opts?: { force?: boolean }): MaintenanceReport {
+/**
+ * Snapshot + verify + prune. The snapshot file itself is integrity-checked
+ * (opened read-only, quick_check) — verifying the live handle proves nothing
+ * about the copy we are about to keep. Pruning runs only after verification so
+ * a corrupt new snapshot can never evict good backups.
+ */
+export function runMaintenance(db: Database.Database, liveDbPath: string, opts?: { force?: boolean }): MaintenanceReport {
   if (!dbFileRef.path) dbFileRef.path = liveDbPath;
   const dir = autoBackupsDir();
   fs.mkdirSync(dir, { recursive: true });
 
   const existing = listAutoBackups();
   const newest = existing[0];
-  let ageMs = newest ? Date.now() - newest.mtimeMs : Infinity;
+  const ageMs = newest ? Date.now() - newest.mtimeMs : Infinity;
 
   if (!opts?.force && ageMs < AUTO_BACKUP_INTERVAL_MS) {
     return {
@@ -84,14 +92,25 @@ export function runMaintenance(db: Database, liveDbPath: string, opts?: { force?
     };
   }
 
-  if (opts?.force && ageMs === Infinity) ageMs = Infinity; // first snapshot semantic stays
-
-  // WAL-safe snapshot: VACUUM INTO produces a verified compact copy.
+  // WAL-safe snapshot: VACUUM INTO produces a compact copy. The filename is
+  // unique per invocation (ms stamp + counter) because VACUUM INTO refuses to
+  // overwrite an existing file — two snapshots in the same millisecond would
+  // otherwise throw and lose the backup.
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const file = path.join(dir, `personal_os-auto-${stamp}.db`);
+  const file = uniqueSnapshotPath(dir, `personal_os-auto-${stamp}`);
   db.exec(`VACUUM INTO '${file.replace(/'/g, "''")}'`);
 
-  // Prune to the newest MAX_AUTO_BACKUPS.
+  const integrity = verifySnapshotFile(file);
+  if (integrity !== "ok") {
+    return {
+      snapshotCreated: true,
+      snapshotPath: file,
+      prunedCount: 0,
+      integrity,
+      reason: "Snapshot created but quick_check on the snapshot flagged issues; retention untouched",
+    };
+  }
+
   let prunedCount = 0;
   for (const old of listAutoBackups().slice(MAX_AUTO_BACKUPS)) {
     try {
@@ -102,18 +121,6 @@ export function runMaintenance(db: Database, liveDbPath: string, opts?: { force?
     }
   }
 
-  // Verify the live DB (and therefore the page set just vacuumed) reads clean.
-  const check = db.pragma("quick_check", { simple: true });
-  if (check !== "ok") {
-    return {
-      snapshotCreated: true,
-      snapshotPath: file,
-      prunedCount,
-      integrity: String(check),
-      reason: "Snapshot created but quick_check on live DB flagged issues",
-    };
-  }
-
   return {
     snapshotCreated: true,
     snapshotPath: file,
@@ -121,4 +128,24 @@ export function runMaintenance(db: Database, liveDbPath: string, opts?: { force?
     integrity: "ok",
     reason: ageMs === Infinity ? "First auto snapshot for this DB" : "Previous auto backup exceeded 24h",
   };
+}
+
+function uniqueSnapshotPath(dir: string, base: string): string {
+  let candidate = path.join(dir, `${base}.db`);
+  let n = 1;
+  while (fs.existsSync(candidate)) {
+    candidate = path.join(dir, `${base}-${n++}.db`);
+  }
+  return candidate;
+}
+
+/** Opens the snapshot read-only and runs quick_check on the copy itself. */
+function verifySnapshotFile(file: string): string {
+  const probe = new Database(file, { readonly: true, fileMustExist: true });
+  try {
+    const check = probe.pragma("quick_check", { simple: true });
+    return String(check);
+  } finally {
+    probe.close();
+  }
 }

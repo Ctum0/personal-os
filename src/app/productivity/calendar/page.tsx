@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
-import { todayISO } from "@/lib/time";
+import { todayISO, addDaysISO, startOfWeekISO } from '@/lib/time';
+import { apiFetch, apiSend, errorText } from '@/lib/api/client';
 import {
   Calendar as CalendarIcon,
   Plus,
@@ -16,9 +17,6 @@ import {
   Edit2,
   CheckCircle2,
   CalendarDays,
-  ListTodo,
-  Layers,
-  ArrowRight,
   AlertCircle,
   AlertTriangle,
   Users,
@@ -66,13 +64,67 @@ interface DenseCluster {
   events: PositionedEvent[];
 }
 
+interface WeekDay {
+  iso: string;
+  dayName: string;
+  dayNum: number;
+  monthName: string;
+}
+
+/**
+ * Formats a YYYY-MM-DD calendar day without going through the local timezone.
+ * `new Date('2026-11-08')` is parsed as UTC midnight, so calling getDate() on it
+ * in UTC+13 reports the 8th as the 9th — the exact day shift this page used to
+ * show. Anchoring at UTC noon and formatting in UTC keeps the label stable.
+ */
+function isoDayParts(iso: string): WeekDay | null {
+  if (!iso) return null;
+  const [year, month, day] = iso.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  const date = new Date(Date.UTC(year, month - 1, day, 12));
+  return {
+    iso,
+    dayName: date.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }),
+    dayNum: date.getUTCDate(),
+    monthName: date.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }),
+  };
+}
+
+/** Closes a modal on Escape from anywhere, not just when a child holds focus. */
+function useEscapeToClose(isOpen: boolean, onClose: () => void): void {
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, onClose]);
+}
+
+function formatISODateLong(iso: string): string {
+  const parts = isoDayParts(iso);
+  if (!parts) return '';
+  const date = new Date(`${iso}T12:00:00Z`);
+  return date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
 export default function CalendarPage() {
   const { activeSpaceId } = useWorkspace();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [selectedDate, setSelectedDate] = useState<string>('2026-11-08');
-  const [todayStr, setTodayStr] = useState<string>('2026-11-08');
+  // Dates start empty: the app timezone decides "today", and the server render
+  // must not bake in a build-time literal. The mount effect below fills them.
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [todayStr, setTodayStr] = useState<string>('');
   const [calendarView, setCalendarView] = useState<'day' | 'week' | 'agenda'>('week');
-  
+  const [error, setError] = useState<string | null>(null);
+
   // Operating rules state from authoritative settings
   const [operatingRules, setOperatingRules] = useState({
     workStart: '09:00',
@@ -87,7 +139,7 @@ export default function CalendarPage() {
 
   // New Event Form states
   const [newEventTitle, setNewEventTitle] = useState('');
-  const [newEventDate, setNewEventDate] = useState('2026-11-08');
+  const [newEventDate, setNewEventDate] = useState('');
   const [newStartTime, setNewStartTime] = useState('09:00');
   const [newEndTime, setNewEndTime] = useState('10:00');
   const [newEventType, setNewEventType] = useState('time_block');
@@ -99,83 +151,69 @@ export default function CalendarPage() {
   const [editEndTime, setEditEndTime] = useState('10:00');
   const [editEventType, setEditEventType] = useState('time_block');
 
-  const loadEvents = () => {
-    fetch('/api/calendar')
-      .then(r => r.json())
-      .then(data => setEvents(data.events || []))
-      .catch(() => {});
-  };
+  const loadEvents = useCallback(async () => {
+    try {
+      const spaceQuery = activeSpaceId !== 'all' ? `?spaceId=${encodeURIComponent(activeSpaceId)}` : '';
+      const data = await apiFetch<{ events?: CalendarEvent[] }>(`/api/calendar${spaceQuery}`);
+      setEvents(data.events ?? []);
+      setError(null);
+    } catch (err) {
+      setError(errorText(err));
+      setEvents([]);
+    }
+  }, [activeSpaceId]);
 
-  const loadSettings = () => {
-    fetch('/api/settings')
-      .then(r => r.json())
-      .then(data => {
-        if (data.preferences) {
-          const p = data.preferences;
-          setOperatingRules({
-            workStart: p.workStart || p.workHoursStart || '09:00',
-            workEnd: p.workEnd || p.workHoursEnd || '18:00',
-            maxDailyWorkloadHours: parseFloat(p.maxDailyWorkloadHours || '6.5'),
-          });
-        }
-      })
-      .catch(() => {});
-  };
+  const loadSettings = useCallback(async () => {
+    try {
+      const data = await apiFetch<{ preferences?: Record<string, unknown> }>('/api/settings');
+      const p = data.preferences;
+      if (!p) return;
+      const readString = (value: unknown): string | undefined =>
+        typeof value === 'string' && value ? value : undefined;
+      setOperatingRules({
+        workStart: readString(p.workStart) ?? readString(p.workHoursStart) ?? '09:00',
+        workEnd: readString(p.workEnd) ?? readString(p.workHoursEnd) ?? '18:00',
+        maxDailyWorkloadHours: parseFloat(readString(p.maxDailyWorkloadHours) ?? '6.5'),
+      });
+    } catch (err) {
+      setError(errorText(err));
+    }
+  }, []);
 
   useEffect(() => {
-    const today = todayISO();
-    setTodayStr(today);
-    setSelectedDate(today);
-    setNewEventDate(today);
-    loadEvents();
-    loadSettings();
-  }, [activeSpaceId]);
+    void (async () => {
+      const today = todayISO();
+      setTodayStr(today);
+      setSelectedDate(today);
+      setNewEventDate(today);
+      await Promise.all([loadEvents(), loadSettings()]);
+    })();
+  }, [loadEvents, loadSettings]);
 
   // Compute the 7 days of the currently selected week (Monday to Sunday)
   const weekDays = useMemo(() => {
-    const base = new Date(selectedDate + 'T12:00:00');
-    const dayOfWeek = base.getDay();
-    const distanceToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    const monday = new Date(base);
-    monday.setDate(base.getDate() + distanceToMonday);
-
-    const days = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      const iso = d.toISOString().split('T')[0];
-      const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
-      const dayNum = d.getDate();
-      const monthName = d.toLocaleDateString('en-US', { month: 'short' });
-      days.push({ iso, dayName, dayNum, monthName, dateObj: d });
-    }
-    return days;
+    if (!selectedDate) return [];
+    const monday = startOfWeekISO(selectedDate);
+    return Array.from({ length: 7 }, (_, i) => {
+      const iso = addDaysISO(monday, i);
+      const parts = isoDayParts(iso);
+      return parts ?? { iso, dayName: '', dayNum: 0, monthName: '' };
+    });
   }, [selectedDate]);
 
   // Navigation handlers
   const handlePrev = () => {
-    const d = new Date(selectedDate + 'T12:00:00');
-    if (calendarView === 'week') {
-      d.setDate(d.getDate() - 7);
-    } else {
-      d.setDate(d.getDate() - 1);
-    }
-    setSelectedDate(d.toISOString().split('T')[0]);
+    if (!selectedDate) return;
+    setSelectedDate(addDaysISO(selectedDate, calendarView === 'week' ? -7 : -1));
   };
 
   const handleNext = () => {
-    const d = new Date(selectedDate + 'T12:00:00');
-    if (calendarView === 'week') {
-      d.setDate(d.getDate() + 7);
-    } else {
-      d.setDate(d.getDate() + 1);
-    }
-    setSelectedDate(d.toISOString().split('T')[0]);
+    if (!selectedDate) return;
+    setSelectedDate(addDaysISO(selectedDate, calendarView === 'week' ? 7 : 1));
   };
 
   const handleToday = () => {
-    const today = todayISO();
-    setSelectedDate(today);
+    setSelectedDate(todayISO());
   };
 
   const handleCreateEvent = async (e: React.FormEvent) => {
@@ -185,21 +223,20 @@ export default function CalendarPage() {
     const start = `${newEventDate}T${newStartTime}:00`;
     const end = `${newEventDate}T${newEndTime}:00`;
 
-    await fetch('/api/calendar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    try {
+      await apiSend('/api/calendar', 'POST', {
         title: newEventTitle.trim(),
         startTime: start,
         endTime: end,
         eventType: newEventType,
         spaceId: activeSpaceId !== 'all' ? activeSpaceId : 'space_personal',
-      }),
-    });
-
-    setNewEventTitle('');
-    setIsAddEventOpen(false);
-    loadEvents();
+      });
+      setNewEventTitle('');
+      setIsAddEventOpen(false);
+      await loadEvents();
+    } catch (err) {
+      setError(errorText(err));
+    }
   };
 
   const handleOpenEdit = (ev: CalendarEvent) => {
@@ -221,10 +258,8 @@ export default function CalendarPage() {
     const start = `${editDate}T${editStartTime}:00`;
     const end = `${editDate}T${editEndTime}:00`;
 
-    await fetch('/api/calendar', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    try {
+      await apiSend('/api/calendar', 'PUT', {
         id: editingEvent.id,
         title: editTitle.trim(),
         startTime: start,
@@ -232,23 +267,33 @@ export default function CalendarPage() {
         eventType: editEventType,
         taskId: editingEvent.task_id,
         projectId: editingEvent.project_id,
-      }),
-    });
-
-    setEditingEvent(null);
-    loadEvents();
-  };
-
-  const handleDeleteEvent = async (id: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    await fetch(`/api/calendar?id=${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-    });
-    if (editingEvent?.id === id) {
+      });
       setEditingEvent(null);
+      await loadEvents();
+    } catch (err) {
+      setError(errorText(err));
     }
-    loadEvents();
   };
+
+  /** Returns whether the block was actually deleted, so callers can keep it listed on cancel. */
+  const handleDeleteEvent = async (id: string, e?: React.MouseEvent): Promise<boolean> => {
+    if (e) e.stopPropagation();
+    if (!window.confirm('Delete this time block?')) return false;
+    try {
+      await apiSend(`/api/calendar?id=${encodeURIComponent(id)}`, 'DELETE');
+      if (editingEvent?.id === id) {
+        setEditingEvent(null);
+      }
+      await loadEvents();
+      return true;
+    } catch (err) {
+      setError(errorText(err));
+      return false;
+    }
+  };
+
+  useEscapeToClose(isAddEventOpen, () => setIsAddEventOpen(false));
+  useEscapeToClose(editingEvent !== null, () => setEditingEvent(null));
 
   // 15 hours: 07:00 to 21:00 (ends at 22:00)
   const START_HOUR = 7;
@@ -332,7 +377,7 @@ export default function CalendarPage() {
     const parsed = sorted.map(ev => {
       const start = new Date(ev.start_time);
       const end = new Date(ev.end_time);
-      let startMs = start.getTime();
+      const startMs = start.getTime();
       let endMs = end.getTime();
       if (endMs <= startMs) endMs = startMs + 30 * 60000;
 
@@ -534,13 +579,14 @@ export default function CalendarPage() {
 
   // Format header range text
   const headerRangeLabel = useMemo(() => {
+    if (!selectedDate) return '';
     if (calendarView === 'week') {
       const first = weekDays[0];
-      const last = weekDays[6];
-      return `${first.monthName} ${first.dayNum} – ${last.monthName} ${last.dayNum}, ${first.dateObj.getFullYear()}`;
+      const last = weekDays[weekDays.length - 1];
+      if (!first || !last) return '';
+      return `${first.monthName} ${first.dayNum} – ${last.monthName} ${last.dayNum}, ${first.iso.slice(0, 4)}`;
     }
-    const d = new Date(selectedDate + 'T12:00:00');
-    return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+    return formatISODateLong(selectedDate);
   }, [calendarView, weekDays, selectedDate]);
 
   // Agenda events: today + upcoming only, sorted chronologically (past events are history, not agenda)
@@ -655,6 +701,12 @@ export default function CalendarPage() {
         </div>
       </div>
 
+      {error && (
+        <div role="alert" className="p-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-xs text-rose-200">
+          {error}
+        </div>
+      )}
+
       {/* Date Header Sub-bar & Authoritative Operating Hours Synchronization */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-zinc-400 bg-zinc-950/60 border border-white/[0.06] rounded-lg px-4 py-2.5">
         <div className="flex items-center gap-3">
@@ -686,12 +738,17 @@ export default function CalendarPage() {
 
       {/* Add Time Block Modal */}
       {isAddEventOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-block-modal-title"
+        >
           <div className="bg-zinc-900 border border-white/[0.1] rounded-xl max-w-md w-full p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
               <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-zinc-300" />
-                <h3 className="text-sm font-semibold text-zinc-100">Schedule Time Block</h3>
+                <Clock className="w-4 h-4 text-zinc-300" aria-hidden="true" />
+                <h3 id="add-block-modal-title" className="text-sm font-semibold text-zinc-100">Schedule Time Block</h3>
               </div>
               <button
                 type="button"
@@ -705,8 +762,9 @@ export default function CalendarPage() {
 
             <form onSubmit={handleCreateEvent} className="space-y-4 text-xs">
               <div>
-                <label className="block text-[11px] font-medium text-zinc-400 mb-1">Title</label>
+                <label htmlFor="new-event-title" className="block text-[11px] font-medium text-zinc-400 mb-1">Title</label>
                 <input
+                  id="new-event-title"
                   type="text"
                   required
                   autoFocus
@@ -719,8 +777,9 @@ export default function CalendarPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-medium text-zinc-400 mb-1">Date</label>
+                  <label htmlFor="new-event-date" className="block text-[11px] font-medium text-zinc-400 mb-1">Date</label>
                   <input
+                    id="new-event-date"
                     type="date"
                     required
                     value={newEventDate}
@@ -729,8 +788,9 @@ export default function CalendarPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-zinc-400 mb-1">Block Type</label>
+                  <label htmlFor="new-event-type" className="block text-[11px] font-medium text-zinc-400 mb-1">Block Type</label>
                   <select
+                    id="new-event-type"
                     value={newEventType}
                     onChange={e => setNewEventType(e.target.value)}
                     className="w-full bg-zinc-950 border border-white/[0.1] rounded-md px-2.5 py-1.5 text-zinc-100 focus:outline-none focus:border-zinc-400 text-xs"
@@ -745,8 +805,9 @@ export default function CalendarPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-medium text-zinc-400 mb-1">Start Time</label>
+                  <label htmlFor="new-event-start" className="block text-[11px] font-medium text-zinc-400 mb-1">Start Time</label>
                   <input
+                    id="new-event-start"
                     type="time"
                     required
                     value={newStartTime}
@@ -755,8 +816,9 @@ export default function CalendarPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-zinc-400 mb-1">End Time</label>
+                  <label htmlFor="new-event-end" className="block text-[11px] font-medium text-zinc-400 mb-1">End Time</label>
                   <input
+                    id="new-event-end"
                     type="time"
                     required
                     value={newEndTime}
@@ -788,12 +850,17 @@ export default function CalendarPage() {
 
       {/* Edit / Reschedule Modal */}
       {editingEvent && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-block-modal-title"
+        >
           <div className="bg-zinc-900 border border-white/[0.1] rounded-xl max-w-md w-full p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
               <div className="flex items-center gap-2">
-                <Edit2 className="w-4 h-4 text-zinc-300" />
-                <h3 className="text-sm font-semibold text-zinc-100">Edit & Reschedule Block</h3>
+                <Edit2 className="w-4 h-4 text-zinc-300" aria-hidden="true" />
+                <h3 id="edit-block-modal-title" className="text-sm font-semibold text-zinc-100">Edit &amp; Reschedule Block</h3>
               </div>
               <button
                 type="button"
@@ -807,8 +874,9 @@ export default function CalendarPage() {
 
             <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
               <div>
-                <label className="block text-[11px] font-medium text-zinc-400 mb-1">Title</label>
+                <label htmlFor="edit-event-title" className="block text-[11px] font-medium text-zinc-400 mb-1">Title</label>
                 <input
+                  id="edit-event-title"
                   type="text"
                   required
                   value={editTitle}
@@ -819,8 +887,9 @@ export default function CalendarPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-medium text-zinc-400 mb-1">Target Date</label>
+                  <label htmlFor="edit-event-date" className="block text-[11px] font-medium text-zinc-400 mb-1">Target Date</label>
                   <input
+                    id="edit-event-date"
                     type="date"
                     required
                     value={editDate}
@@ -829,8 +898,9 @@ export default function CalendarPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-zinc-400 mb-1">Block Type</label>
+                  <label htmlFor="edit-event-type" className="block text-[11px] font-medium text-zinc-400 mb-1">Block Type</label>
                   <select
+                    id="edit-event-type"
                     value={editEventType}
                     onChange={e => setEditEventType(e.target.value)}
                     className="w-full bg-zinc-950 border border-white/[0.1] rounded-md px-2.5 py-1.5 text-zinc-100 focus:outline-none focus:border-zinc-400 text-xs"
@@ -845,8 +915,9 @@ export default function CalendarPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-medium text-zinc-400 mb-1">Start Time</label>
+                  <label htmlFor="edit-event-start" className="block text-[11px] font-medium text-zinc-400 mb-1">Start Time</label>
                   <input
+                    id="edit-event-start"
                     type="time"
                     required
                     value={editStartTime}
@@ -855,8 +926,9 @@ export default function CalendarPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-zinc-400 mb-1">End Time</label>
+                  <label htmlFor="edit-event-end" className="block text-[11px] font-medium text-zinc-400 mb-1">End Time</label>
                   <input
+                    id="edit-event-end"
                     type="time"
                     required
                     value={editEndTime}
@@ -937,7 +1009,7 @@ export default function CalendarPage() {
               </span>
             </div>
 
-            <div className="overflow-y-auto space-y-2 pr-1 flex-1">
+            <div tabIndex={0} role="region" aria-label="Overlapping events" className="overflow-y-auto space-y-2 pr-1 flex-1">
               {selectedDenseCluster.events.map((ev, i) => {
                 const meta = getEventSourceMeta(ev);
                 const Icon = meta.icon;
@@ -984,13 +1056,15 @@ export default function CalendarPage() {
                       <button
                         type="button"
                         onClick={(e) => {
-                          handleDeleteEvent(ev.id, e);
-                          setSelectedDenseCluster(prev => {
-                            if (!prev) return null;
-                            const nextEvents = prev.events.filter(x => x.id !== ev.id);
-                            if (nextEvents.length === 0) return null;
-                            return { ...prev, events: nextEvents };
-                          });
+                          void (async () => {
+                            if (!(await handleDeleteEvent(ev.id, e))) return;
+                            setSelectedDenseCluster(prev => {
+                              if (!prev) return null;
+                              const nextEvents = prev.events.filter(x => x.id !== ev.id);
+                              if (nextEvents.length === 0) return null;
+                              return { ...prev, events: nextEvents };
+                            });
+                          })();
                         }}
                         className="p-1 text-zinc-400 hover:text-rose-400 rounded transition-colors"
                         title="Delete event"
@@ -1056,7 +1130,12 @@ export default function CalendarPage() {
           </div>
 
           {/* Time Grid with scroll */}
-          <div className="relative overflow-y-auto max-h-[720px] select-none">
+          <div
+            className="relative overflow-y-auto max-h-[720px] select-none"
+            tabIndex={0}
+            role="region"
+            aria-label="Weekly time grid"
+          >
             <div
               className="grid grid-cols-[70px_repeat(7,1fr)] relative"
               style={{ height: `${hours.length * ROW_HEIGHT}px` }}
@@ -1139,7 +1218,7 @@ export default function CalendarPage() {
                         }}
                         className="absolute z-25 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[9px] font-mono font-semibold shadow-md backdrop-blur-xs transition-all hover:scale-105 cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-amber-400"
                         title={`High overlap density: ${cluster.events.length} concurrent events (${cluster.startFormatted} – ${cluster.endFormatted}). Click to inspect conflict details.`}
-                        aria-label={`High density cluster: ${cluster.events.length} concurrent events. Press Enter to view list.`}
+                        aria-label={`+${cluster.events.length} dense · high overlap density, ${cluster.events.length} concurrent events · press Enter to view the list`}
                       >
                         <AlertCircle className="w-2.5 h-2.5 text-amber-400" />
                         <span>+{cluster.events.length} dense</span>
@@ -1158,7 +1237,7 @@ export default function CalendarPage() {
                           data-event-id={ev.id}
                           role="button"
                           tabIndex={0}
-                          aria-label={`${ev.title}, ${startFormatted} to ${endFormatted}, ${sourceMeta.label}${ev.crossesMidnight ? ', continues next day' : ''}${ev.isOutsideWorkingHours ? ', off-hours' : ''}. Press Enter to edit.`}
+                          aria-describedby={`event-meta-${ev.id}`}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleOpenEdit(ev);
@@ -1192,6 +1271,12 @@ export default function CalendarPage() {
                               <span className="text-[9px] opacity-60">Off-hours</span>
                             )}
                           </div>
+                          <span id={`event-meta-${ev.id}`} className="sr-only">
+                            {sourceMeta.label}
+                            {ev.crossesMidnight ? ', continues next day' : ''}
+                            {ev.isOutsideWorkingHours ? ', outside working hours' : ''}
+                            . Press Enter to edit or reschedule.
+                          </span>
                         </div>
                       );
                     })}
@@ -1224,7 +1309,7 @@ export default function CalendarPage() {
               </div>
             </div>
 
-            <div className="relative overflow-y-auto max-h-[700px] select-none">
+            <div tabIndex={0} role="region" aria-label="Day time grid" className="relative overflow-y-auto max-h-[700px] select-none">
               <div
                 className="grid grid-cols-[80px_1fr] relative"
                 style={{ height: `${hours.length * ROW_HEIGHT}px` }}
@@ -1289,7 +1374,7 @@ export default function CalendarPage() {
                         data-event-id={ev.id}
                         role="button"
                         tabIndex={0}
-                        aria-label={`${ev.title}, ${startFormatted} to ${endFormatted}, ${sourceMeta.label}${ev.crossesMidnight ? ', continues next day' : ''}${ev.isOutsideWorkingHours ? ', off-hours' : ''}. Press Enter to edit.`}
+                        aria-describedby={`event-meta-${ev.id}`}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleOpenEdit(ev);
@@ -1348,6 +1433,12 @@ export default function CalendarPage() {
                         {ev.description && (
                           <p className="text-[11px] opacity-75 mt-1">{ev.description}</p>
                         )}
+                        <span id={`event-meta-${ev.id}`} className="sr-only">
+                          {ev.crossesMidnight ? 'Continues next day. ' : ''}
+                          {ev.isContinuationFromPrevDay ? 'Continued from previous day. ' : ''}
+                          {ev.isOutsideWorkingHours ? 'Outside working hours. ' : ''}
+                          Press Enter to edit or reschedule.
+                        </span>
                       </div>
                     );
                   })}
@@ -1441,7 +1532,6 @@ export default function CalendarPage() {
                 const startTimeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
                 const endTimeStr = new Date(ev.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
                 const sourceMeta = getEventSourceMeta(ev);
-                const SourceIcon = sourceMeta.icon;
 
                 const startH = dateObj.getHours();
                 const endH = new Date(ev.end_time).getHours();

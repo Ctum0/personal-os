@@ -20,10 +20,14 @@ export const QUARANTINED_STATUS = 'quarantined';
 
 /**
  * SQL fragment to AND into any `tasks` query so that only operationally
- * visible tasks are returned. Use the alias the surrounding query uses
- * for the tasks table (defaults to `t`).
+ * visible tasks are returned.
+ *
+ * `alias` is REQUIRED and must be the alias (or bare table name) that the
+ * surrounding query actually uses for `tasks`. A default of `t` silently
+ * produced `no such column: t.status` on every unaliased query — the failure
+ * mode is a 500 at runtime, so the compiler is asked to prevent it instead.
  */
-export function taskVisibleClause(alias = 't'): string {
+export function taskVisibleClause(alias: string): string {
   return `(${alias}.status != '${QUARANTINED_STATUS}')`;
 }
 

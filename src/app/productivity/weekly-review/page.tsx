@@ -1,17 +1,16 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
 import { todayISO, addDaysISO } from "@/lib/time";
+import { apiFetch, apiSend, errorText } from "@/lib/api/client";
 import { useTodayISO } from "@/lib/time/useTodayISO";
 import {
   CalendarCheck,
   CheckCircle2,
   AlertCircle,
   Flame,
-  Target,
   Briefcase,
-  TrendingUp,
   Clock,
   ArrowRight,
   ShieldCheck,
@@ -20,6 +19,47 @@ import {
   Check,
   History,
 } from 'lucide-react';
+
+interface StoredWeeklyReview {
+  id: string;
+  week_start: string;
+  week_end: string | null;
+  summary: string | null;
+  payload?: {
+    completedCount?: number;
+    openCount?: number;
+    habitsCount?: number;
+    reflectionNotes?: string;
+    nextWeekCommitments?: string;
+  };
+  created_at: string;
+}
+
+interface TaskRow {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  due_date: string | null;
+  completion_at: string | null;
+}
+
+interface HabitRow {
+  id: string;
+  title: string;
+  streak: number;
+  currentStreak?: number;
+}
+
+interface ProjectRow {
+  id: string;
+  name: string;
+  status: string;
+}
+
+interface SafeToSpendSummary {
+  safeToSpendAmount: string | number | null;
+}
 
 interface HistoricalWeeklyReview {
   id: string;
@@ -34,140 +74,114 @@ interface HistoricalWeeklyReview {
 
 export default function WeeklyReviewPage() {
   const { activeSpaceId, setSelectedExplainer } = useWorkspace();
-  const [tasks, setTasks] = useState<any[]>([]);
-  const [habits, setHabits] = useState<any[]>([]);
-  const [projects, setProjects] = useState<any[]>([]);
-  const [goals, setGoals] = useState<any[]>([]);
-  const [safeToSpend, setSafeToSpend] = useState<any | null>(null);
+  const [tasks, setTasks] = useState<TaskRow[]>([]);
+  const [habits, setHabits] = useState<HabitRow[]>([]);
+  const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [safeToSpend, setSafeToSpend] = useState<SafeToSpendSummary | null>(null);
   const [reflectionNotes, setReflectionNotes] = useState('');
   const [nextWeekCommitments, setNextWeekCommitments] = useState('');
   const [isSaved, setIsSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [pastReviews, setPastReviews] = useState<HistoricalWeeklyReview[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-  const loadData = () => {
-    const spaceQuery = activeSpaceId !== 'all' ? `?spaceId=${activeSpaceId}` : '';
-    Promise.all([
-      fetch(`/api/tasks${spaceQuery}`).then(r => r.json()),
-      fetch(`/api/habits${spaceQuery}`).then(r => r.json()),
-      fetch(`/api/projects${spaceQuery}`).then(r => r.json()),
-      fetch(`/api/goals${spaceQuery}`).then(r => r.json()),
-      fetch('/api/finance/safe-to-spend').then(r => r.json()),
-      fetch('/api/settings').then(r => r.json()),
-    ]).then(([tData, hData, pData, gData, stsData, settingsData]) => {
-      // Quarantine filter: strictly exclude quarantined tasks
-      const cleanTasks = (tData.tasks || []).filter((t: any) =>
-        t.status !== 'quarantined'
-      );
-      setTasks(cleanTasks);
-      setHabits(hData.habits || []);
-      setProjects(pData.projects || []);
-      setGoals(gData.goals || []);
-      setSafeToSpend(stsData);
+  /**
+   * Weekly reviews live in the `weekly_reviews` table (migration v4 made it the
+   * authoritative store). Reading and writing `users.preferences.weeklyReviews`
+   * instead left that table permanently empty and put review text in an
+   * unbounded JSON blob.
+   */
+  const loadData = useCallback(async () => {
+    const spaceQuery = activeSpaceId !== 'all' ? `?spaceId=${encodeURIComponent(activeSpaceId)}` : '';
+    setError(null);
+    try {
+      const [tData, hData, pData, stsData, reviewsData] = await Promise.all([
+        apiFetch<{ tasks?: TaskRow[] }>(`/api/tasks${spaceQuery}`),
+        apiFetch<{ habits?: HabitRow[] }>(`/api/habits${spaceQuery}`),
+        apiFetch<{ projects?: ProjectRow[] }>(`/api/projects${spaceQuery}`),
+        apiFetch<{ safeToSpend?: SafeToSpendSummary }>('/api/finance/safe-to-spend'),
+        apiFetch<{ reviews?: StoredWeeklyReview[] }>('/api/weekly-review?limit=12'),
+      ]);
+      setTasks(tData.tasks ?? []);
+      setHabits(hData.habits ?? []);
+      setProjects(pData.projects ?? []);
+      setSafeToSpend(stsData.safeToSpend ?? null);
 
-      // Load persisted historical weekly reviews from database (authoritative source of truth)
-      const dbReviews: HistoricalWeeklyReview[] = settingsData?.preferences?.weeklyReviews || [];
-      let authoritativeReviews = dbReviews;
-
-      if (dbReviews.length > 0) {
-        // Cache to localStorage for offline write-through
-        try {
-          localStorage.setItem('personal_os_weekly_reviews', JSON.stringify(dbReviews));
-        } catch {}
-      } else {
-        // Fallback to localStorage and migrate to database
-        try {
-          const local = localStorage.getItem('personal_os_weekly_reviews');
-          if (local) {
-            const parsed = JSON.parse(local);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              authoritativeReviews = parsed;
-              // Migrate local reviews to database so it becomes the single source of truth
-              fetch('/api/settings', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ weeklyReviews: parsed }),
-              }).catch(() => {});
-            }
-          }
-        } catch {}
+      const mapped: HistoricalWeeklyReview[] = (reviewsData.reviews ?? []).map(review => {
+        const payload = review.payload ?? {};
+        return {
+          id: review.id,
+          date: review.week_end ?? review.week_start,
+          completedCount: Number(payload.completedCount ?? 0),
+          openCount: Number(payload.openCount ?? 0),
+          habitsCount: Number(payload.habitsCount ?? 0),
+          reflectionNotes: String(payload.reflectionNotes ?? review.summary ?? ''),
+          nextWeekCommitments: String(payload.nextWeekCommitments ?? ''),
+          savedAt: review.created_at ?? new Date().toISOString(),
+        };
+      });
+      setPastReviews(mapped);
+      if (mapped.length > 0) {
+        setReflectionNotes(previous => previous || mapped[0].reflectionNotes);
+        setNextWeekCommitments(previous => previous || mapped[0].nextWeekCommitments);
       }
-
-      setPastReviews(authoritativeReviews);
-      if (authoritativeReviews.length > 0) {
-        const latest = authoritativeReviews[0];
-        setReflectionNotes(prev => prev || latest.reflectionNotes || '');
-        setNextWeekCommitments(prev => prev || latest.nextWeekCommitments || '');
-      }
-    });
-  };
-
-  useEffect(() => {
-    loadData();
+    } catch (err) {
+      setError(errorText(err));
+    }
   }, [activeSpaceId]);
 
-  // 7-day rolling review window (matches the explainer's "Active 7-day rolling evaluation window")
-  const [windowStart, setWindowStart] = useState('');
-  const currentDate = useTodayISO();
-
   useEffect(() => {
-    setWindowStart(addDaysISO(todayISO(), -7));
-  }, []);
+    void (async () => {
+      await loadData();
+    })();
+  }, [loadData]);
 
-  const completedTasks = tasks.filter(t =>
-    t.status === 'completed' &&
-    (!windowStart || (t.completion_at && t.completion_at.slice(0, 10) >= windowStart) || t.due_date >= windowStart)
+  // 7-day rolling review window (matches the explainer's "Active 7-day rolling evaluation window")
+  const currentDate = useTodayISO();
+  const windowStart = currentDate ? addDaysISO(currentDate, -7) : '';
+
+  const completedTasks = tasks.filter(
+    t =>
+      t.status === 'completed' &&
+      (!windowStart ||
+        (t.completion_at !== null && t.completion_at.slice(0, 10) >= windowStart) ||
+        (t.due_date !== null && t.due_date >= windowStart))
   );
   const openTasks = tasks.filter(t => t.status !== 'completed');
-  const blockedProjects = projects.filter(p => p.status === 'paused' || p.status === 'active');
   const upcomingDeadlines = useMemo(() => {
     // [defer] today's read must not happen inside render (prerender-safe)
     if (!currentDate) return [];
     const in7Days = addDaysISO(currentDate, 7);
     return openTasks
-      .filter(t => t.due_date && t.due_date >= currentDate && t.due_date <= in7Days)
+      .filter((t): t is TaskRow & { due_date: string } =>
+        t.due_date !== null && t.due_date >= currentDate && t.due_date <= in7Days
+      )
       .sort((a, b) => a.due_date.localeCompare(b.due_date));
   }, [openTasks, currentDate]);
 
   const handleSaveReview = async () => {
     setIsSaving(true);
+    setError(null);
     const today = todayISO();
-    const newReview: HistoricalWeeklyReview = {
-      id: `rev_${Date.now()}`,
-      date: today,
-      completedCount: completedTasks.length,
-      openCount: openTasks.length,
-      habitsCount: habits.length,
-      reflectionNotes: reflectionNotes.trim(),
-      nextWeekCommitments: nextWeekCommitments.trim(),
-      savedAt: new Date().toISOString(),
-    };
-
-    const updatedReviews = [newReview, ...pastReviews.filter(r => r.date !== today)];
-    setPastReviews(updatedReviews);
-
-    // 1. Primary persistence: SQLite users.preferences via PUT /api/settings
+    const weekStart = addDaysISO(today, -6);
     try {
-      const res = await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ weeklyReviews: updatedReviews }),
+      await apiSend('/api/weekly-review', 'POST', {
+        weekStart,
+        weekEnd: today,
+        summary: reflectionNotes.trim() || null,
+        payload: {
+          completedCount: completedTasks.length,
+          openCount: openTasks.length,
+          habitsCount: habits.length,
+          reflectionNotes: reflectionNotes.trim(),
+          nextWeekCommitments: nextWeekCommitments.trim(),
+        },
       });
-      if (!res.ok) throw new Error('Database save failed');
-
-      // 2. Write-through cache to local storage
-      try {
-        localStorage.setItem('personal_os_weekly_reviews', JSON.stringify(updatedReviews));
-      } catch {}
-
       setIsSaved(true);
-      setTimeout(() => setIsSaved(false), 3500);
+      window.setTimeout(() => setIsSaved(false), 3500);
+      await loadData();
     } catch (err) {
-      console.error('Failed to save weekly review to database', err);
-      // Still write-through to localStorage as backup
-      try {
-        localStorage.setItem('personal_os_weekly_reviews', JSON.stringify(updatedReviews));
-      } catch {}
+      setError(errorText(err));
     } finally {
       setIsSaving(false);
     }
@@ -184,10 +198,10 @@ export default function WeeklyReviewPage() {
       excludedEntities: ['Soft-deleted items', 'Unverified speculative projections', 'Quarantined test fixtures'],
       assumptions: ['User completes weekly reflection with honest appraisal of blockers'],
       inputs: {
-        completedTasksCount: completedTasks.length,
-        openTasksCount: openTasks.length,
-        activeProjectsCount: projects.length,
-        activeHabitsCount: habits.length,
+        completedTasksCount: String(completedTasks.length),
+        openTasksCount: String(openTasks.length),
+        activeProjectsCount: String(projects.length),
+        activeHabitsCount: String(habits.length),
       },
       lastCalculatedAt: new Date().toISOString(),
     });
@@ -225,7 +239,7 @@ export default function WeeklyReviewPage() {
             disabled={isSaving}
             className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-semibold transition-colors shadow-xs ${
               isSaved
-                ? 'bg-emerald-600 text-white'
+                ? 'bg-emerald-600 text-zinc-950'
                 : 'bg-zinc-100 hover:bg-white text-zinc-950'
             }`}
           >
@@ -234,6 +248,12 @@ export default function WeeklyReviewPage() {
           </button>
         </div>
       </div>
+
+      {error && (
+        <div role="alert" className="p-3 rounded-lg border border-rose-500/30 bg-rose-500/10 text-xs text-rose-200">
+          {error}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl space-y-1">
@@ -269,7 +289,7 @@ export default function WeeklyReviewPage() {
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="text-2xl font-bold text-zinc-100">
-            {safeToSpend?.safeToSpendAmount ? `$${parseFloat(safeToSpend.safeToSpendAmount).toLocaleString()}` : '$0'}
+            {safeToSpend?.safeToSpendAmount ? `$${parseFloat(String(safeToSpend.safeToSpendAmount)).toLocaleString()}` : '$0'}
           </div>
           <p className="text-[11px] text-zinc-500">Available cash buffer</p>
         </div>
@@ -285,7 +305,7 @@ export default function WeeklyReviewPage() {
             </h2>
             <span className="text-[11px] font-mono text-zinc-500">last 7 days window</span>
           </div>
-          <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+          <div tabIndex={0} role="region" aria-label="Completed tasks in this review window" className="space-y-2 max-h-60 overflow-y-auto pr-1">
             {completedTasks.length === 0 ? (
               <p className="text-xs text-zinc-500 italic">No tasks completed yet in this review cycle.</p>
             ) : (
@@ -309,7 +329,7 @@ export default function WeeklyReviewPage() {
               <span>2. Habit Consistency Check</span>
             </h2>
           </div>
-          <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+          <div tabIndex={0} role="region" aria-label="Habit consistency in this review window" className="space-y-2 max-h-60 overflow-y-auto pr-1">
             {habits.length === 0 ? (
               <p className="text-xs text-zinc-500 italic">No active habits logged.</p>
             ) : (
@@ -334,7 +354,7 @@ export default function WeeklyReviewPage() {
               <span>3. Project Momentum & Blocker Scan</span>
             </h2>
           </div>
-          <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+          <div tabIndex={0} role="region" aria-label="Project momentum in this review window" className="space-y-2 max-h-60 overflow-y-auto pr-1">
             {projects.map(p => (
               <div key={p.id} className="p-3 bg-zinc-950/60 border border-zinc-800/80 rounded-lg space-y-1.5 text-xs">
                 <div className="flex items-center justify-between">
@@ -362,7 +382,7 @@ export default function WeeklyReviewPage() {
             </h2>
             <span className="text-xs text-zinc-400">{upcomingDeadlines.length} scheduled</span>
           </div>
-          <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+          <div tabIndex={0} role="region" aria-label="Upcoming deadlines for next week" className="space-y-2 max-h-60 overflow-y-auto pr-1">
             {upcomingDeadlines.length === 0 ? (
               <p className="text-xs text-zinc-500 italic">No scheduled deadlines.</p>
             ) : (
@@ -387,7 +407,11 @@ export default function WeeklyReviewPage() {
           <p className="text-xs text-zinc-400">
             Document what worked, what caused friction, and lessons learned without speculative conclusions.
           </p>
+          <label htmlFor="reflection-notes" className="sr-only">
+            Weekly reflection notes
+          </label>
           <textarea
+            id="reflection-notes"
             value={reflectionNotes}
             onChange={e => setReflectionNotes(e.target.value)}
             placeholder="Focus was strong early in the week; mid-week meetings caused schedule drift. Project delivery is on track..."
@@ -401,7 +425,11 @@ export default function WeeklyReviewPage() {
           <p className="text-xs text-zinc-400">
             Define top 3 priority objectives for next week.
           </p>
+          <label htmlFor="next-week-commitments" className="sr-only">
+            Next week focus commitments
+          </label>
           <textarea
+            id="next-week-commitments"
             value={nextWeekCommitments}
             onChange={e => setNextWeekCommitments(e.target.value)}
             placeholder="1. Complete MVP Milestone A&#10;2. Reconcile monthly credit card ledger&#10;3. Maintain morning focus routine 5/5 days"
@@ -418,7 +446,7 @@ export default function WeeklyReviewPage() {
             <History className="w-4 h-4 text-zinc-400" />
             <h2 className="text-sm font-semibold text-zinc-200">Historical Review Archive ({pastReviews.length})</h2>
           </div>
-          <div className="divide-y divide-white/[0.04] max-h-72 overflow-y-auto">
+          <div tabIndex={0} role="region" aria-label="Archived weekly reviews" className="divide-y divide-white/[0.04] max-h-72 overflow-y-auto">
             {pastReviews.map(rev => (
               <div key={rev.id} className="py-3 text-xs space-y-1">
                 <div className="flex items-center justify-between text-zinc-400 font-mono">

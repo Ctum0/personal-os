@@ -1,3 +1,10 @@
+# pnpm 12 settings home (the "pnpm" field in package.json is no longer read).
+#
+# `unrs-resolver` is the only dependency in this tree with an install script; its
+# postinstall selects the correct native binding. Approving exactly that package
+# keeps `--frozen-lockfile` installs reproducible in CI and in the Docker build
+# instead of failing with ERR_PNPM_IGNORED_BUILDS. Every other package —
+# including better-sqlite3, which ships prebuilt binaries for musl — stays
+# unapproved, so no other install script can run.
 allowBuilds:
-  sharp: false
-  unrs-resolver: false
+  unrs-resolver: true

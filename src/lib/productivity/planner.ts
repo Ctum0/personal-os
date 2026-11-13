@@ -1,5 +1,42 @@
 import type Database from 'better-sqlite3';
-import { todayISO, toISODate, addDaysISO } from "@/lib/time";
+import { todayISO, addDaysISO } from "@/lib/time";
+import { calculateHabitStreak } from "@/lib/productivity/engine";
+
+/**
+ * The subset of `users.preferences` the planner reads. Values arrive as
+ * untrusted JSON, so every field is optional and loosely typed; callers
+ * coerce them (`parseFloat`/`parseInt`/`Boolean`) as they consume them.
+ */
+export interface PlanningPreferences {
+  workStart?: string;
+  workEnd?: string;
+  workHoursStart?: string;
+  workHoursEnd?: string;
+  maxDailyWorkloadHours?: string | number;
+  focusWindowMinutes?: string | number;
+  shortBreakMinutes?: string | number;
+  enableFinancialInPlanning?: boolean;
+}
+
+/** One persisted planning conversation turn. */
+export interface PlanningConversationTurn {
+  role: 'user' | 'assistant';
+  content: string;
+  /** Absent on turns restored from older persisted sessions. */
+  timestamp?: string;
+  revisedPlan?: DailyPlanProposal;
+}
+
+/** Row shape of `planning_sessions` / `ai_planning_sessions`. */
+interface PlanningSessionRow {
+  id: string;
+  target_date: string;
+  status: string;
+  conversation: string | null;
+  extracted_state: string | null;
+  proposed_plan: string | null;
+  updated_at: string;
+}
 
 export interface ParsedCommitment {
   id: string;
@@ -16,6 +53,8 @@ export interface ParsedCommitment {
   sourceText?: string;
   taskId?: string;
   linkedTaskId?: string;
+  /** Set by callers that reschedule an already-persisted task. */
+  isExistingTask?: boolean;
 }
 
 export interface PlanUncertainty {
@@ -128,6 +167,9 @@ export interface PlanningContext {
     maxDailyWorkloadHours: number;
     focusWindowMinutes: number;
     shortBreakMinutes: number;
+    /** Optional full-day bounds; the scheduler falls back to 07:00–22:30. */
+    dayStart?: string;
+    dayEnd?: string;
   };
   existingEvents?: Array<{ id: string; title: string; startTime: string; endTime: string }>;
   existingCalendarEvents?: Array<{ id: string; title: string; startTime: string; endTime: string }>;
@@ -153,17 +195,18 @@ export function getPlanningContext(
 ): PlanningContext {
   // 1. Operating rules from user preferences or fallback
   const user = db.prepare('SELECT preferences FROM users WHERE tenant_id = ? LIMIT 1').get(tenantId) as { preferences?: string } | undefined;
-  let prefs: any = {};
+  let prefs: PlanningPreferences = {};
   try {
-    prefs = JSON.parse(user?.preferences || '{}');
+    const parsed: unknown = JSON.parse(user?.preferences || '{}');
+    if (parsed && typeof parsed === 'object') prefs = parsed as PlanningPreferences;
   } catch {}
 
   const operatingRules = {
     workStart: prefs.workStart || prefs.workHoursStart || '09:00',
     workEnd: prefs.workEnd || prefs.workHoursEnd || '18:00',
-    maxDailyWorkloadHours: parseFloat(prefs.maxDailyWorkloadHours || '6.5'),
-    focusWindowMinutes: parseInt(prefs.focusWindowMinutes || '50', 10),
-    shortBreakMinutes: parseInt(prefs.shortBreakMinutes || '10', 10),
+    maxDailyWorkloadHours: parseFloat(String(prefs.maxDailyWorkloadHours || '6.5')),
+    focusWindowMinutes: parseInt(String(prefs.focusWindowMinutes || '50'), 10),
+    shortBreakMinutes: parseInt(String(prefs.shortBreakMinutes || '10'), 10),
   };
 
   const workingHours = {
@@ -183,22 +226,22 @@ export function getPlanningContext(
   };
 
   if (enableFinancialInPlanning) {
-    try {
-      const hasBills = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='bills'").get();
-      let bills: Array<{ id: string; name: string; amount: string | number; dueDate: string }> = [];
-      if (hasBills) {
-        bills = db.prepare(`
-          SELECT id, name, amount, due_date as dueDate
-          FROM bills
-          WHERE tenant_id = ? AND is_active = 1 AND due_date BETWEEN ? AND date(?, '+7 days')
-        `).all(tenantId, targetDate, targetDate) as any[];
-      }
-      financialContext = {
-        enabled: true,
-        quarantined: false,
-        upcomingBills: bills,
-      };
-    } catch {}
+    // Real obligations live in `recurring_financial_rules` (there is no `bills`
+    // table); the old query silently returned an empty list forever, so the
+    // opt-in never actually contributed anything to planning.
+    const bills = db.prepare(`
+      SELECT id, name, expected_amount as amount, next_due_date as dueDate
+      FROM recurring_financial_rules
+      WHERE tenant_id = ? AND is_active = 1
+        AND rule_type IN ('bill', 'subscription', 'loan_payment')
+        AND next_due_date BETWEEN ? AND date(?, '+7 days')
+      ORDER BY next_due_date ASC
+    `).all(tenantId, targetDate, targetDate) as Array<{ id: string; name: string; amount: string | number; dueDate: string }>;
+    financialContext = {
+      enabled: true,
+      quarantined: false,
+      upcomingBills: bills,
+    };
   }
 
   // 3. Existing calendar events on target date (exclude daily_plan_blocks from prior revisions)
@@ -257,15 +300,19 @@ export function getPlanningContext(
     };
   });
 
-  // 6. Active habits with streaks and target times
-  const scheduledHabits = (db.prepare(`
-    SELECT id, title, time_of_day as targetTime
+  // 6. Active habits with real streaks and target times.
+  // Streaks come from `habit_logs`; the scheduler previously received a constant
+  // `3`, so its reasoning was based on data that did not exist.
+  const habitRows = db.prepare(`
+    SELECT id, title, time_of_day as targetTime, minimum_threshold as minimumThreshold
     FROM habits
     WHERE tenant_id = ? AND is_paused = 0
-  `).all(tenantId) as Array<{ id: string; title: string; targetTime?: string }>).map(h => ({
+    ORDER BY title ASC
+  `).all(tenantId) as Array<{ id: string; title: string; targetTime?: string; minimumThreshold: number }>;
+  const scheduledHabits = habitRows.map(h => ({
     id: h.id,
     title: h.title,
-    streak: 3, // calculated or persisted
+    streak: calculateHabitStreak(db, tenantId, h.id, targetDate)?.currentStreak ?? 0,
     targetTime: h.targetTime,
   }));
 
@@ -301,6 +348,9 @@ export function parseUnstructuredPlanInput(
   targetDate: string = todayISO(),
   context?: PlanningContext
 ): { commitments: ParsedCommitment[]; uncertainties: PlanUncertainty[]; objective: string } {
+  // `context` remains part of the public signature (callers pass the live
+  // planning context) but extraction is purely textual today.
+  void context;
   const commitments: ParsedCommitment[] = [];
   const uncertainties: PlanUncertainty[] = [];
   const lower = input.toLowerCase();
@@ -496,17 +546,20 @@ export function buildIntelligentDailySchedule(
   requestedCommitments: ParsedCommitment[]
 ): DailyPlanProposal {
   const { targetDate } = context;
-  const rawEvents = context.existingEvents || (context as any).existingCalendarEvents || [];
-  const startDayTime = (context.operatingRules as any)?.dayStart || '07:00';
-  const endDayTime = (context.operatingRules as any)?.dayEnd || '22:30';
+  const rawEvents = context.existingEvents || context.existingCalendarEvents || [];
+  // The scheduler must honor the operator's configured day. `operatingRules` only
+  // carries workStart/workEnd (dayStart/dayEnd are optional and never set by
+  // getPlanningContext), so falling back straight to 07:00–22:30 placed blocks
+  // outside the operator's hours and overstated capacity. `workingHours` is what
+  // the context actually populates.
+  const startDayTime = context.operatingRules?.dayStart || context.workingHours?.start || '07:00';
+  const endDayTime = context.operatingRules?.dayEnd || context.workingHours?.end || '22:30';
   const totalDaySpanHours = calculateDurationMinutes(startDayTime, endDayTime) / 60;
 
-  const workStart = context.workingHours?.start || context.operatingRules?.workStart || '09:00';
-  const workEnd = context.workingHours?.end || context.operatingRules?.workEnd || '17:00';
   const maxFocusHours = context.workingHours?.maxFocusHours || context.operatingRules?.maxDailyWorkloadHours || 6.5;
 
   // 1. Map existing fixed calendar commitments
-  const fixedBlocks: ScheduledTimeBlock[] = rawEvents.map((ev: any) => {
+  const fixedBlocks: ScheduledTimeBlock[] = rawEvents.map(ev => {
     const startHM = ev.startTime.includes('T') ? ev.startTime.split('T')[1].slice(0, 5) : ev.startTime.slice(0, 5);
     const endHM = ev.endTime.includes('T') ? ev.endTime.split('T')[1].slice(0, 5) : ev.endTime.slice(0, 5);
     return {
@@ -586,7 +639,6 @@ export function buildIntelligentDailySchedule(
 
   const isOvercommitted = totalFlexibleDuration > availableMinutes;
   const overloadMinutes = isOvercommitted ? totalFlexibleDuration - availableMinutes : 0;
-  const overloadHours = parseFloat((overloadMinutes / 60).toFixed(1));
 
   // 4. Place scheduled items into open windows
   const scheduledItems: ScheduledTimeBlock[] = [...fixedBlocks];
@@ -624,7 +676,7 @@ export function buildIntelligentDailySchedule(
     if (remainingBudgetMinutes >= task.durationMinutes) {
       const slot = findSlot(task.durationMinutes);
       if (slot && slot.end <= endDayTime) {
-        const isExisting = Boolean(task.linkedTaskId || task.taskId || (task as any).isExistingTask);
+        const isExisting = Boolean(task.linkedTaskId || task.taskId || task.isExistingTask);
         const resolvedTaskId = task.linkedTaskId || task.taskId;
         scheduledItems.push({
           id: `sch_${task.id}`,
@@ -1254,6 +1306,24 @@ export function reviseDailyPlan(
 // Planning Session Continuity & Interruption Helpers
 // ---------------------------------------------------------------------------
 
+export interface ExtractedPlanningState {
+  commitments: ParsedCommitment[];
+  uncertainties: PlanUncertainty[];
+  clarificationQuestions: string[];
+  answers: Record<string, string>;
+}
+
+/** Persisted planning session, restored from JSON columns. */
+export interface StoredPlanningSession {
+  id: string;
+  targetDate: string;
+  status: string;
+  conversation: PlanningConversationTurn[];
+  extractedState: ExtractedPlanningState;
+  proposedPlan: DailyPlanProposal | null;
+  updatedAt: string;
+}
+
 export function savePlanningSession(
   db: Database.Database,
   session: {
@@ -1261,12 +1331,12 @@ export function savePlanningSession(
     tenantId: string;
     userId: string;
     targetDate: string;
-    conversation: any[];
+    conversation: PlanningConversationTurn[];
     extractedState: {
       commitments: ParsedCommitment[];
       uncertainties?: PlanUncertainty[];
       clarificationQuestions?: string[];
-      answers?: Record<string, any>;
+      answers?: Record<string, string>;
     };
     proposedPlan?: DailyPlanProposal | null;
     status: 'interviewing' | 'proposed' | 'committed';
@@ -1301,49 +1371,38 @@ export function getPlanningSession(
   db: Database.Database,
   tenantId: string,
   sessionId: string
-): {
-  id: string;
-  targetDate: string;
-  status: string;
-  conversation: any[];
-  extractedState: {
-    commitments: ParsedCommitment[];
-    uncertainties: PlanUncertainty[];
-    clarificationQuestions: string[];
-    answers: Record<string, any>;
-  };
-  proposedPlan: DailyPlanProposal | null;
-  updatedAt: string;
-} | null {
+): StoredPlanningSession | null {
   const hasPlanningSessions = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='planning_sessions'").get();
   const tableName = hasPlanningSessions ? 'planning_sessions' : 'ai_planning_sessions';
 
   const row = db.prepare(`
     SELECT * FROM ${tableName} WHERE tenant_id = ? AND id = ?
-  `).get(tenantId, sessionId) as any;
+  `).get(tenantId, sessionId) as PlanningSessionRow | undefined;
 
   if (!row) return null;
 
-  const rawExtracted = JSON.parse(row.extracted_state || '{}');
+  // The three JSON columns were written by savePlanningSession; the cast is the
+  // boundary between SQLite TEXT and the shapes this module persists.
+  const rawExtracted = JSON.parse(row.extracted_state || '{}') as Partial<ExtractedPlanningState>;
   const commitments: ParsedCommitment[] = Array.isArray(rawExtracted.commitments) ? rawExtracted.commitments : [];
   const uncertainties: PlanUncertainty[] = Array.isArray(rawExtracted.uncertainties) ? rawExtracted.uncertainties : [];
   const clarificationQuestions: string[] = Array.isArray(rawExtracted.clarificationQuestions)
     ? rawExtracted.clarificationQuestions
     : uncertainties.map(u => u.question);
-  const answers: Record<string, any> = rawExtracted.answers || {};
+  const answers: Record<string, string> = rawExtracted.answers || {};
 
   return {
     id: row.id,
     targetDate: row.target_date,
     status: row.status,
-    conversation: JSON.parse(row.conversation || '[]'),
+    conversation: JSON.parse(row.conversation || '[]') as PlanningConversationTurn[],
     extractedState: {
       commitments,
       uncertainties,
       clarificationQuestions,
       answers,
     },
-    proposedPlan: row.proposed_plan ? JSON.parse(row.proposed_plan) : null,
+    proposedPlan: row.proposed_plan ? (JSON.parse(row.proposed_plan) as DailyPlanProposal) : null,
     updatedAt: row.updated_at,
   };
 }

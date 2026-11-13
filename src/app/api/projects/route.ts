@@ -1,10 +1,31 @@
-import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { calculateProjectProgress } from '@/lib/productivity/engine';
-import { readJson } from '@/lib/db/validate';
+import { withApiLogging } from '@/lib/api/log';
+import { notFound, ok, readBody, routeError } from '@/lib/api/http';
+import {
+  optionalBoolean,
+  optionalEnum,
+  optionalInt,
+  optionalISODate,
+  optionalString,
+  requiredArray,
+  requiredString,
+} from '@/lib/api/fields';
+import { referenceExists } from '@/lib/db/validate';
 
-export async function GET(request: Request) {
+const PROJECT_STATUSES = ['active', 'paused', 'completed', 'archived'] as const;
+const PROGRESS_METHODS = ['manual', 'completion', 'weighted', 'milestone'] as const;
+
+/** Every column reaches the client through a spread; only `id` is read here. */
+type ProjectRow = { id: string } & Record<string, unknown>;
+
+interface MilestoneInput {
+  title?: unknown;
+  targetDate?: unknown;
+}
+
+export const GET = withApiLogging(async function GET(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
@@ -12,7 +33,7 @@ export async function GET(request: Request) {
     const spaceId = searchParams.get('spaceId');
 
     let query = 'SELECT * FROM projects WHERE tenant_id = ?';
-    const params: any[] = [session.tenantId];
+    const params: string[] = [session.tenantId];
 
     if (spaceId && spaceId !== 'all') {
       query += ' AND space_id = ?';
@@ -20,7 +41,7 @@ export async function GET(request: Request) {
     }
     query += ' ORDER BY target_date ASC, created_at DESC';
 
-    const rawProjects = db.prepare(query).all(...params) as any[];
+    const rawProjects = db.prepare(query).all(...params) as ProjectRow[];
 
     const projects = rawProjects.map(p => {
       const progressResult = calculateProjectProgress(db, session.tenantId, p.id);
@@ -38,29 +59,36 @@ export async function GET(request: Request) {
       };
     });
 
-    return NextResponse.json({ projects });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ok({ projects });
+  } catch (err) {
+    return routeError(err);
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withApiLogging(async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const parsedBody = await readJson(request);
-    if ("error" in parsedBody) {
-      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
-    }
-    const body = parsedBody.data;
+    const body = await readBody(request);
 
-    if (!body.name || !body.name.trim()) {
-      return NextResponse.json({ error: 'Project name is required' }, { status: 400 });
-    }
+    const name = requiredString(body.name, 'name', 500);
+    const description = optionalString(body.description, 'description', 20_000) ?? '';
+    const status = optionalEnum(body.status, 'status', PROJECT_STATUSES) ?? 'active';
+    const progressMethod = optionalEnum(body.progressMethod, 'progressMethod', PROGRESS_METHODS) ?? 'completion';
+    const objective = optionalString(body.objective, 'objective', 20_000) ?? '';
+    const definitionOfDone = optionalString(body.definitionOfDone, 'definitionOfDone', 20_000) ?? '';
+    const startDate = optionalISODate(body.startDate, 'startDate');
+    const targetDate = optionalISODate(body.targetDate, 'targetDate');
+    const spaceId = optionalString(body.spaceId, 'spaceId', 100) ?? 'space_personal';
+    const goalId = optionalString(body.goalId, 'goalId', 100);
+    const color = optionalString(body.color, 'color', 30) ?? '#3b82f6';
+    const manualProgress = optionalInt(body.manualProgress, 'manualProgress', 0, 100) ?? 0;
+    const milestones = body.milestones === undefined ? [] : requiredArray<MilestoneInput>(body.milestones, 'milestones', 200);
+
+    if (!referenceExists(db, session.tenantId, 'spaces', spaceId)) notFound('Space');
+    if (goalId !== undefined && !referenceExists(db, session.tenantId, 'goals', goalId)) notFound('Goal');
 
     const projectId = `proj_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const progressMethod = body.progressMethod || 'completion';
-    const color = body.color || '#3b82f6';
 
     db.transaction(() => {
       db.prepare(`
@@ -70,59 +98,72 @@ export async function POST(request: Request) {
       `).run(
         projectId,
         session.tenantId,
-        body.spaceId || 'space_personal',
-        body.goalId || null,
-        body.name.trim(),
-        body.description || '',
-        body.status || 'active',
-        body.objective || '',
-        body.definitionOfDone || '',
-        body.startDate || null,
-        body.targetDate || null,
+        spaceId,
+        goalId ?? null,
+        name,
+        description,
+        status,
+        objective,
+        definitionOfDone,
+        startDate ?? null,
+        targetDate ?? null,
         progressMethod,
-        body.manualProgress || 0,
+        manualProgress,
         color
       );
 
       // If initial milestones provided
-      if (Array.isArray(body.milestones)) {
+      if (milestones.length > 0) {
         const insertMilestone = db.prepare(`
           INSERT INTO project_milestones (id, tenant_id, project_id, title, target_date, sort_order)
           VALUES (?, ?, ?, ?, ?, ?)
         `);
-        body.milestones.forEach((m: any, idx: number) => {
-          if (m.title && m.title.trim()) {
-            insertMilestone.run(`ms_${projectId}_${idx}`, session.tenantId, projectId, m.title.trim(), m.targetDate || null, idx);
-          }
+        milestones.forEach((m, idx) => {
+          const title = optionalString(m.title, `milestones[${idx}].title`, 500);
+          if (title === undefined) return;
+          insertMilestone.run(
+            `ms_${projectId}_${idx}`,
+            session.tenantId,
+            projectId,
+            title,
+            optionalISODate(m.targetDate, `milestones[${idx}].targetDate`) ?? null,
+            idx
+          );
         });
       }
     })();
 
     const project = db.prepare('SELECT * FROM projects WHERE id = ? AND tenant_id = ?').get(projectId, session.tenantId);
-    return NextResponse.json({ project }, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ok({ project }, 201);
+  } catch (err) {
+    return routeError(err);
   }
-}
+});
 
-export async function PUT(request: Request) {
+export const PUT = withApiLogging(async function PUT(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const parsedBody = await readJson(request);
-    if ("error" in parsedBody) {
-      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
-    }
-    const body = parsedBody.data;
+    const body = await readBody(request);
 
-    if (!body.id) {
-      return NextResponse.json({ error: 'Project ID is required' }, { status: 400 });
-    }
+    const id = requiredString(body.id, 'id', 100);
+    const existing = db
+      .prepare('SELECT id FROM projects WHERE id = ? AND tenant_id = ?')
+      .get(id, session.tenantId) as { id: string } | undefined;
+    if (!existing) notFound('Project');
 
-    const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND tenant_id = ?').get(body.id, session.tenantId);
-    if (!existing) {
-      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
-    }
+    const name = optionalString(body.name, 'name', 500);
+    const description = optionalString(body.description, 'description', 20_000);
+    const status = optionalEnum(body.status, 'status', PROJECT_STATUSES);
+    const objective = optionalString(body.objective, 'objective', 20_000);
+    const definitionOfDone = optionalString(body.definitionOfDone, 'definitionOfDone', 20_000);
+    const startDate = optionalISODate(body.startDate, 'startDate');
+    const targetDate = optionalISODate(body.targetDate, 'targetDate');
+    const progressMethod = optionalEnum(body.progressMethod, 'progressMethod', PROGRESS_METHODS);
+    const manualProgress = optionalInt(body.manualProgress, 'manualProgress', 0, 100);
+    const color = optionalString(body.color, 'color', 30);
+    const milestoneId = optionalString(body.milestoneId, 'milestoneId', 100);
+    const isCompleted = optionalBoolean(body.isCompleted, 'isCompleted');
 
     db.transaction(() => {
       db.prepare(`
@@ -141,33 +182,39 @@ export async function PUT(request: Request) {
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
       `).run(
-        body.name,
-        body.description,
-        body.status,
-        body.objective,
-        body.definitionOfDone,
-        body.startDate,
-        body.targetDate,
-        body.progressMethod,
-        body.manualProgress,
-        body.color,
-        body.id,
+        name ?? null,
+        description ?? null,
+        status ?? null,
+        objective ?? null,
+        definitionOfDone ?? null,
+        startDate ?? null,
+        targetDate ?? null,
+        progressMethod ?? null,
+        manualProgress ?? null,
+        color ?? null,
+        id,
         session.tenantId
       );
 
       // Toggle milestone if milestoneId specified
-      if (body.milestoneId && body.isCompleted !== undefined) {
+      if (milestoneId !== undefined && isCompleted !== undefined) {
         db.prepare(`
           UPDATE project_milestones 
           SET is_completed = ?, completed_at = ?
           WHERE id = ? AND project_id = ? AND tenant_id = ?
-        `).run(body.isCompleted ? 1 : 0, body.isCompleted ? new Date().toISOString() : null, body.milestoneId, body.id, session.tenantId);
+        `).run(
+          isCompleted ? 1 : 0,
+          isCompleted ? new Date().toISOString() : null,
+          milestoneId,
+          id,
+          session.tenantId
+        );
       }
     })();
 
-    const updated = db.prepare('SELECT * FROM projects WHERE id = ? AND tenant_id = ?').get(body.id, session.tenantId);
-    return NextResponse.json({ project: updated });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const updated = db.prepare('SELECT * FROM projects WHERE id = ? AND tenant_id = ?').get(id, session.tenantId);
+    return ok({ project: updated });
+  } catch (err) {
+    return routeError(err);
   }
-}
+});

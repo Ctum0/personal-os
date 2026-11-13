@@ -1,13 +1,13 @@
 # Personal OS
 
-A local-first, single-user operating system for your life's work —
-productivity (tasks, projects, goals, habits, focus), a real double-entry
-financial ledger, and an AI planning layer, all on one SQLite database you
+A local-first, single-operator operating system for your life's work —
+productivity (tasks, projects, goals, habits, focus), a decimal-exact financial
+ledger, and a permissioned planning assistant, all on one SQLite database you
 own outright.
 
 > **Product philosophy:** one operator, one machine, one source of truth.
-> Data lives in `data/personal_os.db`. Nothing leaves the machine unless
-> you export it. See [docs/adr/0001-deployment-strategy.md](docs/adr/0001-deployment-strategy.md)
+> Data lives in `data/personal_os.db`. Nothing leaves the machine unless you
+> export it. See [docs/adr/0001-deployment-strategy.md](docs/adr/0001-deployment-strategy.md)
 > for the deployment direction (local-first now, optional encrypted sync relay later).
 
 ## Quick start
@@ -17,60 +17,104 @@ pnpm install
 pnpm dev            # http://localhost:3000
 ```
 
-First boot creates and migrates `data/personal_os.db` automatically
-(current schema version 5) and seeds a starter workspace.
+First boot creates and migrates `data/personal_os.db` automatically (current
+schema version **7**, 53 tables — 52 domain tables plus `idempotency_keys`) and
+seeds a starter workspace.
 
-### Optional hardening: PIN gate
+### Authentication
 
 By default the app assumes a single trusted operator on loopback (open mode).
-Set `PERSONAL_OS_PIN` to lock every `/api/*` route:
+Set the four operator variables to require sign-in:
 
 ```bash
-PERSONAL_OS_PIN=1234 pnpm dev
+PERSONAL_OS_USERNAME=ctum
+PERSONAL_OS_PASSWORD_SALT=<hex salt>
+PERSONAL_OS_PASSWORD_HASH=<pbkdf2 hex digest>
+PERSONAL_OS_PASSWORD_ITERATIONS=210000
+PERSONAL_OS_SESSION_SECRET=<32 random bytes, hex>
+pnpm dev
 ```
 
-- Locked mode: unauthenticated API calls get `401` + `WWW-Authenticate`.
-  Unlock via the `/unlock` page or `POST /api/auth/session` with the PIN —
-  this sets an httpOnly session cookie (a SHA-256 digest of the pin; the raw
-  pin is never stored).
+- **One account, no registration.** The credential exists only in configuration.
+  There is no signup route, no password reset, and no user table to insert into,
+  so a second account cannot be created through the app even by an authenticated
+  operator.
+- **Locked mode** (any variable set but incomplete still counts as unconfigured
+  and stays open — set all four or none): unauthenticated `/api/*` calls get
+  `401` + `WWW-Authenticate`. The client redirects to `/login?next=<path>` on the
+  first 401, so a protected app never looks like an empty app.
+- **Passwords are never stored.** `PERSONAL_OS_PASSWORD_HASH` is PBKDF2-HMAC-SHA256
+  (210k iterations by default, 256-bit) over `PERSONAL_OS_PASSWORD_SALT`. The
+  comparison is length-independent and does not short-circuit on the username.
+- **Sessions are signed, not stored.** The cookie is
+  `v1.<expiresAt>.<HMAC-SHA256>` over `v1.<username>.<expiresAt>`, `httpOnly`,
+  `SameSite=Lax`, `Secure` in production, 7-day expiry. The expiry is inside the
+  signature, so it cannot be extended by editing the cookie. No session table, no
+  per-request database read.
+- **Failed sign-ins are throttled** per client address: 5 failures in 10 minutes
+  locks the address out for a minute, doubling per repeated lockout up to an hour.
 - The gate lives in the Next 16 `proxy` convention: `src/proxy.ts` +
-  `src/lib/api/gate.ts` (edge-safe constant-time digest compare).
+  `src/lib/api/gate.ts` (Edge runtime, WebCrypto only). The credential primitives
+  are in `src/lib/auth/credentials.ts`; throttling is in
+  `src/lib/auth/throttle.ts`.
 
-## Data & operations
+Generate a credential set with:
 
-| Concern | Where | Notes |
-| --- | --- | --- |
-| Live database | `data/personal_os.db` | SQLite, WAL mode. Overridable with `PERSONAL_OS_DB_PATH` (used by tests, backups, E2E, CI). |
-| Auto snapshots | `data/backups/auto/` | Maintenance job (`src/lib/db/maintenance.ts`) runs once per process; 24h staleness window, newest 10 retained, `quick_check` verified. Also `POST /api/backup/maintenance?force=1` (GET for status). |
-| Pre-upgrade snapshot | `data/backups/` | `snapshotDatabase()` runs a `VACUUM INTO` before every migration. |
-| Full JSON export | `/overview/backup` | Zero-lock-in export (all entities, exact decimal strings), plus restore. |
-| Access logs | `data/logs/` | JSON-lines, one file per day, correlated by `x-request-id` (assigned in `src/proxy.ts`). Tail via `GET /api/observability/logs?tail=50`. |
-| Net-worth history | `net_worth_snapshots` table | Daily job (`src/lib/jobs/netWorth.ts`), idempotent `UNIQUE(tenant_id, snapshot_date)` upsert. |
+```bash
+node -e "const c=require('crypto');const salt=c.randomBytes(16).toString('hex');console.log('PERSONAL_OS_PASSWORD_SALT='+salt);console.log('PERSONAL_OS_PASSWORD_HASH='+c.pbkdf2Sync(process.argv[1],salt,210000,32,'sha256').toString('hex'));console.log('PERSONAL_OS_SESSION_SECRET='+c.randomBytes(32).toString('hex'))" 'your-password'
+```
+
+directory, and `next.config.ts` excludes `./data/**` from output file tracing.
+A plain `pnpm build` therefore cannot migrate, snapshot, or ship your database.
 
 ## Environment variables
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `PERSONAL_OS_PIN` | *(unset → open mode)* | Enables the API gate. |
+| `PERSONAL_OS_USERNAME` | *(unset → open mode)* | The single operator account. |
+| `PERSONAL_OS_PASSWORD_SALT` | *(unset → open mode)* | PBKDF2 salt for the operator password. |
+| `PERSONAL_OS_PASSWORD_HASH` | *(unset → open mode)* | PBKDF2-HMAC-SHA256 digest of the operator password (hex). |
+| `PERSONAL_OS_PASSWORD_ITERATIONS` | `210000` | PBKDF2 work factor; must match the digest. |
+| `PERSONAL_OS_SESSION_SECRET` | *(unset → open mode)* | HMAC key for session cookies. Rotating it signs everyone out. |
 | `PERSONAL_OS_DB_PATH` | `data/personal_os.db` | Database file override (sandboxed tests/E2E/CI, containers). |
+| `PERSONAL_OS_TZ` | `Asia/Colombo` | Timezone used for calendar-day formatting (`src/lib/time`). |
 | `E2E_CHROMIUM_PATH` | *(Playwright default)* | Distribution chromium for E2E (e.g. `/usr/bin/chromium`). |
+| `E2E_USERNAME` / `E2E_PASSWORD` | `ctum` / fixture password | Credentials the `authed` E2E project signs in with. |
+| `E2E_PASSWORD_SALT` / `E2E_PASSWORD_HASH` / `E2E_SESSION_SECRET` | fixed test values | Deterministic test-only auth config for the `authed` E2E project. |
 
 ## Testing
 
 ```bash
-pnpm test             # vitest unit + route-handler suites (180 tests)
-pnpm test:e2e         # Playwright: 26 workflows on port 3457
-pnpm exec tsc --noEmit
-pnpm build
+pnpm verify           # lint + typecheck + unit + build (the CI gate)
+pnpm test             # vitest: 27 files / 235 tests
+pnpm test:e2e         # Playwright: 103 specs on ports 3457 (open) + 3458 (PIN)
 ```
 
-The E2E suite never touches your data: it boots its own server on port 3457
-with an isolated profile DB (`/tmp/opencode/personal-os-e2e/profile.db`) and
-build directory (`.next-e2e/`), so your running dev server and live DB stay
-untouched during test runs.
+The E2E suite runs with `workers: 1`: every spec mutates the same isolated
+single-operator profile, so parallel workers would race each other. It covers:
 
-CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs the same
-pipeline: install → typecheck → unit → build → E2E (chromium).
+- a **seeded whole-app axe sweep** (`e2e/axe-sweep.spec.ts`): all 29 routes with
+  overflow data pre-seeded, so scroll containers and dense layouts are audited at
+  a realistic volume rather than an empty profile;
+- the accessibility baseline (one `h1`, labelled controls, named buttons, no
+  horizontal overflow, text contrast computed from rendered colors);
+- keyboard and dialog semantics (skip link, palette arrows/Enter, focus traps,
+  Escape, mobile drawer);
+- the write surfaces (settings save/reject, task archive persistence, AI
+  governance toggle persistence);
+- the backup export→restore round trip;
+- and — given `E2E_PIN` plus a PIN-protected server — the full gate/unlock
+  contract.
+
+The suites are isolated by construction: every test database is either
+in-memory or a temp file via `PERSONAL_OS_DB_PATH`, and the E2E server always
+boots its own instance on port 3457 with `PERSONAL_OS_DB_PATH` pointed at a temp
+profile — `reuseExistingServer` is off so a stray dev server can never be
+adopted, and your live database is never opened.
+
+CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs: install → lint →
+typecheck → unit → build → E2E (chromium), with a throwaway database for every
+step.
 
 ## Docker
 
@@ -78,40 +122,85 @@ pipeline: install → typecheck → unit → build → E2E (chromium).
 docker build -t personal-os .
 docker run -p 3000:3000 -v personal-os-data:/app/data personal-os
 # exposed deployments:
-docker run -p 3000:3000 -v personal-os-data:/app/data -e PERSONAL_OS_PIN=1234 personal-os
+docker run -p 3000:3000 -v personal-os-data:/app/data \
+  -e PERSONAL_OS_USERNAME=ctum \
+  -e PERSONAL_OS_PASSWORD_SALT=... -e PERSONAL_OS_PASSWORD_HASH=... \
+  -e PERSONAL_OS_SESSION_SECRET=... \
+  personal-os
 ```
 
-The container is a node:22-alpine multi-stage build (standalone output,
-non-root user). SQLite data persists in `/app/data` (auto snapshots log
-there too). Orchestration tools like Hostinger EasyPanel map the volume; see
+The container is a node:22-alpine multi-stage build (standalone output, non-root
+user). `.dockerignore` keeps `data/`, `.artifacts/`, `.next/` and `node_modules/`
+out of the build context, and only the traced standalone output is copied into
+the runtime image — the build-time `node_modules` tree and your database never
+ship. SQLite data persists in `/app/data`; see
 `docs/adr/0001-deployment-strategy.md`.
 
 ## API surface
 
-~35 routes under `/api/*` (tasks, habits, projects, goals, calendar, focus,
-journal/transactions, budgets, recurring rules, net worth, backup, weekly
-review, observability, AI planning). Highlights:
+37 route files under `/api/*`. Conventions worth knowing:
 
-- `GET /api/tasks?limit=&offset=` → bounded windows with `total`/`hasMore`.
-- `POST /api/finance/transactions?strict=1` → hard-rejects posted
-  byte-identical duplicates with `409 {duplicateOf}` (persisted
-  `dup_fingerprint`, migration v5). Default stays advisory (`duplicateWarning`).
-- `POST /api/auth/session` → unlock round-trip (gate-exempt, PIN mode only).
+- **Validation**: every body is read with typed field readers
+  (`src/lib/api/fields.ts`); bad input is always `400 { error }`, never a 500.
+  Calendar dates must be real (`2026-02-31` is rejected), datetimes are
+  clock-bounded, and money is normalized to 2dp.
+- **Errors**: `src/lib/api/http.ts` maps `FieldError` → its status, FK
+  violations → 400, `UNIQUE` violations → 409, anything else → 500. Deleting or
+  voiding a missing row returns 404, not a false success.
+- **Tenancy**: every query is scoped by `tenant_id` from `getCurrentSession()`;
+  cross-tenant ids are rejected with 404 rather than written.
+- **Idempotency**: mutations accept `X-Idempotency-Key` and replay the stored
+  response (`idempotent-replay: true`). The offline queue reuses one key across
+  the live attempt and its replay.
+- **Bounded reads**: list endpoints clamp `limit`/`offset` and report
+  `total`/`hasMore`; calendar reads are capped at 2000 events.
+
+Highlights:
+
+- `GET /api/tasks?limit=&offset=` → bounded windows with `total`/`hasMore`;
+  quarantined records are excluded unless `includeQuarantined=1`.
+- `POST /api/finance/transactions?strict=1` → hard-rejects posted byte-identical
+  duplicates with `409 {duplicateOf}` (persisted `dup_fingerprint`, migration
+  v5). Default stays advisory (`duplicateWarning`).
+- `GET /api/search?q=&scope=` → cross-domain search (tasks, projects, goals,
+  accounts, **posted** transactions only).
+- `POST /api/ai/approvals` → applies a draft (`decision` must be
+  `approved`/`rejected`); `apply_daily_plan` writes `daily_plan_block` events
+  with full ISO timestamps.
+- `GET /api/backup/export` / `POST /api/backup/restore` → symmetric,
+  tenant-safe round trip across every domain.
 
 ## Architecture map
 
 ```
 src/
-  app/            # Next.js App Router pages + API routes
+  app/            # Next.js App Router pages + 37 API route files
   components/     # UI (layout shell, modals, design-system primitives)
   lib/
-    db/           # SQLite bootstrap, migrations (v1..v5), maintenance job
-    finance/      # double-entry engine: balances, budgets, net worth, debt
+    db/           # SQLite bootstrap, migrations (v1..v7), maintenance, validation
+    finance/      # decimal-exact ledger engine: balances, budgets, net worth, debt
+    productivity/ # progress/streak engines + the planning scheduler
+    ai/           # tool registry, permission policy, draft/approval machinery
+    api/          # gate, typed field readers, HTTP contract, logging, idempotency, client
     offline/      # localStorage mutation queue + guardOffline()
-    api/          # request gate, logging, pagination helpers
     jobs/         # scheduled jobs (net worth daily snapshot)
+    time/         # calendar-day helpers in the configured timezone
+    ui/           # contrast helpers for operator-supplied colors
   proxy.ts        # Next 16 API gate (replaces deprecated middleware.ts)
   tests/          # vitest suites incl. direct route-handler contracts
-e2e/              # Playwright workflows
+e2e/              # Playwright workflows (incl. PIN gate + a11y)
 docs/adr/         # architecture decision records
 ```
+
+### Financial model, precisely
+
+Money is stored as TEXT and computed with `decimal.js` (precision 28,
+`ROUND_HALF_UP`). Account balances derive from posted journal transactions;
+`journal_lines` is the audit record written alongside each transaction (and
+preserved when a transaction is voided). Budgets are computed at read time, so a
+month-end budget auto-rolls into the current month without rewriting the
+persisted period. Safe-to-spend subtracts pending expenses, recurring
+obligations (including overdue ones), earmarked savings capped at their linked
+ledger balance, overdrafts, and the configured safety buffer; available credit
+counts only when `include_credit_lines` is enabled and the account has a
+`credit_limit`.

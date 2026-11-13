@@ -1,9 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { getInMemoryDb } from '@/lib/db';
 import { sumDecimalAmounts, calculateAccountBalances } from '@/lib/finance/engine';
-import { validateApiRequest } from '@/lib/auth';
 import { rescheduleTask } from '@/lib/productivity/planner';
-import { Decimal } from 'decimal.js';
 
 describe('Hardening - Exact Financial Arithmetic & Audit Invariants', () => {
   it('sumDecimalAmounts calculates exact sums without IEEE-754 float drift', () => {
@@ -64,31 +62,6 @@ describe('Hardening - Exact Financial Arithmetic & Audit Invariants', () => {
     const lines = db.prepare(`SELECT * FROM journal_lines WHERE transaction_id = ?`).all(txId);
     expect(lines.length).toBe(1);
     expect((lines[0] as any).amount).toBe('150.00');
-  });
-
-  it('validateApiRequest respects environment PIN when configured', () => {
-    // Unset PIN: open mode for local workstation
-    delete process.env.PERSONAL_OS_PIN;
-    expect(validateApiRequest().authorized).toBe(true);
-
-    // Configured PIN
-    process.env.PERSONAL_OS_PIN = '9876';
-
-    const unauthReq = new Request('http://localhost:3001/api/tasks');
-    expect(validateApiRequest(unauthReq).authorized).toBe(false);
-
-    const authHeaderReq = new Request('http://localhost:3001/api/tasks', {
-      headers: { 'x-personal-os-pin': '9876' },
-    });
-    expect(validateApiRequest(authHeaderReq).authorized).toBe(true);
-
-    const authCookieReq = new Request('http://localhost:3001/api/tasks', {
-      headers: { cookie: 'personal_os_session=9876; other=123' },
-    });
-    expect(validateApiRequest(authCookieReq).authorized).toBe(true);
-
-    // Cleanup
-    delete process.env.PERSONAL_OS_PIN;
   });
 
   it('rescheduleTask strictly rejects attempts to access or modify other tenant tasks', () => {

@@ -6,7 +6,6 @@ import {
   calculateBudget,
   calculateSafeToSpend,
   calculateNetWorth,
-  calculateDebtPayoffScenarios,
 } from '../lib/finance/engine';
 import { previewCsvImport, commitCsvImport, reverseImportBatch } from '../lib/finance/csv-import';
 import type Database from 'better-sqlite3';

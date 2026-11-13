@@ -2,6 +2,7 @@ import Papa from 'papaparse';
 import { Decimal } from 'decimal.js';
 import type Database from 'better-sqlite3';
 import { toISODate } from "@/lib/time";
+import { transactionFingerprint } from "./engine";
 
 export interface ColumnMapping {
   dateColumn: string;
@@ -54,7 +55,8 @@ export function normalizeDate(dateStr: string): string | null {
   // Check MM/DD/YYYY or DD/MM/YYYY
   const slashParts = clean.split('/');
   if (slashParts.length === 3) {
-    let [p1, p2, p3] = slashParts;
+    const [p1, p2] = slashParts;
+    let p3 = slashParts[2];
     if (p3.length === 2) p3 = '20' + p3;
     if (parseInt(p1, 10) > 12 && parseInt(p2, 10) <= 12) {
       // DD/MM/YYYY
@@ -294,10 +296,14 @@ export function commitCsvImport(
       '{}'
     );
 
+    // `dup_fingerprint` is what makes ?strict=1 duplicate rejection work. Rows
+    // committed here used to leave it NULL, so an imported statement was
+    // permanently invisible to the duplicate gate — re-importing it with
+    // skipDuplicates off created a second copy even in strict mode.
     const insertTx = db.prepare(`
       INSERT INTO journal_transactions (
-        id, tenant_id, transaction_type, date, account_id, amount, currency, base_amount, payee_name, description, status, import_batch_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'posted', ?)
+        id, tenant_id, transaction_type, date, account_id, amount, currency, base_amount, payee_name, description, status, import_batch_id, dup_fingerprint
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?)
     `);
 
     const insertLine = db.prepare(`
@@ -331,18 +337,33 @@ export function commitCsvImport(
       }
 
       const txId = `tx_imp_${batchId}_${rIndex}`;
+      const txType = r.parsedType || 'expense';
+      // A row with no parsed date cannot be posted; throwing here aborts the whole
+      // batch (transactional), which is the established contract callers rely on.
+      const txDate: string = r.parsedDate ?? (() => {
+        throw new Error('Transaction date is required');
+      })();
+      const txAmount: string = r.parsedAmount ?? (() => {
+        throw new Error('Transaction amount is required');
+      })();
       insertTx.run(
         txId,
         tenantId,
-        r.parsedType || 'expense',
-        r.parsedDate,
+        txType,
+        txDate,
         accountId,
-        r.parsedAmount,
+        txAmount,
         currency,
-        r.parsedAmount,
+        txAmount,
         r.parsedPayee || '',
         r.parsedDescription || '',
-        batchId
+        batchId,
+        transactionFingerprint(tenantId, {
+          accountId,
+          date: txDate,
+          transactionType: txType,
+          amount: txAmount,
+        })
       );
 
       // Balanced ledger line
@@ -353,9 +374,9 @@ export function commitCsvImport(
         txId,
         accountId,
         entryType,
-        r.parsedAmount,
+        txAmount,
         currency,
-        r.parsedAmount,
+        txAmount,
         r.parsedDescription || 'CSV imported'
       );
 

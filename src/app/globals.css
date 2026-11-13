@@ -50,18 +50,57 @@ body {
   outline-offset: 2px;
 }
 
-/* Muted-text contrast floor (unlayered, so it beats the layered utilities).
+/* Muted-text contrast floor. Declared inside @layer utilities so hover/focus
+   variants that also target zinc-500 still win on specificity order; an
+   unlayered rule silently disabled every hover color transition.
    zinc-500 (#71717a) measured ~2.6:1 on card backgrounds in the final audit and
    was the single largest source of axe color-contrast violations; zinc-600
    measured ~1.8:1. These brighter equivalents keep the restrained palette and
    pass WCAG AA against the dark background tokens. */
-.text-zinc-500 {
-  color: #8b8d94;
+@layer utilities {
+  .text-zinc-500 {
+    color: #8b8d94;
+  }
+  .text-zinc-600 {
+    color: #7a7c83;
+  }
+  ::placeholder {
+    color: #8b8d94;
+    opacity: 1;
+  }
 }
-.text-zinc-600 {
-  color: #7a7c83;
+
+/* Screen-reader-only helper, used by skip links and icon-only controls that
+   still need a visible label. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
-::placeholder {
-  color: #8b8d94;
-  opacity: 1;
+.focus\:not-sr-only:focus {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: inherit;
+  margin: inherit;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

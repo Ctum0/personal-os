@@ -436,7 +436,7 @@ describe('Multi-Month Cumulative Financial Simulation & Accounting Integrity', (
       VALUES ('debt_cc_linked', ?, 'Linked Credit Card Debt', 'credit_card', '450.00', 'acc_crd')
     `).run(tenantId);
 
-    let nwTest = calculateNetWorth(db, tenantId);
+    const nwTest = calculateNetWorth(db, tenantId);
     // Liabilities must STILL be only Credit card account ($450) + Student Loan ($4448.63) = $4898.63
     // Linked debt was NOT double counted!
     expect(nwTest.totalLiabilities).toBe('4898.63');

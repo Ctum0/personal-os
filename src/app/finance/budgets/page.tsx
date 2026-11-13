@@ -1,49 +1,95 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import type { ExplainerPayload } from '@/components/layout/WorkspaceContext';
 import { todayISO } from '@/lib/time';
+import { apiFetch, apiSend, errorText } from '@/lib/api/client';
 import { fmtMoney, toDecimal } from '../_shared/format';
 import {
   PieChart,
-  Plus,
   HelpCircle,
-  ArrowRightLeft,
-  CheckCircle2,
   AlertTriangle,
-  RotateCcw,
   Repeat,
-  Calendar,
-  Layers,
 } from 'lucide-react';
+
+interface BudgetLineItem {
+  categoryId: string;
+  categoryName: string;
+  categoryColor: string;
+  allocatedAmount: string;
+  rolloverAmount: string;
+  totalBudgeted: string;
+  spentAmount: string;
+  remainingAmount: string;
+  percentUsed: string;
+  status: 'under' | 'warning' | 'over';
+}
+
+interface BudgetRow {
+  budgetId: string;
+  budgetName: string;
+  rolloverMode: string;
+  periodStart: string;
+  periodEnd: string;
+  totalAllocated: string;
+  totalSpent: string;
+  totalRemaining: string;
+  overallPercentUsed: string;
+  items: BudgetLineItem[];
+  explainer: ExplainerPayload;
+}
+
+interface RecurringRuleRow {
+  id: string;
+  name: string;
+  category_id: string | null;
+  expected_amount: string;
+  is_active: number | boolean;
+}
+
+interface BudgetsPayload {
+  budget: BudgetRow | null;
+}
+
+interface RecurringRulesPayload {
+  recurringRules: RecurringRuleRow[];
+}
 
 export default function BudgetsPage() {
   const { setSelectedExplainer } = useWorkspace();
-  const [budget, setBudget] = useState<any | null>(null);
-  const [recurringRules, setRecurringRules] = useState<any[]>([]);
-  const [editingCategory, setEditingCategory] = useState<any | null>(null);
+  const [budget, setBudget] = useState<BudgetRow | null>(null);
+  const [recurringRules, setRecurringRules] = useState<RecurringRuleRow[]>([]);
+  const [editingCategory, setEditingCategory] = useState<BudgetLineItem | null>(null);
   const [newAllocated, setNewAllocated] = useState('');
   const [newRollover, setNewRollover] = useState('');
   const [allocError, setAllocError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadBudget = () => {
+  const loadBudget = useCallback(async () => {
     setIsLoading(true);
-    Promise.all([
-      fetch('/api/finance/budgets').then(r => r.json()),
-      fetch('/api/finance/recurring').then(r => r.json()).catch(() => ({ recurringRules: [] })),
-    ])
-      .then(([bgtData, recData]) => {
-        setBudget(bgtData.budget || null);
-        setRecurringRules(recData.recurringRules || []);
-      })
-      .finally(() => setIsLoading(false));
-  };
+    try {
+      const [bgtData, recData] = await Promise.all([
+        apiFetch<BudgetsPayload>('/api/finance/budgets'),
+        apiFetch<RecurringRulesPayload>('/api/finance/recurring'),
+      ]);
+      setBudget(bgtData.budget ?? null);
+      setRecurringRules(recData.recurringRules ?? []);
+      setError(null);
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    loadBudget();
-  }, []);
+    void (async () => {
+      await loadBudget();
+    })();
+  }, [loadBudget]);
 
   const handleUpdateAllocation = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,25 +118,16 @@ export default function BudgetsPage() {
     setIsSaving(true);
     setAllocError(null);
     try {
-      const res = await fetch('/api/finance/budgets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          budgetId: budget.budgetId,
-          categoryId: editingCategory.categoryId,
-          allocatedAmount: alloc.toDecimalPlaces(2).toFixed(2),
-          rolloverAmount: roll.toDecimalPlaces(2).toFixed(2),
-        }),
+      await apiSend<BudgetsPayload>('/api/finance/budgets', 'POST', {
+        budgetId: budget.budgetId,
+        categoryId: editingCategory.categoryId,
+        allocatedAmount: alloc.toDecimalPlaces(2).toFixed(2),
+        rolloverAmount: roll.toDecimalPlaces(2).toFixed(2),
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        setAllocError(err.error || 'Failed to save allocation. Your change was not stored.');
-        return;
-      }
       setEditingCategory(null);
-      loadBudget();
+      await loadBudget();
     } catch (err) {
-      setAllocError(err instanceof Error ? err.message : 'Network error saving allocation.');
+      setAllocError(errorText(err));
     } finally {
       setIsSaving(false);
     }
@@ -120,6 +157,22 @@ export default function BudgetsPage() {
         )}
       </div>
 
+      {error && (
+        <div
+          role="alert"
+          className="p-3 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-3"
+        >
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="text-[11px] underline opacity-80 hover:opacity-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Edit Allocation Modal */}
       {editingCategory && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -141,7 +194,7 @@ export default function BudgetsPage() {
             </div>
 
             {allocError && (
-              <div className="p-2.5 bg-red-950/40 border border-red-800/60 rounded-lg text-xs text-red-300 flex items-start gap-2">
+              <div role="alert" className="p-2.5 bg-red-950/40 border border-red-800/60 rounded-lg text-xs text-red-300 flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>{allocError}</span>
               </div>
@@ -153,10 +206,11 @@ export default function BudgetsPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">
+              <label htmlFor="budget-allocated-amount" className="block text-xs font-medium text-zinc-400 mb-1">
                 Allocated Spending Target ($ USD)
               </label>
               <input
+                id="budget-allocated-amount"
                 type="number"
                 step="0.01"
                 min="0"
@@ -175,10 +229,11 @@ export default function BudgetsPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">
+              <label htmlFor="budget-rollover-amount" className="block text-xs font-medium text-zinc-400 mb-1">
                 Carried-Over Amount ($ USD)
               </label>
               <input
+                id="budget-rollover-amount"
                 type="number"
                 step="0.01"
                 min="0"
@@ -277,7 +332,9 @@ export default function BudgetsPage() {
             </p>
           </div>
         </div>
-      ) : null}
+      ) : (
+        <div className="p-8 text-center text-xs text-zinc-500">Loading budget envelopes…</div>
+      )}
 
       {/* Category Budget Lines Table */}
       {budget && (
@@ -303,7 +360,7 @@ export default function BudgetsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/60">
-                {budget.items?.map((item: any) => {
+                {budget.items?.map(item => {
                   const catRules = recurringRules.filter(r => r.category_id === item.categoryId && r.is_active);
                   const totalRec = catRules.reduce((sum, r) => sum + parseFloat(r.expected_amount || '0'), 0);
 

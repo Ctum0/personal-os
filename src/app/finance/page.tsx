@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
-import { todayISO } from '@/lib/time';
+import type { ExplainerPayload } from '@/components/layout/WorkspaceContext';
 import { useTodayISO } from '@/lib/time/useTodayISO';
+import { apiFetch, errorText } from '@/lib/api/client';
 import {
   HelpCircle,
-  ArrowRightLeft,
   Plus,
   FileSpreadsheet,
   Landmark,
@@ -18,40 +18,95 @@ import {
 import { Button } from '@/components/ui/Button';
 import { fmtMoney, fmtAbsMoney, sumDecimalParts } from './_shared/format';
 
+interface DashboardAccountRow {
+  accountId: string;
+  accountName: string;
+  accountType: string;
+  currentBalance: string;
+}
+
+interface DashboardSafeToSpendRow {
+  safeToSpendAmount: string;
+  fundingDeficit: string;
+  isDeficit: boolean;
+  currency: string;
+  liquidFunds: string;
+  upcomingObligations: string;
+  overdueObligations: string;
+  overdueObligationsCount: number;
+  earmarkedSavings: string;
+  safetyBuffer: string;
+  daysHorizon: number;
+  breakdown: Array<{ label: string; amount: string }>;
+  explainer: ExplainerPayload;
+}
+
+interface DashboardBudgetRow {
+  totalRemaining: string;
+  totalAllocated: string;
+  periodStart: string;
+  periodEnd: string;
+  periodRolledForward: boolean;
+  overallPercentUsed: string;
+  explainer: ExplainerPayload;
+}
+
+interface DashboardNetWorthRow {
+  netWorth: string;
+  totalAssets: string;
+  totalLiabilities: string;
+  explainer: ExplainerPayload;
+}
+
+interface DashboardTransactionRow {
+  id: string;
+  date: string;
+  description: string;
+  amount: string;
+  transaction_type: string;
+  account_name: string;
+  to_account_name: string | null;
+  category_name: string | null;
+}
+
 export default function FinanceDashboard() {
   const { setSelectedExplainer, setIsQuickAddOpen } = useWorkspace();
-  const [balances, setBalances] = useState<any[]>([]);
-  const [safeToSpend, setSafeToSpend] = useState<any | null>(null);
-  const [budget, setBudget] = useState<any | null>(null);
-  const [netWorth, setNetWorth] = useState<any | null>(null);
-  const [recentTx, setRecentTx] = useState<any[]>([]);
-  const [upcomingBills, setUpcomingBills] = useState<any[]>([]);
+  const [balances, setBalances] = useState<DashboardAccountRow[]>([]);
+  const [safeToSpend, setSafeToSpend] = useState<DashboardSafeToSpendRow | null>(null);
+  const [budget, setBudget] = useState<DashboardBudgetRow | null>(null);
+  const [netWorth, setNetWorth] = useState<DashboardNetWorthRow | null>(null);
+  const [recentTx, setRecentTx] = useState<DashboardTransactionRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadDashboard = () => {
+  const loadDashboard = useCallback(async () => {
     setIsLoading(true);
-    Promise.all([
-      fetch('/api/finance/accounts').then(r => r.json()),
-      fetch('/api/finance/safe-to-spend').then(r => r.json()),
-      fetch('/api/finance/budgets').then(r => r.json()),
-      fetch('/api/finance/net-worth').then(r => r.json()),
-      fetch('/api/finance/transactions?limit=6').then(r => r.json()),
-      fetch('/api/finance/recurring').then(r => r.json()),
-    ])
-      .then(([accData, stsData, bgtData, nwData, txData, recData]) => {
-        setBalances(accData.accounts || []);
-        setSafeToSpend(stsData.safeToSpend);
-        setBudget(bgtData.budget);
-        setNetWorth(nwData.netWorth);
-        setRecentTx((txData.transactions || []).slice(0, 5));
-        setUpcomingBills((recData.recurringRules || []).slice(0, 4));
-      })
-      .finally(() => setIsLoading(false));
-  };
+    setError(null);
+    try {
+      const [accData, stsData, bgtData, nwData, txData] = await Promise.all([
+        apiFetch<{ accounts: DashboardAccountRow[] }>('/api/finance/accounts'),
+        apiFetch<{ safeToSpend: DashboardSafeToSpendRow | null }>('/api/finance/safe-to-spend'),
+        apiFetch<{ budget: DashboardBudgetRow | null }>('/api/finance/budgets'),
+        apiFetch<{ netWorth: DashboardNetWorthRow | null }>('/api/finance/net-worth'),
+        apiFetch<{ transactions: DashboardTransactionRow[] }>('/api/finance/transactions?limit=6'),
+      ]);
+      setBalances(accData.accounts ?? []);
+      setSafeToSpend(stsData.safeToSpend ?? null);
+      setBudget(bgtData.budget ?? null);
+      setNetWorth(nwData.netWorth ?? null);
+      setRecentTx((txData.transactions ?? []).slice(0, 5));
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    loadDashboard();
-  }, []);
+    void (async () => {
+      await loadDashboard();
+    })();
+  }, [loadDashboard]);
 
   // QuickAddModal (shared) now only calls router.refresh() after a write, which does not
   // re-run client-side effects — listen for the cross-page data-change signal so money
@@ -116,9 +171,23 @@ export default function FinanceDashboard() {
         </div>
       </div>
 
-      {/* 2. Hero Safe-to-Spend Feature (The Primary Financial Truth) */}
+      {/* Load failure banner */}
+      {error && (
+        <div
+          role="alert"
+          className="p-3 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2"
+        >
+          <span>{error}</span>
+        </div>
+      )}
+
+      {isLoading && (
+        <div className="p-8 text-center text-xs text-zinc-500">Loading financial position…</div>
+      )}
+
+      {/* 3. Hero Safe-to-Spend Feature (The Primary Financial Truth) */}
       {safeToSpend && (() => {
-        const pendingItem = safeToSpend.breakdown?.find((b: any) => b.label.toLowerCase().includes('pending'));
+        const pendingItem = safeToSpend.breakdown?.find(b => b.label.toLowerCase().includes('pending'));
         const pendingAmt = pendingItem?.amount || '0.00';
         const hasPending = parseFloat(pendingAmt) > 0;
         const overdueAmt = parseFloat(safeToSpend.overdueObligations || '0');
@@ -135,11 +204,10 @@ export default function FinanceDashboard() {
                   <button
                     onClick={() => setSelectedExplainer(safeToSpend.explainer)}
                     className="text-zinc-500 hover:text-zinc-300 p-0.5 rounded transition-colors inline-flex items-center gap-1"
-                    title="Inspect Safe-to-spend inputs"
-                    aria-label="Inspect Safe-to-spend inputs"
+                    title="Explain how safe-to-spend is calculated"
                   >
-                    <HelpCircle className="w-3.5 h-3.5" />
-                    <span className="text-[10px] underline decoration-dotted text-zinc-500">Explain calculation</span>
+                    <HelpCircle className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span className="text-[10px] underline decoration-dotted text-zinc-400">Explain calculation</span>
                   </button>
                   <span className="text-[11px] font-mono text-zinc-400 bg-zinc-950 px-2 py-0.5 rounded border border-white/[0.06]">
                     Rolling {safeToSpend.daysHorizon} Days

@@ -1,12 +1,32 @@
-import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { generateDailyPlanProposal } from '@/lib/productivity/engine';
 import { getPlanningContext } from '@/lib/productivity/planner';
-import { todayISO } from "@/lib/time";
-import {isISODateString, referenceExists, readJson } from "@/lib/db/validate";
+import { todayISO } from '@/lib/time';
+import { withApiLogging } from '@/lib/api/log';
+import { FieldError, ok, notFound, readBody, routeError } from '@/lib/api/http';
+import {
+  optionalISODate,
+  optionalString,
+  requiredArray,
+  requiredString,
+  requiredTimeOfDay,
+} from '@/lib/api/fields';
+import { referenceExists } from '@/lib/db/validate';
 
-export async function GET(request: Request) {
+interface ApprovedPlanRow {
+  id: string;
+  [column: string]: unknown;
+}
+
+interface TimeBlock {
+  title: string;
+  startTime: string;
+  endTime: string;
+  taskId?: string;
+}
+
+export const GET = withApiLogging(async function GET(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
@@ -18,63 +38,59 @@ export async function GET(request: Request) {
 
     // Check if an approved daily plan already exists in daily_plans
     const approvedPlan = db.prepare(`
-      SELECT * FROM daily_plans 
-      WHERE tenant_id = ? AND plan_date = ? 
+      SELECT * FROM daily_plans
+      WHERE tenant_id = ? AND plan_date = ?
       ORDER BY revision DESC LIMIT 1
-    `).get(session.tenantId, date) as any;
+    `).get(session.tenantId, date) as ApprovedPlanRow | undefined;
 
-    let planItems: any[] = [];
+    let planItems: unknown[] = [];
     if (approvedPlan) {
       planItems = db.prepare(`
-        SELECT * FROM daily_plan_items 
-        WHERE tenant_id = ? AND plan_id = ? 
+        SELECT * FROM daily_plan_items
+        WHERE tenant_id = ? AND plan_id = ?
         ORDER BY sort_order ASC
       `).all(session.tenantId, approvedPlan.id);
     }
 
-    return NextResponse.json({
+    return ok({
       proposal,
       context,
       approvedPlan: approvedPlan ? { ...approvedPlan, items: planItems } : null,
       missedTasks: context.missedTasks,
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err);
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withApiLogging(async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const parsedBody = await readJson(request);
-    if ("error" in parsedBody) {
-      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
-    }
-    const body = parsedBody.data;
+    const body = await readBody(request);
 
-    const { targetDate, timeBlocks } = body;
-    if (!Array.isArray(timeBlocks)) {
-      return NextResponse.json({ error: 'timeBlocks array is required' }, { status: 400 });
-    }
-    if (!isISODateString(targetDate || todayISO())) {
-      return NextResponse.json({ error: 'targetDate must be in YYYY-MM-DD format' }, { status: 400 });
-    }
+    const targetDate = optionalISODate(body.targetDate, 'targetDate') ?? todayISO();
+    const rawBlocks = requiredArray(body.timeBlocks, 'timeBlocks', 100);
 
-    for (const block of timeBlocks) {
-      if (!block || typeof block !== 'object' || !block.title || typeof block.startTime !== 'string' || typeof block.endTime !== 'string') {
-        return NextResponse.json({ error: 'Each time block needs title, startTime and endTime' }, { status: 400 });
+    const timeBlocks: TimeBlock[] = rawBlocks.map((raw, index) => {
+      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+        throw new FieldError(`timeBlocks[${index}] must be an object`);
       }
-      if (!/^\d{2}:\d{2}$/.test(block.startTime) || !/^\d{2}:\d{2}$/.test(block.endTime)) {
-        return NextResponse.json({ error: 'Block startTime and endTime must be HH:mm strings' }, { status: 400 });
+      const block = raw as Record<string, unknown>;
+      const title = requiredString(block.title, `timeBlocks[${index}].title`, 500);
+      const startTime = requiredTimeOfDay(block.startTime, `timeBlocks[${index}].startTime`);
+      const endTime = requiredTimeOfDay(block.endTime, `timeBlocks[${index}].endTime`);
+      const taskId = optionalString(block.taskId, `timeBlocks[${index}].taskId`, 100);
+
+      if (endTime <= startTime) {
+        throw new FieldError(`timeBlocks[${index}] endTime must be after startTime`);
       }
-      if (block.endTime <= block.startTime) {
-        return NextResponse.json({ error: `Block "${block.title}" endTime must be after startTime` }, { status: 400 });
+      if (taskId !== undefined && !referenceExists(db, session.tenantId, 'tasks', taskId)) {
+        notFound(`Task ${taskId}`);
       }
-      if (block.taskId && !referenceExists(db, session.tenantId, 'tasks', block.taskId)) {
-        return NextResponse.json({ error: `Task not found: ${block.taskId}` }, { status: 404 });
-      }
-    }
+
+      return { title, startTime, endTime, taskId };
+    });
 
     db.transaction(() => {
       const insertEvent = db.prepare(`
@@ -85,19 +101,21 @@ export async function POST(request: Request) {
 
       for (const block of timeBlocks) {
         const eventId = `ev_plan_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+        // calendar_events.start_time holds a full timestamp; a bare HH:mm is
+        // parsed as an instant by the calendar, so the date is prefixed here.
         insertEvent.run(
           eventId,
           session.tenantId,
           block.title,
-          block.startTime,
-          block.endTime,
-          block.taskId || null
+          `${targetDate}T${block.startTime}:00`,
+          `${targetDate}T${block.endTime}:00`,
+          block.taskId ?? null
         );
 
         // Update task status to 'next' or scheduled
         if (block.taskId) {
           db.prepare(`
-            UPDATE tasks 
+            UPDATE tasks
             SET status = CASE WHEN status = 'inbox' THEN 'next' ELSE status END,
                 due_date = coalesce(due_date, ?)
             WHERE id = ? AND tenant_id = ?
@@ -106,8 +124,8 @@ export async function POST(request: Request) {
       }
     })();
 
-    return NextResponse.json({ success: true, count: timeBlocks.length });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ok({ success: true, count: timeBlocks.length });
+  } catch (err) {
+    return routeError(err);
   }
-}
+});

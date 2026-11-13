@@ -1,65 +1,104 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import { useWorkspace, type ExplainerPayload } from '@/components/layout/WorkspaceContext';
+import { apiFetch, errorText } from '@/lib/api/client';
 import {
   BarChart3,
   TrendingUp,
   Clock,
   CheckCircle2,
   AlertCircle,
-  Flame,
   HelpCircle,
   Calendar,
   Briefcase,
-  Layers,
-  ArrowRight,
   Download,
   RotateCcw,
   Sparkles,
-  ShieldCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
+interface DailyTrendPoint {
+  date: string;
+  planned: number;
+  completed: number;
+}
+
+interface ProjectTimeRow {
+  id: string;
+  name: string;
+  color: string | null;
+  task_count: number;
+  total_minutes: number;
+}
+
+interface RescheduleReasonRow {
+  rescheduled_reason: string;
+  count: number;
+}
+
+interface AnalyticsPayload {
+  period: { days: string; startDate: string; endDate: string };
+  taskPerformance: {
+    totalCompleted: number;
+    completedWithDueDateCount: number;
+    onTimeCount: number;
+    lateCount: number;
+    onTimeRate: number | null;
+    currentOverdueCount: number;
+    dayOfWeekDistribution: Record<string, number>;
+    dailyTrend: DailyTrendPoint[];
+  };
+  timeAllocation: {
+    byProject: ProjectTimeRow[];
+    focus: { sessionCount: number; totalFocusMinutes: number; avgSessionDuration: number };
+  };
+  planningQuality: {
+    totalDailyPlans: number;
+    committedPlans: number;
+    avgConfidence: number | null;
+    rescheduling: {
+      totalEvents: number;
+      reasons: RescheduleReasonRow[];
+    };
+  };
+  explainer: ExplainerPayload;
+}
+
 export default function ProductivityAnalyticsPage() {
   const { setSelectedExplainer, activeSpaceId } = useWorkspace();
-  const [data, setData] = useState<any | null>(null);
+  const [data, setData] = useState<AnalyticsPayload | null>(null);
   const [period, setPeriod] = useState<'7' | '30' | '90' | 'all'>('30');
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const fetchAnalytics = () => {
+  const fetchAnalytics = useCallback(async () => {
     setIsLoading(true);
-    const spaceQuery = activeSpaceId !== 'all' ? `&spaceId=${activeSpaceId}` : '';
-    fetch(`/api/productivity/analytics?days=${period}${spaceQuery}`)
-      .then(res => res.json())
-      .then(json => {
-        setData(json);
-      })
-      .catch(err => console.error('Failed to load analytics', err))
-      .finally(() => setIsLoading(false));
-  };
-
-  useEffect(() => {
-    fetchAnalytics();
+    try {
+      const spaceQuery = activeSpaceId !== 'all' ? `&spaceId=${encodeURIComponent(activeSpaceId)}` : '';
+      const json = await apiFetch<AnalyticsPayload>(`/api/productivity/analytics?days=${period}${spaceQuery}`);
+      setData(json);
+      setError(null);
+    } catch (err) {
+      setError(errorText(err));
+      setData(null);
+    } finally {
+      setIsLoading(false);
+    }
   }, [period, activeSpaceId]);
 
-  const exportJSON = () => {
-    if (!data) return;
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `productivity-analytics-${period}d-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  useEffect(() => {
+    void (async () => {
+      await fetchAnalytics();
+    })();
+  }, [fetchAnalytics]);
 
   const exportCSV = () => {
     if (!data || !data.taskPerformance?.dailyTrend) return;
     const rows = [
       ['Date', 'Planned Tasks', 'Completed Tasks'],
-      ...data.taskPerformance.dailyTrend.map((d: any) => [d.date, d.planned, d.completed]),
+      ...data.taskPerformance.dailyTrend.map(d => [d.date, d.planned, d.completed]),
     ];
     const csvContent = 'data:text/csv;charset=utf-8,' + rows.map(e => e.join(',')).join('\n');
     const encodedUri = encodeURI(csvContent);
@@ -70,11 +109,12 @@ export default function ProductivityAnalyticsPage() {
   };
 
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const dayDistribution = data?.taskPerformance?.dayOfWeekDistribution || { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
-  const maxDowCount = Math.max(1, ...Object.values(dayDistribution).map((v: any) => Number(v) || 0));
+  const dayDistribution: Record<string, number> =
+    data?.taskPerformance?.dayOfWeekDistribution ?? { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+  const maxDowCount = Math.max(1, ...Object.values(dayDistribution).map(v => Number(v) || 0));
 
   const dailyTrend = data?.taskPerformance?.dailyTrend || [];
-  const maxTrendVal = Math.max(1, ...dailyTrend.map((d: any) => Math.max(d.completed || 0, d.planned || 0)));
+  const maxTrendVal = Math.max(1, ...dailyTrend.map(d => Math.max(d.completed || 0, d.planned || 0)));
 
   return (
     <div className="w-full max-w-6xl mx-auto px-4 sm:px-8 py-8 space-y-8">
@@ -134,6 +174,12 @@ export default function ProductivityAnalyticsPage() {
           </button>
         </div>
       </div>
+
+      {error && (
+        <div role="alert" className="p-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-xs text-rose-200">
+          {error}
+        </div>
+      )}
 
       {/* 2. Key Execution Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -242,7 +288,7 @@ export default function ProductivityAnalyticsPage() {
           <div className="py-12 text-center text-xs text-zinc-500">No execution data for this period</div>
         ) : (
           <div className="h-44 flex items-end gap-1.5 pt-6 pb-2 border-b border-white/[0.06]">
-            {dailyTrend.map((d: any) => {
+            {dailyTrend.map(d => {
               const completedHeight = Math.max(4, Math.round(((d.completed || 0) / maxTrendVal) * 120));
               const plannedHeight = Math.max(4, Math.round(((d.planned || 0) / maxTrendVal) * 120));
               const dateLabel = d.date.slice(5);
@@ -292,7 +338,7 @@ export default function ProductivityAnalyticsPage() {
 
           <div className="space-y-2 pt-2">
             {[1, 2, 3, 4, 5, 6, 0].map(dow => {
-              const count = dayDistribution[dow as keyof typeof dayDistribution] || 0;
+              const count = dayDistribution[String(dow)] || 0;
               const pct = Math.round((count / maxDowCount) * 100);
               const isWeekend = dow === 0 || dow === 6;
 
@@ -334,7 +380,7 @@ export default function ProductivityAnalyticsPage() {
             <div className="py-8 text-center text-xs text-zinc-500">No project time logged</div>
           ) : (
             <div className="space-y-3 pt-2">
-              {data.timeAllocation.byProject.map((p: any) => {
+              {data.timeAllocation.byProject.map(p => {
                 const totalMins = p.total_minutes || 0;
                 const hours = (totalMins / 60).toFixed(1);
                 return (
@@ -408,11 +454,11 @@ export default function ProductivityAnalyticsPage() {
         </div>
 
         {/* Reschedule Reasons Breakdown */}
-        {data?.planningQuality?.rescheduling?.reasons?.length > 0 && (
+        {data && data.planningQuality.rescheduling.reasons.length > 0 && (
           <div className="mt-4 pt-4 border-t border-white/[0.04] space-y-2">
             <span className="text-xs font-medium text-zinc-400">Rescheduling Root Causes:</span>
             <div className="flex flex-wrap gap-2">
-              {data.planningQuality.rescheduling.reasons.map((r: any) => (
+              {data.planningQuality.rescheduling.reasons.map(r => (
                 <div
                   key={r.rescheduled_reason}
                   className="px-2.5 py-1 rounded bg-zinc-800/80 border border-white/[0.04] text-xs font-mono flex items-center gap-2"

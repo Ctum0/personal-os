@@ -1,68 +1,107 @@
-import { sha256Hex } from '@/lib/api/gate';
 import { NextResponse } from 'next/server';
+import { withApiLogging } from '@/lib/api/log';
+import { ok, readBody, routeError } from '@/lib/api/http';
+import { requiredString } from '@/lib/api/fields';
+import {
+  SESSION_COOKIE,
+  SESSION_TTL_MS,
+  createSessionToken,
+  isAuthConfigured,
+  readAuthConfig,
+  verifyCredentials,
+} from '@/lib/auth/credentials';
+import {
+  checkLoginAllowed,
+  clientKeyFromHeaders,
+  recordLoginFailure,
+  recordLoginSuccess,
+} from '@/lib/auth/throttle';
 
 /**
- * Session unlock endpoint — the ONLY /api path exempt from the gate.
+ * The single sign-in endpoint — the ONLY /api path exempt from the gate.
  *
- * POST { pin: string }  → compares against PERSONAL_OS_PIN in constant time and,
- * on match, sets the `personal_os_session` cookie (httpOnly, sha256 digest).
- * DELETE                → clears the session cookie.
- * POST with wrong pin   → 401 with WWW-Authenticate hint (same as the gate).
+ * POST { username, password } → sets an HMAC-signed session cookie.
+ * DELETE                      → clears it.
  *
- * Cookie holds the sha256(pin) digest, never the raw pin.
+ * There is no registration, no password reset and no second account: the
+ * operator credential exists only in configuration, and this route can only ever
+ * authenticate it. Failures are throttled per client address so a stolen username
+ * is not a brute-force invitation.
  */
 
-export async function POST(request: Request) {
-  const pin = process.env.PERSONAL_OS_PIN;
-  if (!pin) {
-    // Open mode — there is nothing to unlock.
-    return NextResponse.json({ authorized: true, openMode: true }, { status: 200 });
-  }
-
-  let payload: unknown;
+export const POST = withApiLogging(async function POST(request: Request) {
   try {
-    payload = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Malformed JSON body' }, { status: 400 });
+    const config = readAuthConfig();
+    if (!config) {
+      // Nothing to sign in to: the instance is deliberately open (local dev).
+      return ok({ authenticated: true, openMode: true });
+    }
+
+    const clientKey = clientKeyFromHeaders(request.headers);
+    const allowed = checkLoginAllowed(clientKey);
+    if (!allowed.allowed) {
+      return NextResponse.json(
+        { error: 'Too many failed attempts. Try again later.', retryAfterSeconds: allowed.retryAfterSeconds },
+        { status: 429, headers: { 'Retry-After': String(allowed.retryAfterSeconds ?? 60) } }
+      );
+    }
+
+    const body = await readBody(request);
+    const username = requiredString(body.username, 'username', 200);
+    const password = requiredString(body.password, 'password', 1024);
+
+    const valid = await verifyCredentials(config, username, password);
+    if (!valid) {
+      recordLoginFailure(clientKey);
+      return NextResponse.json(
+        { error: 'Invalid credentials' },
+        { status: 401, headers: { 'WWW-Authenticate': 'PersonalOS-Session realm="Personal OS"' } }
+      );
+    }
+
+    recordLoginSuccess(clientKey);
+    const token = await createSessionToken(config);
+    const response = ok({ authenticated: true, openMode: false, username: config.username });
+    response.cookies.set(SESSION_COOKIE, token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: Math.floor(SESSION_TTL_MS / 1000),
+      // Secure is required whenever the deployment is served over TLS; Coolify
+      // terminates TLS in front, so NODE_ENV=production is the right signal.
+      secure: process.env.NODE_ENV === 'production',
+    });
+    return response;
+  } catch (err) {
+    return routeError(err);
   }
+});
 
-  const provided = typeof (payload as { pin?: unknown })?.pin === 'string'
-    ? (payload as { pin: string }).pin
-    : null;
-
-  if (!provided || provided.length === 0 || provided.length > 512) {
-    return NextResponse.json({ error: 'Provide a pin string' }, { status: 400 });
+export const GET = withApiLogging(async function GET() {
+  try {
+    if (!isAuthConfigured()) {
+      return ok({ authenticated: true, openMode: true });
+    }
+    // Existence of a settled session is answered by the gate itself (any other
+    // /api call succeeds); this endpoint only reports configuration state.
+    return ok({ authenticated: false, openMode: false });
+  } catch (err) {
+    return routeError(err);
   }
+});
 
-  const providedDigest = await sha256Hex(provided);
-  const expectedDigest = await sha256Hex(pin);
-  const a = providedDigest;
-  const b = expectedDigest;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+export const DELETE = withApiLogging(async function DELETE() {
+  try {
+    const response = ok({ authenticated: false, openMode: !isAuthConfigured() });
+    response.cookies.set(SESSION_COOKIE, '', {
+      httpOnly: true,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 0,
+      secure: process.env.NODE_ENV === 'production',
+    });
+    return response;
+  } catch (err) {
+    return routeError(err);
   }
-
-  if (diff !== 0 || a.length !== b.length) {
-    return NextResponse.json(
-      { error: 'Invalid pin' },
-      { status: 401, headers: { 'WWW-Authenticate': 'PersonalOS-PIN realm="Personal OS"' } },
-    );
-  }
-
-  const response = NextResponse.json({ authorized: true, openMode: false }, { status: 200 });
-  response.cookies.set('personal_os_session', expectedDigest, {
-    httpOnly: true,
-    sameSite: 'strict',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 30,
-    secure: process.env.NODE_ENV === 'production',
-  });
-  return response;
-}
-
-export async function DELETE() {
-  const response = NextResponse.json({ authorized: false, openMode: !process.env.PERSONAL_OS_PIN }, { status: 200 });
-  response.cookies.set('personal_os_session', '', { httpOnly: true, path: '/', maxAge: 0 });
-  return response;
-}
+});

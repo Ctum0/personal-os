@@ -1,62 +1,104 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useWorkspace } from '@/components/layout/WorkspaceContext';
-import { todayISO } from '@/lib/time';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useTodayISO } from '@/lib/time/useTodayISO';
+import { apiFetch, apiSend, errorText } from '@/lib/api/client';
 import { fmtMoney } from '../_shared/format';
 import {
   ArrowRightLeft,
   Plus,
   Calendar,
-  Clock,
-  CheckCircle2,
   AlertCircle,
-  Landmark,
 } from 'lucide-react';
 
+interface RecurringRuleRow {
+  id: string;
+  name: string;
+  rule_type: string;
+  frequency: string;
+  expected_amount: string;
+  next_due_date: string;
+  auto_action: string | null;
+  is_active: number | boolean;
+  category_name: string | null;
+  category_color: string | null;
+  account_name: string | null;
+}
+
+interface RecurringAccountRow {
+  accountId: string;
+  accountName: string;
+  accountType: string;
+}
+
+interface BudgetEnvelopeRow {
+  categoryId: string;
+  categoryName: string;
+}
+
 export default function RecurringBillsPage() {
-  const [rules, setRules] = useState<any[]>([]);
-  const [accounts, setAccounts] = useState<any[]>([]);
-  const [categories, setCategories] = useState<any[]>([]);
+  const [rules, setRules] = useState<RecurringRuleRow[]>([]);
+  const [accounts, setAccounts] = useState<RecurringAccountRow[]>([]);
+  const [categories, setCategories] = useState<BudgetEnvelopeRow[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [nextDate, setNextDate] = useState('');
-  const [frequency, setFrequency] = useState('monthly');
+  const frequency = 'monthly';
   const [accountId, setAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   // [defer] today's date via hook — synchronous todayISO() at render aborts prerender
   const currentDate = useTodayISO();
 
-  const loadRules = () => {
-    fetch('/api/finance/recurring')
-      .then(r => r.json())
-      .then(data => setRules(data.recurringRules || []))
-      .catch(() => {});
-  };
+  const loadRules = useCallback(async () => {
+    try {
+      const data = await apiFetch<{ recurringRules: RecurringRuleRow[] }>('/api/finance/recurring');
+      setRules(data.recurringRules ?? []);
+      setError(null);
+    } catch (err) {
+      setError(errorText(err));
+    }
+  }, []);
+
+  const loadAccounts = useCallback(async () => {
+    try {
+      const data = await apiFetch<{ accounts: RecurringAccountRow[] }>('/api/finance/accounts');
+      const accs = data.accounts ?? [];
+      setAccounts(accs);
+      setAccountId(current => (current ? current : accs[0]?.accountId ?? current));
+    } catch (err) {
+      setError(errorText(err));
+    }
+  }, []);
+
+  const loadCategories = useCallback(async () => {
+    try {
+      const data = await apiFetch<{ budget: { items: BudgetEnvelopeRow[] } | null }>('/api/finance/budgets');
+      setCategories(data.budget?.items ?? []);
+    } catch (err) {
+      setError(errorText(err));
+    }
+  }, []);
 
   useEffect(() => {
-    fetch('/api/finance/accounts')
-      .then(r => r.json())
-      .then(data => {
-        setAccounts(data.accounts || []);
-        if (data.accounts?.length > 0) setAccountId(data.accounts[0].accountId);
-      })
-      .catch(() => {});
+    void (async () => {
+      await loadAccounts();
+    })();
+  }, [loadAccounts]);
 
-    fetch('/api/finance/budgets')
-      .then(r => r.json())
-      .then(data => {
-        if (data.budget?.items) {
-          setCategories(data.budget.items);
-        }
-      })
-      .catch(() => {});
+  useEffect(() => {
+    void (async () => {
+      await loadCategories();
+    })();
+  }, [loadCategories]);
 
-    loadRules();
-  }, []);
+  useEffect(() => {
+    void (async () => {
+      await loadRules();
+    })();
+  }, [loadRules]);
 
   const isDuplicate = name.trim().length > 0 && rules.some(
     r => r.name?.toLowerCase().trim() === name.trim().toLowerCase()
@@ -71,34 +113,24 @@ export default function RecurringBillsPage() {
     }
 
     try {
-      const res = await fetch('/api/finance/recurring', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: name.trim(),
-          expectedAmount: amount,
-          accountId,
-          categoryId: categoryId || null,
-          nextDueDate: nextDate,
-          frequency,
-          ruleType: 'bill',
-        }),
+      await apiSend<{ recurringRule: { id: string } }>('/api/finance/recurring', 'POST', {
+        name: name.trim(),
+        expectedAmount: amount,
+        accountId,
+        categoryId: categoryId || null,
+        nextDueDate: nextDate,
+        frequency,
+        ruleType: 'bill',
       });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        setFormError(err.error || 'Failed to save recurring obligation');
-        return;
-      }
 
       setName('');
       setAmount('');
       setNextDate('');
       setCategoryId('');
       setIsAddOpen(false);
-      loadRules();
-    } catch (err: any) {
-      setFormError(err.message || 'Network error saving obligation');
+      await loadRules();
+    } catch (err) {
+      setFormError(errorText(err));
     }
   };
 
@@ -117,12 +149,28 @@ export default function RecurringBillsPage() {
 
         <button
           onClick={() => setIsAddOpen(true)}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-all"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 rounded-lg text-xs font-semibold shadow-sm transition-all"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>New Recurring Obligation</span>
         </button>
       </div>
+
+      {error && (
+        <div
+          role="alert"
+          className="p-3 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-3"
+        >
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="text-[11px] underline opacity-80 hover:opacity-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Safe-to-Spend Guarantee Explainer */}
       <div className="p-3.5 bg-zinc-900 border border-zinc-800 rounded-xl flex items-start gap-3">
@@ -141,7 +189,7 @@ export default function RecurringBillsPage() {
           </div>
 
           {formError && (
-            <div className="p-2.5 bg-red-950/40 border border-red-800/60 rounded-lg text-xs text-red-300">
+            <div role="alert" className="p-2.5 bg-red-950/40 border border-red-800/60 rounded-lg text-xs text-red-300">
               {formError}
             </div>
           )}
@@ -156,8 +204,9 @@ export default function RecurringBillsPage() {
           )}
 
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Name / Service</label>
+            <label htmlFor="rule-name" className="block text-xs font-medium text-zinc-400 mb-1">Name / Service</label>
             <input
+              id="rule-name"
               type="text"
               required
               autoFocus
@@ -169,8 +218,9 @@ export default function RecurringBillsPage() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">Amount ($)</label>
+              <label htmlFor="rule-amount" className="block text-xs font-medium text-zinc-400 mb-1">Amount ($)</label>
               <input
+                id="rule-amount"
                 type="number"
                 step="0.01"
                 required
@@ -181,8 +231,9 @@ export default function RecurringBillsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">Next Due Date</label>
+              <label htmlFor="rule-next-date" className="block text-xs font-medium text-zinc-400 mb-1">Next Due Date</label>
               <input
+                id="rule-next-date"
                 type="date"
                 required
                 value={nextDate}
@@ -193,8 +244,9 @@ export default function RecurringBillsPage() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">Account</label>
+              <label htmlFor="rule-account" className="block text-xs font-medium text-zinc-400 mb-1">Account</label>
               <select
+                id="rule-account"
                 value={accountId}
                 onChange={e => setAccountId(e.target.value)}
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-200"
@@ -205,8 +257,9 @@ export default function RecurringBillsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">Budget Envelope (Optional)</label>
+              <label htmlFor="rule-category" className="block text-xs font-medium text-zinc-400 mb-1">Budget Envelope (Optional)</label>
               <select
+                id="rule-category"
                 value={categoryId}
                 onChange={e => setCategoryId(e.target.value)}
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-200"
@@ -218,7 +271,7 @@ export default function RecurringBillsPage() {
               </select>
             </div>
           </div>
-          <button type="submit" className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold">
+          <button type="submit" className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 rounded-lg text-xs font-semibold">
             Save Obligation
           </button>
         </form>
@@ -238,7 +291,7 @@ export default function RecurringBillsPage() {
           </div>
           <button
             onClick={() => setIsAddOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-all"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 rounded-lg text-xs font-semibold shadow-sm transition-all"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add First Recurring Obligation</span>
@@ -258,8 +311,11 @@ export default function RecurringBillsPage() {
                       <span
                         className="text-[10px] px-1.5 py-0.5 rounded font-medium"
                         style={{
+                          // Category colors are operator data and can be any
+                          // saturation; the chip uses a fixed high-contrast ink
+                          // and keeps the category hue only as a background tint.
                           backgroundColor: `${rule.category_color || '#6366f1'}20`,
-                          color: rule.category_color || '#818cf8',
+                          color: '#e4e4e7',
                           border: `1px solid ${rule.category_color || '#6366f1'}40`
                         }}
                       >

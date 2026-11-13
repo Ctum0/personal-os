@@ -1,10 +1,45 @@
-import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { calculateGoalProgress } from '@/lib/productivity/engine';
-import {referenceExists, readJson } from "@/lib/db/validate";
+import { withApiLogging } from '@/lib/api/log';
+import { FieldError, notFound, ok, readBody, routeError } from '@/lib/api/http';
+import {
+  optionalEnum,
+  optionalISODate,
+  optionalNumber,
+  optionalString,
+  requiredString,
+} from '@/lib/api/fields';
+import { referenceExists } from '@/lib/db/validate';
 
-export async function GET(request: Request) {
+const GOAL_STATUSES = [
+  'not_started', 'in_progress', 'on_track', 'at_risk', 'achieved', 'abandoned',
+] as const;
+const GOAL_TYPES = ['numeric', 'binary'] as const;
+const GOAL_DIRECTIONS = ['ascending', 'descending'] as const;
+const GOAL_CADENCES = ['weekly', 'monthly', 'quarterly', 'yearly'] as const;
+
+interface GoalRow {
+  id: string;
+  space_id: string | null;
+  title: string;
+  description: string | null;
+  type: string;
+  start_value: number;
+  target_value: number;
+  current_value: number;
+  unit: string;
+  direction: string;
+  progress_method: string;
+  start_date: string | null;
+  deadline: string | null;
+  cadence: string;
+  status: string;
+  linked_savings_goal_id: string | null;
+  color: string;
+}
+
+export const GET = withApiLogging(async function GET(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
@@ -12,7 +47,7 @@ export async function GET(request: Request) {
     const spaceId = searchParams.get('spaceId');
 
     let query = 'SELECT * FROM goals WHERE tenant_id = ?';
-    const params: any[] = [session.tenantId];
+    const params: string[] = [session.tenantId];
 
     if (spaceId && spaceId !== 'all') {
       query += ' AND space_id = ?';
@@ -20,7 +55,7 @@ export async function GET(request: Request) {
     }
     query += ' ORDER BY status ASC, deadline ASC, created_at DESC';
 
-    const rawGoals = db.prepare(query).all(...params) as any[];
+    const rawGoals = db.prepare(query).all(...params) as GoalRow[];
 
     const goals = rawGoals.map(g => {
       const progressInfo = calculateGoalProgress(db, session.tenantId, g.id);
@@ -38,57 +73,47 @@ export async function GET(request: Request) {
       };
     });
 
-    return NextResponse.json({ goals });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ok({ goals });
+  } catch (err) {
+    return routeError(err);
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withApiLogging(async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const parsedBody = await readJson(request);
-    if ("error" in parsedBody) {
-      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
-    }
-    const body = parsedBody.data;
+    const body = await readBody(request);
 
-    if (!body.title || !body.title.trim()) {
-      return NextResponse.json({ error: 'Goal title is required' }, { status: 400 });
-    }
-    if (typeof body.title !== 'string') {
-      return NextResponse.json({ error: 'Goal title must be a string' }, { status: 400 });
+    const title = requiredString(body.title, 'title', 500);
+    const description = optionalString(body.description, 'description', 20_000) ?? '';
+    const type = optionalEnum(body.type, 'type', GOAL_TYPES) ?? 'numeric';
+    const direction = optionalEnum(body.direction, 'direction', GOAL_DIRECTIONS) ?? 'ascending';
+    const cadence = optionalEnum(body.cadence, 'cadence', GOAL_CADENCES) ?? 'quarterly';
+    const status = optionalEnum(body.status, 'status', GOAL_STATUSES) ?? 'in_progress';
+    const unit = optionalString(body.unit, 'unit', 30) ?? '%';
+    const color = optionalString(body.color, 'color', 30) ?? '#10b981';
+    const startDate = optionalISODate(body.startDate, 'startDate');
+    const deadline = optionalISODate(body.deadline, 'deadline');
+    const spaceId = optionalString(body.spaceId, 'spaceId', 100) ?? 'space_personal';
+    const linkedSavingsGoalId = optionalString(body.linkedSavingsGoalId, 'linkedSavingsGoalId', 100);
+
+    // Goal values are measurements, never negative: a negative reading is a
+    // client error, not a stored value that silently breaks progress math.
+    const startValue = optionalNumber(body.startValue, 'startValue') ?? 0;
+    const targetValue = optionalNumber(body.targetValue, 'targetValue') ?? 100;
+    const currentValue = optionalNumber(body.currentValue, 'currentValue') ?? startValue;
+    if (startValue < 0 || targetValue < 0 || currentValue < 0) {
+      throw new FieldError('Goal values must be non-negative');
     }
 
-    const startNum = body.startValue !== undefined ? Number(body.startValue) : 0;
-    const targetNum = body.targetValue !== undefined ? Number(body.targetValue) : 100;
-    const currentNum = body.currentValue !== undefined ? Number(body.currentValue) : startNum;
-    if (isNaN(startNum) || isNaN(targetNum) || isNaN(currentNum)) {
-      return NextResponse.json({ error: 'startValue, targetValue, and currentValue must be valid numbers' }, { status: 400 });
-    }
-    if (targetNum < 0 || currentNum < 0 || startNum < 0) {
-      return NextResponse.json({ error: 'Goal values must be non-negative' }, { status: 400 });
-    }
-    if (body.linkedSavingsGoalId) {
-      const sg = db.prepare('SELECT id FROM savings_goals WHERE id = ? AND tenant_id = ?').get(body.linkedSavingsGoalId, session.tenantId);
-      if (!sg) {
-        return NextResponse.json({ error: 'Linked savings goal not found' }, { status: 404 });
-      }
+    if (linkedSavingsGoalId !== undefined && !referenceExists(db, session.tenantId, 'savings_goals', linkedSavingsGoalId)) {
+      notFound('Linked savings goal');
     }
     // Isolation: owner space must exist within the tenant
-    if (body.spaceId !== undefined && body.spaceId !== null && body.spaceId !== '' && !referenceExists(db, session.tenantId, 'spaces', body.spaceId)) {
-      return NextResponse.json({ error: 'Space not found' }, { status: 404 });
-    }
+    if (!referenceExists(db, session.tenantId, 'spaces', spaceId)) notFound('Space');
 
     const goalId = `goal_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const startVal = body.startValue !== undefined ? Number(body.startValue) : 0;
-    const targetVal = body.targetValue !== undefined ? Number(body.targetValue) : 100;
-    const currentVal = body.currentValue !== undefined ? Number(body.currentValue) : startVal;
-    const direction = body.direction || 'ascending';
-    const type = body.type || 'numeric';
-    const unit = body.unit || '%';
-    const color = body.color || '#10b981';
 
     db.transaction(() => {
       db.prepare(`
@@ -98,21 +123,21 @@ export async function POST(request: Request) {
       `).run(
         goalId,
         session.tenantId,
-        body.spaceId || 'space_personal',
-        body.title.trim(),
-        body.description || '',
+        spaceId,
+        title,
+        description,
         type,
-        startVal,
-        targetVal,
-        currentVal,
+        startValue,
+        targetValue,
+        currentValue,
         unit,
         direction,
-        body.progressMethod || 'log_latest',
-        body.startDate || null,
-        body.deadline || null,
-        body.cadence || 'quarterly',
-        body.status || 'in_progress',
-        body.linkedSavingsGoalId || null,
+        optionalString(body.progressMethod, 'progressMethod', 30) ?? 'log_latest',
+        startDate ?? null,
+        deadline ?? null,
+        cadence,
+        status,
+        linkedSavingsGoalId ?? null,
         color
       );
 
@@ -120,56 +145,62 @@ export async function POST(request: Request) {
       db.prepare(`
         INSERT INTO goal_progress_logs (id, tenant_id, goal_id, value, delta, note, source)
         VALUES (?, ?, ?, ?, ?, 'Initial measurement', 'manual')
-      `).run(`gpl_${goalId}_0`, session.tenantId, goalId, currentVal, 0);
+      `).run(`gpl_${goalId}_0`, session.tenantId, goalId, currentValue, 0);
     })();
 
     const goal = db.prepare('SELECT * FROM goals WHERE id = ? AND tenant_id = ?').get(goalId, session.tenantId);
-    return NextResponse.json({ goal }, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ok({ goal }, 201);
+  } catch (err) {
+    return routeError(err);
   }
-}
+});
 
-export async function PUT(request: Request) {
+export const PUT = withApiLogging(async function PUT(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const parsedBody = await readJson(request);
-    if ("error" in parsedBody) {
-      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
-    }
-    const body = parsedBody.data;
+    const body = await readBody(request);
 
-    if (!body.id) {
-      return NextResponse.json({ error: 'Goal ID is required' }, { status: 400 });
+    const id = requiredString(body.id, 'id', 100);
+    const existing = db
+      .prepare('SELECT id, current_value FROM goals WHERE id = ? AND tenant_id = ?')
+      .get(id, session.tenantId) as Pick<GoalRow, 'id' | 'current_value'> | undefined;
+    if (!existing) notFound('Goal');
+
+    const title = optionalString(body.title, 'title', 500);
+    const description = optionalString(body.description, 'description', 20_000);
+    const status = optionalEnum(body.status, 'status', GOAL_STATUSES);
+    const deadline = optionalISODate(body.deadline, 'deadline');
+    const color = optionalString(body.color, 'color', 30);
+    const note = optionalString(body.note, 'note', 2000) ?? 'Progress update';
+
+    const currentValue = optionalNumber(body.currentValue, 'currentValue');
+    const targetValue = optionalNumber(body.targetValue, 'targetValue');
+    const newLogValue = optionalNumber(body.newLogValue, 'newLogValue');
+    if ((currentValue ?? 0) < 0 || newLogValue !== undefined && newLogValue < 0) {
+      throw new FieldError('Goal values must be non-negative');
+    }
+    if (targetValue !== undefined && targetValue < 0) {
+      throw new FieldError('targetValue must be a non-negative number');
     }
 
-    const existing = db.prepare('SELECT * FROM goals WHERE id = ? AND tenant_id = ?').get(body.id, session.tenantId) as any;
-    if (!existing) {
-      return NextResponse.json({ error: 'Goal not found' }, { status: 404 });
-    }
-
-    const nextValue = body.currentValue !== undefined ? Number(body.currentValue) : (body.newLogValue !== undefined ? Number(body.newLogValue) : undefined);
-    if (nextValue !== undefined && isNaN(nextValue)) {
-      return NextResponse.json({ error: 'currentValue / newLogValue must be valid numbers' }, { status: 400 });
-    }
-    if (nextValue !== undefined && nextValue < 0) {
-      return NextResponse.json({ error: 'Goal values must be non-negative' }, { status: 400 });
-    }
-    if (body.targetValue !== undefined && (isNaN(Number(body.targetValue)) || Number(body.targetValue) < 0)) {
-      return NextResponse.json({ error: 'targetValue must be a non-negative number' }, { status: 400 });
-    }
+    // A logged measurement writes a history row and becomes the stored current
+    // value; a bare currentValue edit only overwrites the projection.
+    const nextValue = newLogValue ?? currentValue;
 
     db.transaction(() => {
-      if (body.newLogValue !== undefined) {
-        const val = Number(body.newLogValue);
-        const delta = val - existing.current_value;
+      if (newLogValue !== undefined) {
         db.prepare(`
           INSERT INTO goal_progress_logs (id, tenant_id, goal_id, value, delta, note, source)
           VALUES (?, ?, ?, ?, ?, ?, 'manual')
-        `).run(`gpl_${body.id}_${Date.now()}`, session.tenantId, body.id, val, delta, body.note || 'Progress update');
-
-        body.currentValue = val;
+        `).run(
+          `gpl_${id}_${Date.now()}`,
+          session.tenantId,
+          id,
+          newLogValue,
+          newLogValue - existing.current_value,
+          note
+        );
       }
 
       db.prepare(`
@@ -185,21 +216,21 @@ export async function PUT(request: Request) {
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
       `).run(
-        body.title,
-        body.description,
-        body.currentValue,
-        body.targetValue,
-        body.status,
-        body.deadline,
-        body.color,
-        body.id,
+        title ?? null,
+        description ?? null,
+        nextValue ?? null,
+        targetValue ?? null,
+        status ?? null,
+        deadline ?? null,
+        color ?? null,
+        id,
         session.tenantId
       );
     })();
 
-    const updated = db.prepare('SELECT * FROM goals WHERE id = ? AND tenant_id = ?').get(body.id, session.tenantId);
-    return NextResponse.json({ goal: updated });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const updated = db.prepare('SELECT * FROM goals WHERE id = ? AND tenant_id = ?').get(id, session.tenantId);
+    return ok({ goal: updated });
+  } catch (err) {
+    return routeError(err);
   }
-}
+});

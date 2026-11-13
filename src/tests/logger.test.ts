@@ -51,7 +51,7 @@ describe('structured JSON-lines logger', () => {
   it('withApiLogging wraps a handler and logs status+duration', async () => {
     const { withApiLogging } = await import('../lib/api/log');
     const { readApiLogTail } = await import('../lib/api/logger');
-    const handler = withApiLogging(async (req: Request) =>
+    const handler = withApiLogging(async () =>
       new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'x-request-id': 'req_wrap_9' } })
     );
     const res = await handler(new Request('http://localhost/api/tasks'));

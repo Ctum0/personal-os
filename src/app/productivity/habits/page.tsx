@@ -1,85 +1,125 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
-import { todayISO, toISODate } from "@/lib/time";
+import { todayISO, addDaysISO } from '@/lib/time';
+import { apiFetch, apiSend, errorText } from '@/lib/api/client';
 import {
   Flame,
   Plus,
   CheckCircle2,
   Circle,
-  Clock,
-  Sparkles,
-  BookOpen,
-  Calendar,
-  Layers,
 } from 'lucide-react';
+
+interface HabitLogRow {
+  log_date: string;
+  value: number;
+  status: string;
+}
+
+interface HabitRow {
+  id: string;
+  title: string;
+  unit: string;
+  target_value: number;
+  schedule_type: string;
+  color: string;
+  streak: number;
+  bestStreak: number;
+  completionRate: number;
+  isCompletedToday: boolean;
+  todayValue?: number | null;
+  recentLogs: HabitLogRow[];
+}
+
+interface RoutineStep {
+  id: string;
+  title: string;
+  done: boolean;
+  duration: number;
+}
+
+interface Routine {
+  id: string;
+  title: string;
+  scheduleTime: string;
+  steps: RoutineStep[];
+}
+
+const INITIAL_ROUTINES: Routine[] = [
+  {
+    id: 'rt_morning',
+    title: 'Morning Startup Routine',
+    scheduleTime: '07:00 AM',
+    steps: [
+      { id: 's1', title: 'Hydration (500ml water)', done: false, duration: 2 },
+      { id: 's2', title: '15-min Mindfulness / Meditation', done: false, duration: 15 },
+      { id: 's3', title: 'Review Today Daily Plan & Top 3 Priorities', done: false, duration: 10 },
+    ],
+  },
+  {
+    id: 'rt_evening',
+    title: 'Evening Shutdown & Review',
+    scheduleTime: '06:00 PM',
+    steps: [
+      { id: 's4', title: 'Clear Inbox & Triage Captured Items', done: false, duration: 10 },
+      { id: 's5', title: 'Record Daily Habit Logs & Close Open Tabs', done: false, duration: 5 },
+      { id: 's6', title: 'Rough Plan for Tomorrow', done: false, duration: 10 },
+    ],
+  },
+];
 
 export default function HabitsPage() {
   const { activeSpaceId, setIsQuickAddOpen } = useWorkspace();
-  const [habits, setHabits] = useState<any[]>([]);
+  const [habits, setHabits] = useState<HabitRow[]>([]);
   const [activeTab, setActiveTab] = useState<'habits' | 'routines'>('habits');
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Routines state
-  const [routines, setRoutines] = useState<any[]>([
-    {
-      id: 'rt_morning',
-      title: 'Morning Startup Routine',
-      scheduleTime: '07:00 AM',
-      steps: [
-        { id: 's1', title: 'Hydration (500ml water)', done: false, duration: 2 },
-        { id: 's2', title: '15-min Mindfulness / Meditation', done: false, duration: 15 },
-        { id: 's3', title: 'Review Today Daily Plan & Top 3 Priorities', done: false, duration: 10 },
-      ],
-    },
-    {
-      id: 'rt_evening',
-      title: 'Evening Shutdown & Review',
-      scheduleTime: '06:00 PM',
-      steps: [
-        { id: 's4', title: 'Clear Inbox & Triage Captured Items', done: false, duration: 10 },
-        { id: 's5', title: 'Record Daily Habit Logs & Close Open Tabs', done: false, duration: 5 },
-        { id: 's6', title: 'Rough Plan for Tomorrow', done: false, duration: 10 },
-      ],
-    },
-  ]);
+  // Routines are a static preview: no routines API exists, so toggles stay local.
+  const [routines, setRoutines] = useState<Routine[]>(INITIAL_ROUTINES);
   const [pastDays, setPastDays] = useState<string[]>([]);
 
   useEffect(() => {
-    const days = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - (6 - i));
-      return toISODate(d);
-    });
-    setPastDays(days);
+    void (async () => {
+      const today = todayISO();
+      setPastDays(Array.from({ length: 7 }, (_, i) => addDaysISO(today, i - 6)));
+    })();
   }, []);
 
-  const loadHabits = () => {
+  const loadHabits = useCallback(async () => {
     setIsLoading(true);
-    const spaceQuery = activeSpaceId !== 'all' ? `?spaceId=${activeSpaceId}` : '';
-    fetch(`/api/habits${spaceQuery}`)
-      .then(r => r.json())
-      .then(data => setHabits(data.habits || []))
-      .finally(() => setIsLoading(false));
-  };
+    try {
+      const spaceQuery = activeSpaceId !== 'all' ? `?spaceId=${encodeURIComponent(activeSpaceId)}` : '';
+      const data = await apiFetch<{ habits?: HabitRow[] }>(`/api/habits${spaceQuery}`);
+      setHabits(data.habits ?? []);
+      setError(null);
+    } catch (err) {
+      setError(errorText(err));
+      setHabits([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [activeSpaceId]);
 
   useEffect(() => {
-    loadHabits();
-  }, [activeSpaceId]);
+    void (async () => {
+      await loadHabits();
+    })();
+  }, [loadHabits]);
 
   const toggleHabit = async (habitId: string, currentStatus: boolean) => {
     const today = todayISO();
-    if (currentStatus) {
-      await fetch(`/api/habits/log?habitId=${habitId}&date=${today}`, { method: 'DELETE' });
-    } else {
-      await fetch('/api/habits/log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ habitId, date: today, status: 'completed', value: 1 }),
-      });
+    try {
+      if (currentStatus) {
+        await apiSend(`/api/habits/log?habitId=${encodeURIComponent(habitId)}&date=${today}`, 'DELETE');
+      } else {
+        await apiSend('/api/habits/log', 'POST', { habitId, date: today, status: 'completed', value: 1 });
+      }
+      await loadHabits();
+    } catch (err) {
+      setError(errorText(err));
     }
-    loadHabits();
   };
 
   const toggleRoutineStep = (routineId: string, stepId: string) => {
@@ -88,7 +128,7 @@ export default function HabitsPage() {
         if (r.id === routineId) {
           return {
             ...r,
-            steps: r.steps.map((s: any) => (s.id === stepId ? { ...s, done: !s.done } : s)),
+            steps: r.steps.map(s => (s.id === stepId ? { ...s, done: !s.done } : s)),
           };
         }
         return r;
@@ -141,12 +181,22 @@ export default function HabitsPage() {
         </div>
       </div>
 
+      {error && (
+        <div role="alert" className="p-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-xs text-rose-200">
+          {error}
+        </div>
+      )}
+
       {activeTab === 'habits' ? (
         /* Habits Grid */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {habits.length === 0 ? (
+          {isLoading ? (
             <div className="col-span-full p-12 text-center text-xs text-zinc-500 bg-zinc-950/40 border border-white/[0.06] rounded-lg">
-              No habits configured in this space. Click "New Habit" to start building consistency!
+              Loading habits...
+            </div>
+          ) : habits.length === 0 ? (
+            <div className="col-span-full p-12 text-center text-xs text-zinc-500 bg-zinc-950/40 border border-white/[0.06] rounded-lg">
+              No habits configured in this space. Click &quot;New Habit&quot; to start building consistency!
             </div>
           ) : (
             habits.map(h => (
@@ -198,7 +248,7 @@ export default function HabitsPage() {
                   <span className="text-[10px] uppercase font-mono text-zinc-500 tracking-wider">Past 7 Days</span>
                   <div className="flex items-center gap-1.5 mt-1.5">
                     {pastDays.map((dateStr, i) => {
-                      const isLogged = h.recentLogs?.some((l: any) => l.log_date === dateStr && l.status === 'completed');
+                      const isLogged = h.recentLogs?.some(l => l.log_date === dateStr && l.status === 'completed');
                       return (
                         <div
                           key={i}
@@ -217,54 +267,59 @@ export default function HabitsPage() {
         </div>
       ) : (
         /* Routines View */
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {routines.map(routine => {
-            const completedSteps = routine.steps.filter((s: any) => s.done).length;
-            const progress = Math.round((completedSteps / routine.steps.length) * 100);
+        <div className="space-y-3">
+          <p className="text-[11px] text-zinc-500">
+            Routine steps are a local preview — toggles are not saved.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {routines.map(routine => {
+              const completedSteps = routine.steps.filter(s => s.done).length;
+              const progress = Math.round((completedSteps / routine.steps.length) * 100);
 
-            return (
-              <div key={routine.id} className="bg-zinc-950/60 border border-white/[0.06] rounded-lg p-5 space-y-4">
-                <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
-                  <div>
-                    <h2 className="text-sm font-medium text-zinc-100">{routine.title}</h2>
-                    <span className="text-[11px] text-zinc-500 font-mono">Scheduled: {routine.scheduleTime}</span>
-                  </div>
-                  <span className="text-xs font-mono text-zinc-400">{progress}% Done</span>
-                </div>
-
-                {/* Progress line */}
-                <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-zinc-300 rounded-full transition-all duration-300"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-
-                {/* Steps */}
-                <div className="divide-y divide-white/[0.04]">
-                  {routine.steps.map((step: any) => (
-                    <div
-                      key={step.id}
-                      onClick={() => toggleRoutineStep(routine.id, step.id)}
-                      className="py-2.5 flex items-center justify-between cursor-pointer hover:bg-white/[0.02] px-2 rounded transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        {step.done ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                        ) : (
-                          <Circle className="w-4 h-4 text-zinc-600" />
-                        )}
-                        <span className={`text-xs font-normal ${step.done ? 'line-through text-zinc-500' : 'text-zinc-200'}`}>
-                          {step.title}
-                        </span>
-                      </div>
-                      <span className="text-[10px] text-zinc-500 font-mono">{step.duration}m</span>
+              return (
+                <div key={routine.id} className="bg-zinc-950/60 border border-white/[0.06] rounded-lg p-5 space-y-4">
+                  <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
+                    <div>
+                      <h2 className="text-sm font-medium text-zinc-100">{routine.title}</h2>
+                      <span className="text-[11px] text-zinc-500 font-mono">Scheduled: {routine.scheduleTime}</span>
                     </div>
-                  ))}
+                    <span className="text-xs font-mono text-zinc-400">{progress}% Done</span>
+                  </div>
+
+                  {/* Progress line */}
+                  <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-zinc-300 rounded-full transition-all duration-300"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+
+                  {/* Steps */}
+                  <div className="divide-y divide-white/[0.04]">
+                    {routine.steps.map(step => (
+                      <div
+                        key={step.id}
+                        onClick={() => toggleRoutineStep(routine.id, step.id)}
+                        className="py-2.5 flex items-center justify-between cursor-pointer hover:bg-white/[0.02] px-2 rounded transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          {step.done ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          ) : (
+                            <Circle className="w-4 h-4 text-zinc-600" />
+                          )}
+                          <span className={`text-xs font-normal ${step.done ? 'line-through text-zinc-500' : 'text-zinc-200'}`}>
+                            {step.title}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-zinc-500 font-mono">{step.duration}m</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

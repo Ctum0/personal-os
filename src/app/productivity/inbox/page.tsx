@@ -1,68 +1,84 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import { apiFetch, apiSend, errorText } from '@/lib/api/client';
 import {
   Inbox,
-  Plus,
   ArrowRight,
-  CheckCircle2,
   Trash2,
-  Briefcase,
-  Target,
-  Sparkles,
 } from 'lucide-react';
+
+interface InboxTaskRow {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  created_at: string;
+}
 
 export default function InboxPage() {
   const { activeSpaceId } = useWorkspace();
-  const [inboxTasks, setInboxTasks] = useState<any[]>([]);
+  const [inboxTasks, setInboxTasks] = useState<InboxTaskRow[]>([]);
   const [captureInput, setCaptureInput] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const loadInbox = () => {
+  const loadInbox = useCallback(async () => {
     setIsLoading(true);
-    const spaceQuery = activeSpaceId !== 'all' ? `&spaceId=${activeSpaceId}` : '';
-    fetch(`/api/tasks?status=inbox${spaceQuery}`)
-      .then(r => r.json())
-      .then(data => setInboxTasks(data.tasks || []))
-      .finally(() => setIsLoading(false));
-  };
+    try {
+      const spaceQuery = activeSpaceId !== 'all' ? `&spaceId=${encodeURIComponent(activeSpaceId)}` : '';
+      const data = await apiFetch<{ tasks?: InboxTaskRow[] }>(`/api/tasks?status=inbox${spaceQuery}`);
+      setInboxTasks(data.tasks ?? []);
+      setError(null);
+    } catch (err) {
+      setError(errorText(err));
+      setInboxTasks([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [activeSpaceId]);
 
   useEffect(() => {
-    loadInbox();
-  }, [activeSpaceId]);
+    void (async () => {
+      await loadInbox();
+    })();
+  }, [loadInbox]);
 
   const handleCapture = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!captureInput.trim()) return;
 
-    await fetch('/api/tasks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    try {
+      await apiSend('/api/tasks', 'POST', {
         title: captureInput.trim(),
         status: 'inbox',
         priority: 'normal',
         spaceId: activeSpaceId !== 'all' ? activeSpaceId : 'space_personal',
-      }),
-    });
-
-    setCaptureInput('');
-    loadInbox();
+      });
+      setCaptureInput('');
+      await loadInbox();
+    } catch (err) {
+      setError(errorText(err));
+    }
   };
 
   const promoteToNext = async (taskId: string) => {
-    await fetch('/api/tasks', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: taskId, status: 'next' }),
-    });
-    setInboxTasks(prev => prev.filter(t => t.id !== taskId));
+    try {
+      await apiSend('/api/tasks', 'PUT', { id: taskId, status: 'next' });
+      setInboxTasks(prev => prev.filter(t => t.id !== taskId));
+    } catch (err) {
+      setError(errorText(err));
+    }
   };
 
   const archiveItem = async (taskId: string) => {
-    await fetch(`/api/tasks?id=${taskId}`, { method: 'DELETE' });
-    setInboxTasks(prev => prev.filter(t => t.id !== taskId));
+    try {
+      await apiSend(`/api/tasks?id=${encodeURIComponent(taskId)}`, 'DELETE');
+      setInboxTasks(prev => prev.filter(t => t.id !== taskId));
+    } catch (err) {
+      setError(errorText(err));
+    }
   };
 
   return (
@@ -77,11 +93,18 @@ export default function InboxPage() {
         </p>
       </div>
 
+      {error && (
+        <div role="alert" className="p-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-xs text-rose-200">
+          {error}
+        </div>
+      )}
+
       {/* Quick Capture Input */}
       <form onSubmit={handleCapture} className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center gap-3 shadow-sm">
         <input
           type="text"
           autoFocus
+          aria-label="Capture a new inbox item"
           value={captureInput}
           onChange={e => setCaptureInput(e.target.value)}
           placeholder="Capture an idea, thought, or unorganized to-do and press Enter..."
@@ -105,7 +128,9 @@ export default function InboxPage() {
         </div>
 
         <div className="divide-y divide-zinc-800/60">
-          {inboxTasks.length === 0 ? (
+          {isLoading ? (
+            <div className="p-12 text-center text-xs text-zinc-500">Loading inbox items...</div>
+          ) : inboxTasks.length === 0 ? (
             <div className="p-12 text-center text-xs text-zinc-500">
               Your inbox is clear! All thoughts and ideas have been triaged.
             </div>
@@ -134,6 +159,7 @@ export default function InboxPage() {
                     onClick={() => archiveItem(item.id)}
                     className="p-1.5 text-zinc-600 hover:text-red-400 rounded-lg transition-colors"
                     title="Archive"
+                    aria-label={`Archive ${item.title}`}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

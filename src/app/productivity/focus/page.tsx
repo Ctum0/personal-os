@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import React, { useCallback, useState, useEffect } from 'react';
 import { todayISO } from '@/lib/time';
+import { apiFetch, apiSend, errorText } from '@/lib/api/client';
 import {
   Clock,
   Play,
@@ -10,19 +10,50 @@ import {
   RotateCcw,
   CheckCircle2,
   AlertTriangle,
-  FileText,
-  Calendar,
 } from 'lucide-react';
 
+interface FocusSessionRow {
+  id: string;
+  task_id: string | null;
+  task_title: string | null;
+  planned_duration: number;
+  actual_duration: number;
+  interruptions_count: number;
+  notes: string | null;
+  started_at: string;
+  created_at: string;
+}
+
+interface CompletedSession {
+  id: string;
+  title: string;
+  duration: number;
+  interruptions: number;
+  timestamp: string;
+}
+
+interface StoredTimerState {
+  sessionDurationMinutes?: number;
+  secondsRemaining?: number;
+  isRunning?: boolean;
+  lastUpdated?: number;
+  sessionNotes?: string;
+  interruptionsCount?: number;
+  startedAt?: string | null;
+}
+
+const STORAGE_KEY = 'personal_os_focus_timer_state';
+
 export default function FocusTimerPage() {
-  const { activeSpaceId } = useWorkspace();
   const [sessionDurationMinutes, setSessionDurationMinutes] = useState(25);
   const [secondsRemaining, setSecondsRemaining] = useState(25 * 60);
   const [isRunning, setIsRunning] = useState(false);
   const [interruptionsCount, setInterruptionsCount] = useState(0);
   const [sessionNotes, setSessionNotes] = useState('');
   const [sessionStartTime, setSessionStartTime] = useState<string | null>(null);
-  const [completedSessions, setCompletedSessions] = useState<any[]>([]);
+  const [completedSessions, setCompletedSessions] = useState<CompletedSession[]>([]);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Refs for reliable access in event handlers and beforeunload
   const isRunningRef = React.useRef(isRunning);
@@ -41,32 +72,32 @@ export default function FocusTimerPage() {
     sessionStartTimeRef.current = sessionStartTime;
   }, [isRunning, secondsRemaining, sessionDurationMinutes, sessionNotes, interruptionsCount, sessionStartTime]);
 
-  const loadSessions = () => {
-    fetch('/api/focus')
-      .then(r => r.json())
-      .then(data => {
-        if (data.sessions) {
-          // Heading says "Today's Completed Sessions" — filter out older days client-side
-          // (GET /api/focus returns the 20 most recent sessions of all time; backend
-          // date filtering is pending — see agent1 findings section B).
-          const today = todayISO();
-          const todaySessions = data.sessions.filter((s: any) => {
-            const created = s.created_at || s.started_at || '';
-            return created.slice(0, 10) === today;
-          });
-          setCompletedSessions(todaySessions.map((s: any) => ({
-            id: s.id,
-            title: s.notes || s.task_title || 'Deep Work Session',
-            duration: s.actual_duration || s.planned_duration,
-            interruptions: s.interruptions_count || 0,
-            timestamp: s.created_at ? new Date(s.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recently',
-          })));
-        }
-      })
-      .catch(() => {});
-  };
+  const loadSessions = useCallback(async () => {
+    try {
+      const data = await apiFetch<{ sessions?: FocusSessionRow[] }>('/api/focus');
+      // GET /api/focus returns the most recent sessions of all time; the heading
+      // is "Today's Completed Sessions", so older days are filtered out here.
+      const today = todayISO();
+      const todaySessions = (data.sessions ?? []).filter(s => {
+        const created = s.created_at || s.started_at || '';
+        return created.slice(0, 10) === today;
+      });
+      setCompletedSessions(todaySessions.map(s => ({
+        id: s.id,
+        title: s.notes || s.task_title || 'Deep Work Session',
+        duration: s.actual_duration || s.planned_duration,
+        interruptions: s.interruptions_count || 0,
+        timestamp: s.created_at ? new Date(s.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recently',
+      })));
+      setError(null);
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setIsLoadingSessions(false);
+    }
+  }, []);
 
-  const saveSessionToDb = async (
+  const saveSessionToDb = useCallback(async (
     plannedDuration: number,
     actualDuration: number,
     notes: string,
@@ -74,73 +105,73 @@ export default function FocusTimerPage() {
     startedAt?: string
   ) => {
     try {
-      await fetch('/api/focus', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          plannedDuration,
-          actualDuration,
-          notes: notes || 'Focus Session',
-          interruptions,
-          startedAt: startedAt || new Date(Date.now() - actualDuration * 60000).toISOString(),
-          endedAt: new Date().toISOString(),
-        }),
+      await apiSend('/api/focus', 'POST', {
+        plannedDuration,
+        actualDuration,
+        notes: notes || 'Focus Session',
+        interruptions,
+        startedAt: startedAt || new Date(Date.now() - actualDuration * 60000).toISOString(),
+        endedAt: new Date().toISOString(),
       });
-      loadSessions();
+      await loadSessions();
     } catch (err) {
-      console.error('Failed to save focus session', err);
+      setError(errorText(err));
     }
-  };
+  }, [loadSessions]);
 
   // 1. Session Persistence: Restore timer state from localStorage on initial mount
   useEffect(() => {
-    loadSessions();
+    void (async () => {
+      await loadSessions();
 
-    try {
-      const stored = localStorage.getItem('personal_os_focus_timer_state');
-      if (stored) {
-        const state = JSON.parse(stored);
-        if (state && typeof state.sessionDurationMinutes === 'number') {
-          setSessionDurationMinutes(state.sessionDurationMinutes);
-          setSessionNotes(state.sessionNotes || '');
-          setInterruptionsCount(state.interruptionsCount || 0);
-          setSessionStartTime(state.startedAt || null);
-
-          if (state.isRunning && state.lastUpdated) {
-            const elapsed = Math.floor((Date.now() - state.lastUpdated) / 1000);
-            const remaining = Math.max(0, (state.secondsRemaining || 0) - elapsed);
-
-            if (remaining === 0) {
-              // Session completed while away
-              saveSessionToDb(
-                state.sessionDurationMinutes,
-                state.sessionDurationMinutes,
-                state.sessionNotes || 'Focus Session',
-                state.interruptionsCount || 0,
-                state.startedAt
-              );
-              setSecondsRemaining(state.sessionDurationMinutes * 60);
-              setIsRunning(false);
-              localStorage.removeItem('personal_os_focus_timer_state');
-            } else {
-              setSecondsRemaining(remaining);
-              setIsRunning(true);
-            }
-          } else {
-            setSecondsRemaining(state.secondsRemaining ?? (state.sessionDurationMinutes * 60));
-            setIsRunning(false);
-          }
-        }
+      let state: StoredTimerState | null = null;
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) state = JSON.parse(stored) as StoredTimerState;
+      } catch {
+        state = null;
       }
-    } catch {}
-  }, []);
+      if (!state || typeof state.sessionDurationMinutes !== 'number') return;
+
+      const durationMinutes = state.sessionDurationMinutes;
+      setSessionDurationMinutes(durationMinutes);
+      setSessionNotes(state.sessionNotes || '');
+      setInterruptionsCount(state.interruptionsCount || 0);
+      setSessionStartTime(state.startedAt || null);
+
+      if (state.isRunning && state.lastUpdated) {
+        const elapsed = Math.floor((Date.now() - state.lastUpdated) / 1000);
+        const remaining = Math.max(0, (state.secondsRemaining || 0) - elapsed);
+
+        if (remaining === 0) {
+          // Session completed while away
+          await saveSessionToDb(
+            durationMinutes,
+            durationMinutes,
+            state.sessionNotes || 'Focus Session',
+            state.interruptionsCount || 0,
+            state.startedAt || undefined
+          );
+          setSecondsRemaining(durationMinutes * 60);
+          setIsRunning(false);
+          localStorage.removeItem(STORAGE_KEY);
+        } else {
+          setSecondsRemaining(remaining);
+          setIsRunning(true);
+        }
+      } else {
+        setSecondsRemaining(state.secondsRemaining ?? durationMinutes * 60);
+        setIsRunning(false);
+      }
+    })();
+  }, [loadSessions, saveSessionToDb]);
 
   // 2. Persist state changes to localStorage
   useEffect(() => {
     try {
       if (secondsRemaining < sessionDurationMinutes * 60 || isRunning) {
         localStorage.setItem(
-          'personal_os_focus_timer_state',
+          STORAGE_KEY,
           JSON.stringify({
             sessionDurationMinutes,
             secondsRemaining,
@@ -152,7 +183,9 @@ export default function FocusTimerPage() {
           })
         );
       }
-    } catch {}
+    } catch {
+      /* private browsing: timer state is a convenience, never a correctness path */
+    }
   }, [sessionDurationMinutes, secondsRemaining, isRunning, sessionNotes, interruptionsCount, sessionStartTime]);
 
   // 3. Save session on interruption beforeunload
@@ -184,7 +217,9 @@ export default function FocusTimerPage() {
                 keepalive: true,
               });
             }
-          } catch {}
+          } catch {
+            /* page is unloading: nothing left to surface the failure to */
+          }
         }
       }
     };
@@ -193,16 +228,21 @@ export default function FocusTimerPage() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
 
-  // 4. Timer interval tick and completion save
+  // 4. Timer interval tick
   useEffect(() => {
-    let timer: any = null;
-    if (isRunning && secondsRemaining > 0) {
-      timer = setInterval(() => {
-        setSecondsRemaining(prev => prev - 1);
-      }, 1000);
-    } else if (secondsRemaining === 0 && isRunning) {
+    if (!isRunning) return;
+    const timer = setInterval(() => {
+      setSecondsRemaining(prev => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isRunning]);
+
+  // 5. Completion: persist the finished session once the countdown reaches zero
+  useEffect(() => {
+    if (!isRunning || secondsRemaining !== 0) return;
+    void (async () => {
       setIsRunning(false);
-      saveSessionToDb(
+      await saveSessionToDb(
         sessionDurationMinutes,
         sessionDurationMinutes,
         sessionNotes,
@@ -212,11 +252,12 @@ export default function FocusTimerPage() {
       setSessionNotes('');
       setSessionStartTime(null);
       try {
-        localStorage.removeItem('personal_os_focus_timer_state');
-      } catch {}
-    }
-    return () => clearInterval(timer);
-  }, [isRunning, secondsRemaining, sessionDurationMinutes, sessionNotes, interruptionsCount, sessionStartTime]);
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {
+        /* private browsing */
+      }
+    })();
+  }, [isRunning, secondsRemaining, sessionDurationMinutes, sessionNotes, interruptionsCount, sessionStartTime, saveSessionToDb]);
 
   const setDuration = async (mins: number) => {
     // If >= 1 minute has elapsed (running OR paused), record the partial session
@@ -238,19 +279,41 @@ export default function FocusTimerPage() {
     setSecondsRemaining(mins * 60);
     setSessionStartTime(null);
     try {
-      localStorage.removeItem('personal_os_focus_timer_state');
-    } catch {}
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* private browsing */
+    }
   };
 
   const handleToggleRunning = () => {
-    if (!isRunning) {
-      if (!sessionStartTime) {
-        setSessionStartTime(new Date().toISOString());
-      }
-      setIsRunning(true);
-    } else {
-      setIsRunning(false);
+    const nextRunning = !isRunning;
+    // Persist the transition immediately. The generic effect below runs on the
+    // render after this state change, but a reload triggered in the same tick
+    // (or a fast pause-then-reload) could otherwise replay the previous snapshot
+    // and restore `isRunning: true` — the timer would appear to keep running.
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          sessionDurationMinutes,
+          secondsRemaining,
+          isRunning: nextRunning,
+          lastUpdated: Date.now(),
+          sessionNotes,
+          interruptionsCount,
+          startedAt: nextRunning ? (sessionStartTime ?? new Date().toISOString()) : sessionStartTime,
+        })
+      );
+    } catch {
+      /* private browsing: timer state is a convenience, never a correctness path */
     }
+
+    if (nextRunning) {
+      if (!sessionStartTime) setSessionStartTime(new Date().toISOString());
+      setIsRunning(true);
+      return;
+    }
+    setIsRunning(false);
   };
 
   const handleResetTimer = async () => {
@@ -271,8 +334,10 @@ export default function FocusTimerPage() {
     setSecondsRemaining(sessionDurationMinutes * 60);
     setSessionStartTime(null);
     try {
-      localStorage.removeItem('personal_os_focus_timer_state');
-    } catch {}
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* private browsing */
+    }
   };
 
   const formatDisplay = (secs: number) => {
@@ -292,6 +357,12 @@ export default function FocusTimerPage() {
           Protect uninterrupted deep work, record session distractions, and measure actual effort.
         </p>
       </div>
+
+      {error && (
+        <div role="alert" className="p-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-xs text-rose-200">
+          {error}
+        </div>
+      )}
 
       {/* Main Timer Display */}
       <div className="p-8 bg-zinc-950/60 border border-white/[0.06] rounded-xl flex flex-col items-center justify-center space-y-6 text-center">
@@ -350,6 +421,7 @@ export default function FocusTimerPage() {
         {/* Input for target task/note */}
         <input
           type="text"
+          aria-label="What is your singular focus during this block?"
           value={sessionNotes}
           onChange={e => setSessionNotes(e.target.value)}
           placeholder="What is your singular focus during this block?"
@@ -374,6 +446,7 @@ export default function FocusTimerPage() {
             onClick={handleResetTimer}
             className="p-2 rounded-md bg-zinc-900/60 hover:bg-zinc-800 border border-white/[0.06] text-zinc-400 hover:text-zinc-200 transition-colors"
             title="Reset Timer"
+            aria-label="Reset Timer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
@@ -390,9 +463,11 @@ export default function FocusTimerPage() {
 
       {/* Completed Focus Sessions History */}
       <div className="bg-zinc-950/60 border border-white/[0.06] rounded-lg p-4 space-y-3">
-        <h2 className="text-xs font-mono uppercase tracking-wider text-zinc-400">Today's Completed Sessions</h2>
+        <h2 className="text-xs font-mono uppercase tracking-wider text-zinc-400">Today&apos;s Completed Sessions</h2>
         <div className="divide-y divide-white/[0.04]">
-          {completedSessions.length === 0 ? (
+          {isLoadingSessions ? (
+            <p className="py-4 text-xs text-zinc-500 text-center font-mono">Loading sessions...</p>
+          ) : completedSessions.length === 0 ? (
             <p className="py-4 text-xs text-zinc-500 text-center font-mono">No sessions logged yet today.</p>
           ) : (
             completedSessions.map(session => (

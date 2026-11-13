@@ -1,54 +1,89 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import { apiFetch, apiSend, errorText } from '@/lib/api/client';
+import { readableSurface } from '@/lib/ui/contrast';
 import {
   Briefcase,
   Plus,
   CheckCircle2,
   Circle,
-  Clock,
-  Target,
   AlertTriangle,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
 
+interface MilestoneRow {
+  id: string;
+  title: string;
+  description: string | null;
+  target_date: string | null;
+  is_completed: number;
+  sort_order: number;
+}
+
+interface ProjectProgressDetails {
+  isBlocked: boolean;
+  blockersCount: number;
+  progressPercentage: number;
+}
+
+interface ProjectRow {
+  id: string;
+  name: string;
+  description: string | null;
+  status: string;
+  objective: string | null;
+  definition_of_done: string | null;
+  color: string | null;
+  progress_method: string;
+  progress: number;
+  progressDetails: ProjectProgressDetails | null;
+  milestones: MilestoneRow[];
+}
+
 export default function ProjectsPage() {
   const { activeSpaceId, setIsQuickAddOpen } = useWorkspace();
-  const [projects, setProjects] = useState<any[]>([]);
+  const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const loadProjects = () => {
+  const loadProjects = useCallback(async () => {
     setIsLoading(true);
-    const spaceQuery = activeSpaceId !== 'all' ? `?spaceId=${activeSpaceId}` : '';
-    fetch(`/api/projects${spaceQuery}`)
-      .then(r => r.json())
-      .then(data => {
-        setProjects(data.projects || []);
-        if (data.projects && data.projects.length > 0 && !expandedProjectId) {
-          setExpandedProjectId(data.projects[0].id);
-        }
-      })
-      .finally(() => setIsLoading(false));
-  };
-
-  useEffect(() => {
-    loadProjects();
+    try {
+      const spaceQuery = activeSpaceId !== 'all' ? `?spaceId=${encodeURIComponent(activeSpaceId)}` : '';
+      const data = await apiFetch<{ projects?: ProjectRow[] }>(`/api/projects${spaceQuery}`);
+      const loaded = data.projects ?? [];
+      setProjects(loaded);
+      setError(null);
+      setExpandedProjectId(current => current ?? loaded[0]?.id ?? null);
+    } catch (err) {
+      setError(errorText(err));
+      setProjects([]);
+    } finally {
+      setIsLoading(false);
+    }
   }, [activeSpaceId]);
 
+  useEffect(() => {
+    void (async () => {
+      await loadProjects();
+    })();
+  }, [loadProjects]);
+
   const toggleMilestone = async (projectId: string, milestoneId: string, currentVal: number) => {
-    await fetch('/api/projects', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    try {
+      await apiSend('/api/projects', 'PUT', {
         id: projectId,
         milestoneId,
         isCompleted: currentVal === 0,
-      }),
-    });
-    loadProjects();
+      });
+      await loadProjects();
+    } catch (err) {
+      setError(errorText(err));
+    }
   };
 
   return (
@@ -66,22 +101,33 @@ export default function ProjectsPage() {
 
         <button
           onClick={() => setIsQuickAddOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-all"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-all"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>New Project</span>
         </button>
       </div>
 
+      {error && (
+        <div role="alert" className="p-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-xs text-rose-200">
+          {error}
+        </div>
+      )}
+
       {/* Projects List */}
       <div className="space-y-4">
-        {projects.length === 0 ? (
+        {isLoading ? (
           <div className="p-12 text-center text-xs text-zinc-500 bg-zinc-900 border border-zinc-800 rounded-xl">
-            No projects in the selected space. Click "New Project" to create one.
+            Loading projects...
+          </div>
+        ) : projects.length === 0 ? (
+          <div className="p-12 text-center text-xs text-zinc-500 bg-zinc-900 border border-zinc-800 rounded-xl">
+            No projects in the selected space. Click &quot;New Project&quot; to create one.
           </div>
         ) : (
           projects.map(proj => {
             const isExpanded = expandedProjectId === proj.id;
+            const milestones = proj.milestones ?? [];
             return (
               <div
                 key={proj.id}
@@ -94,8 +140,11 @@ export default function ProjectsPage() {
                 >
                   <div className="flex items-start gap-3.5">
                     <div
-                      className="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-white shrink-0 text-sm shadow-sm"
-                      style={{ backgroundColor: proj.color || '#3b82f6' }}
+                      className="w-10 h-10 rounded-lg flex items-center justify-center font-bold shrink-0 text-sm shadow-sm ring-1 ring-black/20"
+                      style={(() => {
+                        const surface = readableSurface(proj.color || '#3b82f6');
+                        return { backgroundColor: surface.background, color: surface.color };
+                      })()}
                     >
                       {proj.name.substring(0, 2).toUpperCase()}
                     </div>
@@ -162,15 +211,15 @@ export default function ProjectsPage() {
                       <div className="flex items-center justify-between mb-2.5">
                         <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Project Milestones</h3>
                         <span className="text-[11px] text-zinc-500">
-                          {proj.milestones?.filter((m: any) => m.is_completed).length} of {proj.milestones?.length || 0} completed
+                          {milestones.filter(m => m.is_completed).length} of {milestones.length} completed
                         </span>
                       </div>
 
                       <div className="divide-y divide-zinc-800 border border-zinc-800 rounded-lg bg-zinc-900 overflow-hidden">
-                        {proj.milestones?.length === 0 ? (
+                        {milestones.length === 0 ? (
                           <div className="p-4 text-center text-xs text-zinc-500">No milestones yet.</div>
                         ) : (
-                          proj.milestones?.map((m: any) => (
+                          milestones.map(m => (
                             <div
                               key={m.id}
                               onClick={() => toggleMilestone(proj.id, m.id, m.is_completed)}

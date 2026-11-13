@@ -1,10 +1,91 @@
-import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import { previewCsvImport, commitCsvImport, reverseImportBatch } from '@/lib/finance/csv-import';
-import { readJson } from '@/lib/db/validate';
+import type { ColumnMapping, ParsedCsvRow } from '@/lib/finance/csv-import';
+import { withApiLogging } from '@/lib/api/log';
+import { FieldError, notFound, ok, readBody, routeError } from '@/lib/api/http';
+import {
+  optionalBoolean,
+  optionalString,
+  requiredArray,
+  requiredEnum,
+  requiredString,
+} from '@/lib/api/fields';
+import { referenceExists } from '@/lib/db/validate';
 
-export async function GET() {
+const IMPORT_ACTIONS = ['preview', 'commit'] as const;
+
+interface ImportBatchRow {
+  id: string;
+  status: string;
+}
+
+/**
+ * Reads the column-mapping suggestion the client may send back from a preview.
+ * Only the known string keys are copied; a non-string value is a 400 rather
+ * than a silently ignored mapping.
+ */
+function readColumnMapping(value: unknown): Partial<ColumnMapping> | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new FieldError('customMapping must be an object');
+  }
+  const raw = value as Record<string, unknown>;
+  const mapping: Partial<ColumnMapping> = {};
+  const keys: Array<keyof ColumnMapping> = [
+    'dateColumn',
+    'amountColumn',
+    'debitColumn',
+    'creditColumn',
+    'payeeColumn',
+    'descriptionColumn',
+    'categoryColumn',
+  ];
+  for (const key of keys) {
+    const parsed = optionalString(raw[key], `customMapping.${key}`, 200);
+    if (parsed !== undefined) mapping[key] = parsed;
+  }
+  return mapping;
+}
+
+/** Commit rows are re-validated at the boundary: `commitCsvImport` types these fields. */
+function readImportRows(value: unknown): ParsedCsvRow[] {
+  const rows = requiredArray<unknown>(value, 'rows', 5000);
+  if (rows.length === 0) {
+    throw new FieldError('No rows provided to commit');
+  }
+  return rows.map((row, index) => {
+    if (typeof row !== 'object' || row === null || Array.isArray(row)) {
+      throw new FieldError(`rows[${index}] must be an object`);
+    }
+    const raw = row as Record<string, unknown>;
+    if (typeof raw.raw !== 'object' || raw.raw === null || Array.isArray(raw.raw)) {
+      throw new FieldError(`rows[${index}].raw must be an object`);
+    }
+    const cells: Record<string, string> = {};
+    for (const [key, cell] of Object.entries(raw.raw as Record<string, unknown>)) {
+      if (typeof cell !== 'string') {
+        throw new FieldError(`rows[${index}].raw.${key} must be a string`);
+      }
+      cells[key] = cell;
+    }
+    return {
+      rowIndex: typeof raw.rowIndex === 'number' ? raw.rowIndex : index,
+      raw: cells,
+      parsedDate: typeof raw.parsedDate === 'string' ? raw.parsedDate : null,
+      parsedAmount: typeof raw.parsedAmount === 'string' ? raw.parsedAmount : null,
+      parsedType: raw.parsedType === 'income' ? 'income' : 'expense',
+      parsedPayee: typeof raw.parsedPayee === 'string' ? raw.parsedPayee : '',
+      parsedDescription: typeof raw.parsedDescription === 'string' ? raw.parsedDescription : '',
+      parsedCategory: typeof raw.parsedCategory === 'string' ? raw.parsedCategory : null,
+      isDuplicate: raw.isDuplicate === true,
+      duplicateReason: typeof raw.duplicateReason === 'string' ? raw.duplicateReason : undefined,
+      error: typeof raw.error === 'string' ? raw.error : undefined,
+    };
+  });
+}
+
+export const GET = withApiLogging(async function GET() {
   try {
     const session = getCurrentSession();
     const db = getDb();
@@ -17,67 +98,54 @@ export async function GET() {
       ORDER BY b.created_at DESC LIMIT 20
     `).all(session.tenantId);
 
-    return NextResponse.json({ batches });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ok({ batches });
+  } catch (err) {
+    return routeError(err);
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withApiLogging(async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const parsedBody = await readJson(request);
-    if ("error" in parsedBody) {
-      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
-    }
-    const body = parsedBody.data;
+    const body = await readBody(request);
 
-    const { action, accountId, fileName, csvText, customMapping, fileHash, rows, skipDuplicates } = body;
-
-    if (!accountId) {
-      return NextResponse.json({ error: 'accountId is required' }, { status: 400 });
+    const action = requiredEnum(body.action, 'action', IMPORT_ACTIONS);
+    const accountId = requiredString(body.accountId, 'accountId', 100);
+    // Without this check a caller could post ledger rows into any tenant's
+    // account by guessing its id.
+    if (!referenceExists(db, session.tenantId, 'finance_accounts', accountId)) {
+      notFound('Account');
     }
+    const fileName = optionalString(body.fileName, 'fileName', 500) ?? 'statement.csv';
 
     if (action === 'preview') {
-      if (!csvText) {
-        return NextResponse.json({ error: 'csvText is required for preview' }, { status: 400 });
-      }
-      const preview = previewCsvImport(
-        db,
-        session.tenantId,
-        accountId,
-        fileName || 'statement.csv',
-        csvText,
-        customMapping
-      );
-      return NextResponse.json({ preview });
+      const csvText = requiredString(body.csvText, 'csvText', 5_000_000);
+      const customMapping = readColumnMapping(body.customMapping);
+      const preview = previewCsvImport(db, session.tenantId, accountId, fileName, csvText, customMapping);
+      return ok({ preview });
     }
 
-    if (action === 'commit') {
-      if (!Array.isArray(rows) || rows.length === 0) {
-        return NextResponse.json({ error: 'No rows provided to commit' }, { status: 400 });
-      }
+    const rows = readImportRows(body.rows);
+    const fileHash = optionalString(body.fileHash, 'fileHash', 200) ?? 'hash';
+    const skipDuplicates = optionalBoolean(body.skipDuplicates, 'skipDuplicates') ?? true;
 
-      const result = commitCsvImport(
-        db,
-        session.tenantId,
-        accountId,
-        fileName || 'statement.csv',
-        fileHash || 'hash',
-        rows,
-        skipDuplicates !== false
-      );
-      return NextResponse.json({ success: true, ...result }, { status: 201 });
-    }
-
-    return NextResponse.json({ error: 'Invalid action, expected preview or commit' }, { status: 400 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const result = commitCsvImport(
+      db,
+      session.tenantId,
+      accountId,
+      fileName,
+      fileHash,
+      rows,
+      skipDuplicates
+    );
+    return ok({ success: true, ...result }, 201);
+  } catch (err) {
+    return routeError(err);
   }
-}
+});
 
-export async function DELETE(request: Request) {
+export const DELETE = withApiLogging(async function DELETE(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
@@ -85,12 +153,17 @@ export async function DELETE(request: Request) {
     const batchId = searchParams.get('batchId');
 
     if (!batchId) {
-      return NextResponse.json({ error: 'batchId is required' }, { status: 400 });
+      throw new FieldError('batchId is required');
     }
 
+    const batch = db
+      .prepare('SELECT id, status FROM import_batches WHERE id = ? AND tenant_id = ?')
+      .get(batchId, session.tenantId) as ImportBatchRow | undefined;
+    if (!batch) notFound('Import batch');
+
     const result = reverseImportBatch(db, session.tenantId, batchId);
-    return NextResponse.json(result);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ok(result);
+  } catch (err) {
+    return routeError(err);
   }
-}
+});

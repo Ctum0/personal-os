@@ -6,23 +6,35 @@ import {
   Play,
   CheckCircle2,
   AlertTriangle,
-  Code,
-  HelpCircle,
 } from 'lucide-react';
+import { apiFetch, errorText } from '@/lib/api/client';
+import type { FormulaValue } from '@/lib/customization/formula';
+
+/** Response of POST /api/customization/formula/test. */
+interface FormulaTestResult {
+  isValid: boolean;
+  success?: boolean;
+  value?: FormulaValue;
+  error?: string;
+}
 
 export default function FormulaStudioPage() {
   const [formula, setFormula] = useState("IF(spent > budget, 'Over Budget', 'On Track')");
   const [variablesJson, setVariablesJson] = useState('{\n  "spent": 450,\n  "budget": 500\n}');
-  const [testResult, setTestResult] = useState<any | null>(null);
+  const [testResult, setTestResult] = useState<FormulaTestResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleTestFormula = async () => {
     setIsLoading(true);
     setTestResult(null);
 
-    let parsedVars = {};
+    let parsedVars: Record<string, FormulaValue>;
     try {
-      parsedVars = JSON.parse(variablesJson);
+      const parsed: unknown = JSON.parse(variablesJson);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Variables must be a JSON object');
+      }
+      parsedVars = parsed as Record<string, FormulaValue>;
     } catch {
       setTestResult({ isValid: false, error: 'Invalid JSON in variables editor' });
       setIsLoading(false);
@@ -30,15 +42,14 @@ export default function FormulaStudioPage() {
     }
 
     try {
-      const res = await fetch('/api/customization/formula/test', {
+      const data = await apiFetch<FormulaTestResult>('/api/customization/formula/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ formula, variables: parsedVars }),
       });
-      const data = await res.json();
       setTestResult(data);
-    } catch (err: any) {
-      setTestResult({ isValid: false, error: err.message });
+    } catch (err) {
+      setTestResult({ isValid: false, error: errorText(err) });
     } finally {
       setIsLoading(false);
     }
@@ -66,13 +77,14 @@ export default function FormulaStudioPage() {
       {/* Formula Editor */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4 shadow-sm">
         <div className="flex items-center justify-between">
-          <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
+          <label htmlFor="formula-expression" className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
             Formula Expression
           </label>
           <span className="text-[10px] text-zinc-500 font-mono">AST Parser v1.0</span>
         </div>
 
         <input
+          id="formula-expression"
           type="text"
           value={formula}
           onChange={e => setFormula(e.target.value)}
@@ -114,9 +126,9 @@ export default function FormulaStudioPage() {
           <button
             onClick={handleTestFormula}
             disabled={isLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-all disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-zinc-950 rounded-lg text-xs font-semibold shadow-sm transition-all disabled:opacity-50"
           >
-            <Play className="w-3.5 h-3.5" />
+            <Play className="w-3.5 h-3.5" aria-hidden="true" />
             <span>{isLoading ? 'Evaluating AST...' : 'Evaluate Formula'}</span>
           </button>
         </div>
@@ -124,6 +136,7 @@ export default function FormulaStudioPage() {
         {/* Evaluation Output */}
         {testResult && (
           <div
+            role={testResult.success ? 'status' : 'alert'}
             className={`p-4 rounded-xl border text-xs space-y-1 ${
               testResult.success
                 ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
@@ -132,9 +145,9 @@ export default function FormulaStudioPage() {
           >
             <div className="flex items-center gap-2 font-bold">
               {testResult.success ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" aria-hidden="true" />
               ) : (
-                <AlertTriangle className="w-4 h-4 text-red-400" />
+                <AlertTriangle className="w-4 h-4 text-red-400" aria-hidden="true" />
               )}
               <span>{testResult.success ? 'Formula Evaluated Successfully' : 'Syntax / Evaluation Error'}</span>
             </div>

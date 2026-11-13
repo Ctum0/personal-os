@@ -1,34 +1,105 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { todayISO, addDaysISO } from "@/lib/time";
+import { todayISO, addDaysISO } from '@/lib/time';
+import { apiFetch, apiSend, errorText } from '@/lib/api/client';
 import {
   Sparkles,
   Calendar,
-  Clock,
   CheckCircle2,
   AlertTriangle,
-  ArrowRight,
   Send,
   Plus,
   Trash2,
-  Edit2,
   Check,
-  ChevronRight,
-  RotateCcw,
-  Sliders,
-  CalendarCheck,
-  Lock,
-  ListPlus,
   ArrowUpDown,
   CheckSquare,
 } from 'lucide-react';
-import { ScheduledTimeBlock, DailyPlanProposal, PlanUncertainty, addMinutesToTimeString } from '@/lib/productivity/planner';
+import {
+  type ScheduledTimeBlock,
+  type DailyPlanProposal,
+  type PlanUncertainty,
+  type PlanningContext,
+  addMinutesToTimeString,
+} from '@/lib/productivity/planner';
+
+interface ApprovedPlanItemRow {
+  id: string;
+  title: string;
+  item_type: ScheduledTimeBlock['itemType'];
+  start_time: string;
+  end_time: string;
+  duration_minutes: number;
+  priority: ScheduledTimeBlock['priority'];
+  notes: string | null;
+}
+
+interface ApprovedPlanRow {
+  objective: string | null;
+  available_hours: number | null;
+  estimated_workload_hours: number | null;
+  items: ApprovedPlanItemRow[];
+}
+
+interface PlanningResponse {
+  context?: PlanningContext;
+  approvedPlan?: ApprovedPlanRow | null;
+}
+
+interface PlanningChatResponse {
+  reply?: string;
+  uncertainties?: PlanUncertainty[];
+  proposal?: DailyPlanProposal;
+}
+
+interface CommitResult {
+  success: boolean;
+  planId: string;
+  revision: number;
+  scheduledBlocksCount: number;
+  committedItemsCount: number;
+  createdTasksCount: number;
+}
+
+type CommitStatus = 'idle' | 'committing' | 'committed' | 'error';
+
+/** Lightweight commitment draft the chat endpoint accepts alongside saved blocks. */
+interface NewCommitmentInput {
+  id: string;
+  title: string;
+  itemType: 'scheduled_task';
+  isFixed: boolean;
+  durationMinutes: number;
+  priority: string;
+}
+
+type PlannerCommitment = NewCommitmentInput | ScheduledTimeBlock;
+
+/**
+ * The planner context fields the workspace renders. `PlanningContext` marks them
+ * optional because other callers build partial contexts; the page normalizes
+ * once at the fetch boundary so the render never guards the same field twice.
+ */
+interface PlanningContextView {
+  operatingRules: { workStart: string; workEnd: string; maxDailyWorkloadHours: number };
+  existingEvents: NonNullable<PlanningContext['existingEvents']>;
+  incompleteTasks: NonNullable<PlanningContext['incompleteTasks']>;
+  missedTasks: NonNullable<PlanningContext['missedTasks']>;
+}
+
+const DEFAULT_OPERATING_RULES = { workStart: '09:00', workEnd: '18:00', maxDailyWorkloadHours: 6.5 };
+
+function toContextView(context: PlanningContext): PlanningContextView {
+  return {
+    operatingRules: context.operatingRules ?? DEFAULT_OPERATING_RULES,
+    existingEvents: context.existingEvents ?? [],
+    incompleteTasks: context.incompleteTasks ?? [],
+    missedTasks: context.missedTasks ?? [],
+  };
+}
 
 export default function PlanMyDayPage() {
-  const router = useRouter();
   const [today, setToday] = useState<string>('');
   const [targetDate, setTargetDate] = useState<string>('');
   const [inputMessage, setInputMessage] = useState<string>('');
@@ -42,9 +113,10 @@ export default function PlanMyDayPage() {
   ]);
   const [currentUncertainties, setCurrentUncertainties] = useState<PlanUncertainty[]>([]);
   const [activeProposal, setActiveProposal] = useState<DailyPlanProposal | null>(null);
-  const [commitStatus, setCommitStatus] = useState<'idle' | 'committing' | 'committed' | 'error'>('idle');
-  const [commitResult, setCommitResult] = useState<any | null>(null);
-  const [planningContext, setPlanningContext] = useState<any | null>(null);
+  const [commitStatus, setCommitStatus] = useState<CommitStatus>('idle');
+  const [commitError, setCommitError] = useState<string | null>(null);
+  const [planningContext, setPlanningContext] = useState<PlanningContextView | null>(null);
+  const [contextError, setContextError] = useState<string | null>(null);
 
   // State for manual commitment addition
   const [isAddingItem, setIsAddingItem] = useState(false);
@@ -61,56 +133,67 @@ export default function PlanMyDayPage() {
   }, [conversation, isProcessing]);
 
   useEffect(() => {
-    const currentToday = todayISO();
-    setToday(currentToday);
-    setTargetDate(addDaysISO(currentToday, 1));
+    void (async () => {
+      const currentToday = todayISO();
+      setToday(currentToday);
+      setTargetDate(addDaysISO(currentToday, 1));
+    })();
+  }, []);
+
+  const loadPlanningContext = useCallback(async (date: string) => {
+    try {
+      const data = await apiFetch<PlanningResponse>(`/api/planning?date=${encodeURIComponent(date)}`);
+      if (data.context) setPlanningContext(toContextView(data.context));
+      setContextError(null);
+
+      const approved = data.approvedPlan;
+      if (approved) {
+        // If a plan already exists, display it
+        setActiveProposal({
+          targetDate: date,
+          objective: approved.objective || `Plan for ${date}`,
+          totalAvailableHours: approved.available_hours || 8,
+          estimatedWorkloadHours: approved.estimated_workload_hours || 0,
+          isOvercommitted: false,
+          overloadHours: 0,
+          scheduledItems: (approved.items ?? []).map(it => ({
+            id: it.id,
+            title: it.title,
+            itemType: it.item_type,
+            startTime: it.start_time,
+            endTime: it.end_time,
+            durationMinutes: it.duration_minutes,
+            priority: it.priority,
+            isExistingTask: true,
+            notes: it.notes ?? undefined,
+          })),
+          suggestedDeferrals: [],
+          identifiedUncertainties: [],
+          assumptions: ['Previously committed plan'],
+          diffSummary: {
+            tasksToCreate: 0,
+            calendarBlocksToCreate: 0,
+            tasksToReschedule: 0,
+          },
+        });
+      }
+    } catch (err) {
+      setContextError(errorText(err));
+    }
   }, []);
 
   // Load existing context and any approved plan for target date
   useEffect(() => {
     if (!targetDate) return;
-    fetch(`/api/planning?date=${targetDate}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.context) setPlanningContext(data.context);
-        if (data.approvedPlan) {
-          // If a plan already exists, display it
-          setActiveProposal({
-            targetDate,
-            objective: data.approvedPlan.objective || `Plan for ${targetDate}`,
-            totalAvailableHours: data.approvedPlan.available_hours || 8,
-            estimatedWorkloadHours: data.approvedPlan.estimated_workload_hours || 0,
-            isOvercommitted: false,
-            overloadHours: 0,
-            scheduledItems: (data.approvedPlan.items || []).map((it: any) => ({
-              id: it.id,
-              title: it.title,
-              itemType: it.item_type,
-              startTime: it.start_time,
-              endTime: it.end_time,
-              durationMinutes: it.duration_minutes,
-              priority: it.priority,
-              isExistingTask: true,
-              notes: it.notes,
-            })),
-            suggestedDeferrals: [],
-            identifiedUncertainties: [],
-            assumptions: ['Previously committed plan'],
-            diffSummary: {
-              tasksToCreate: 0,
-              calendarBlocksToCreate: 0,
-              tasksToReschedule: 0,
-            },
-          });
-        }
-      })
-      .catch(() => {});
-  }, [targetDate]);
+    void (async () => {
+      await loadPlanningContext(targetDate);
+    })();
+  }, [targetDate, loadPlanningContext]);
 
   const handleSendMessage = async (
     textToSend?: string,
     answers: Record<string, string> = {},
-    customCommitments?: any[]
+    customCommitments?: PlannerCommitment[]
   ) => {
     const text = textToSend !== undefined ? textToSend : inputMessage;
     if (!text.trim() && Object.keys(answers).length === 0 && !customCommitments) return;
@@ -125,22 +208,18 @@ export default function PlanMyDayPage() {
 
     setIsProcessing(true);
     try {
-      const res = await fetch('/api/planning/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: text,
-          targetDate,
-          answers,
-          existingCommitments: customCommitments || activeProposal?.scheduledItems || [],
-        }),
+      const data = await apiSend<PlanningChatResponse>('/api/planning/chat', 'POST', {
+        message: text,
+        targetDate,
+        answers,
+        existingCommitments: customCommitments || activeProposal?.scheduledItems || [],
       });
 
-      const data = await res.json();
       if (data.reply) {
+        const reply = data.reply;
         setConversation(prev => [
           ...prev,
-          { role: 'assistant', content: data.reply, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
+          { role: 'assistant', content: reply, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
         ]);
       }
 
@@ -152,10 +231,10 @@ export default function PlanMyDayPage() {
         setActiveProposal(data.proposal);
         setCurrentUncertainties([]);
       }
-    } catch (err: any) {
+    } catch (err) {
       setConversation(prev => [
         ...prev,
-        { role: 'assistant', content: `Sorry, I encountered an issue preparing your plan: ${err.message}`, timestamp: 'Just now' },
+        { role: 'assistant', content: `Sorry, I encountered an issue preparing your plan: ${errorText(err)}`, timestamp: 'Just now' },
       ]);
     } finally {
       setIsProcessing(false);
@@ -163,7 +242,7 @@ export default function PlanMyDayPage() {
   };
 
   const handleAnswerUncertainty = (uncertaintyId: string, answerText: string) => {
-    let answerPayload: Record<string, string> = {};
+    const answerPayload: Record<string, string> = {};
     if (uncertaintyId === 'call_time' || uncertaintyId === 'unc_call_time') {
       answerPayload.call_time = answerText;
     } else if (uncertaintyId === 'gym_duration' || uncertaintyId === 'unc_gym_travel') {
@@ -255,53 +334,45 @@ export default function PlanMyDayPage() {
 
   const handleReorganizeTimeline = () => {
     if (!activeProposal) return;
-    handleSendMessage('Reorganize timeline to optimize breaks and flow', {}, activeProposal.scheduledItems);
+    void handleSendMessage('Reorganize timeline to optimize breaks and flow', {}, activeProposal.scheduledItems);
   };
+
+  const splitOpenTask = (task: PlanningContextView['incompleteTasks'][number]): NewCommitmentInput => ({
+    id: `task_${task.id}`,
+    title: task.title,
+    itemType: 'scheduled_task',
+    isFixed: false,
+    durationMinutes: task.duration || 45,
+    priority: task.priority || 'high',
+  });
 
   const handleAutoDraftFromOpenTasks = () => {
     if (!planningContext) return;
-    const openTasks = (planningContext.incompleteTasks || []).slice(0, 5).map((t: any) => ({
-      id: `task_${t.id}`,
-      title: t.title,
-      itemType: 'scheduled_task' as const,
-      isFixed: false,
-      durationMinutes: t.duration || 45,
-      priority: t.priority || 'high',
-    }));
-    handleSendMessage(`Auto-draft day schedule for ${targetDate} using my top priority tasks`, {}, openTasks);
+    const openTasks = planningContext.incompleteTasks.slice(0, 5).map(splitOpenTask);
+    void handleSendMessage(`Auto-draft day schedule for ${targetDate} using my top priority tasks`, {}, openTasks);
   };
 
-  const handleAddTaskToDraft = (task: any) => {
-    const newCommitment = {
-      id: `task_${task.id}`,
-      title: task.title,
-      itemType: 'scheduled_task' as const,
-      isFixed: false,
-      durationMinutes: task.duration || 45,
-      priority: task.priority || 'high',
-    };
-    const current = activeProposal?.scheduledItems || [];
-    handleSendMessage(`Schedule task: "${task.title}"`, {}, [...current, newCommitment]);
+  const handleAddTaskToDraft = (task: PlanningContextView['incompleteTasks'][number]) => {
+    const current = activeProposal?.scheduledItems ?? [];
+    void handleSendMessage(`Schedule task: "${task.title}"`, {}, [...current, splitOpenTask(task)]);
   };
 
+  /**
+   * Commits the approved proposal. The failure branch used to set a status no
+   * code path rendered, so an "Approve & Commit" that the server rejected looked
+   * identical to a no-op. The error is now held as text and rendered beside the
+   * button.
+   */
   const handleCommitPlan = async () => {
     if (!activeProposal) return;
     setCommitStatus('committing');
+    setCommitError(null);
     try {
-      const res = await fetch('/api/planning/commit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan: activeProposal }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setCommitStatus('committed');
-        setCommitResult(data);
-      } else {
-        setCommitStatus('error');
-      }
-    } catch {
+      await apiSend<CommitResult>('/api/planning/commit', 'POST', { plan: activeProposal });
+      setCommitStatus('committed');
+    } catch (err) {
       setCommitStatus('error');
+      setCommitError(errorText(err));
     }
   };
 
@@ -369,6 +440,12 @@ export default function PlanMyDayPage() {
         </div>
       </div>
 
+      {contextError && (
+        <div role="alert" className="p-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-xs text-rose-200">
+          Could not load planning context: {contextError}
+        </div>
+      )}
+
       {/* Main Grid: Left Chat & Input / Right Editable Timeline & Diff */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column: Conversational Interview & Context (5 cols) */}
@@ -398,13 +475,13 @@ export default function PlanMyDayPage() {
                 onClick={() => handleSendMessage(samplePrompt)}
                 className="text-[11px] px-2.5 py-1 bg-zinc-950 hover:bg-zinc-900 text-zinc-300 rounded border border-white/[0.06] transition-colors text-left"
               >
-                "Work 9-5, assignment, cybersecurity, gym, groceries & call"
+                &quot;Work 9-5, assignment, cybersecurity, gym, groceries &amp; call&quot;
               </button>
               <button
                 onClick={() => handleSendMessage("Let's plan tomorrow. I have client meetings at 10 AM and 2 PM, need 2 hours for design review, and want to clear my inbox.")}
                 className="text-[11px] px-2.5 py-1 bg-zinc-950 hover:bg-zinc-900 text-zinc-300 rounded border border-white/[0.06] transition-colors text-left"
               >
-                "Client meetings & design review"
+                &quot;Client meetings &amp; design review&quot;
               </button>
             </div>
           </div>
@@ -412,7 +489,7 @@ export default function PlanMyDayPage() {
           {/* Chat Stream Box with independent scrolling and pinned composer */}
           <div className="bg-zinc-950/60 border border-white/[0.06] rounded-xl flex flex-col h-[600px] xl:h-[680px] sticky top-4 shadow-sm overflow-hidden">
             {/* Scrollable messages container */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3.5 pr-2">
+            <div tabIndex={0} role="log" aria-label="Planning conversation" className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3.5 pr-2">
               {conversation.map((msg, i) => (
                 <div
                   key={i}
@@ -498,7 +575,7 @@ export default function PlanMyDayPage() {
         </div>
 
         {/* Right Column: Live Structured Planning Workspace & Editable Timeline (7 cols, independently scrollable) */}
-        <div className="lg:col-span-7 space-y-4 h-[600px] xl:h-[680px] overflow-y-auto pr-2">
+        <div tabIndex={0} role="region" aria-label="Proposed schedule" className="lg:col-span-7 space-y-4 h-[600px] xl:h-[680px] overflow-y-auto pr-2">
           {!activeProposal ? (
             <div className="space-y-4">
               {/* Live Capacity & Context Bar */}
@@ -553,18 +630,18 @@ export default function PlanMyDayPage() {
                 <div className="flex items-center justify-between pb-2 border-b border-white/[0.06]">
                   <span className="text-xs font-mono uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
                     <Calendar className="w-3.5 h-3.5 text-zinc-400" />
-                    <span>Fixed Calendar Commitments ({planningContext?.existingEvents?.length || 0})</span>
+                    <span>Fixed Calendar Commitments ({planningContext?.existingEvents.length || 0})</span>
                   </span>
                   <span className="text-[10px] font-mono text-zinc-500">Locked</span>
                 </div>
 
-                {(!planningContext?.existingEvents || planningContext.existingEvents.length === 0) ? (
+                {!planningContext || planningContext.existingEvents.length === 0 ? (
                   <p className="text-xs text-zinc-500 py-2 italic font-mono">
                     No fixed calendar appointments scheduled on {targetDate}. Full focus capacity available.
                   </p>
                 ) : (
                   <div className="space-y-1.5">
-                    {planningContext.existingEvents.map((ev: any) => (
+                    {planningContext.existingEvents.map(ev => (
                       <div
                         key={ev.id}
                         className="p-2.5 bg-zinc-900/60 rounded border border-white/[0.04] flex items-center justify-between text-xs"
@@ -594,13 +671,13 @@ export default function PlanMyDayPage() {
                   <span className="text-[10px] font-mono text-zinc-500">Click to Schedule</span>
                 </div>
 
-                {(!planningContext?.incompleteTasks || planningContext.incompleteTasks.length === 0) ? (
+                {!planningContext || planningContext.incompleteTasks.length === 0 ? (
                   <p className="text-xs text-zinc-500 py-2 italic font-mono">
                     No open tasks in backlog. Describe new tasks in chat.
                   </p>
                 ) : (
-                  <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
-                    {planningContext.incompleteTasks.map((t: any) => (
+                  <div tabIndex={0} role="region" aria-label="Candidate commitments" className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
+                    {planningContext.incompleteTasks.map(t => (
                       <div
                         key={t.id}
                         className="p-2.5 bg-zinc-900/40 hover:bg-zinc-900/80 rounded border border-white/[0.04] flex items-center justify-between text-xs transition-colors group"
@@ -736,7 +813,7 @@ export default function PlanMyDayPage() {
                       <select
                         aria-label="New Commitment Priority"
                         value={newItemPriority}
-                        onChange={e => setNewItemPriority(e.target.value as any)}
+                        onChange={e => setNewItemPriority(e.target.value as 'critical' | 'high' | 'normal' | 'optional')}
                         className="sm:col-span-3 bg-zinc-950 border border-white/[0.08] rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none font-mono"
                       >
                         <option value="critical">Critical</option>
@@ -815,7 +892,7 @@ export default function PlanMyDayPage() {
                           <select
                             aria-label="Block Priority"
                             value={block.priority}
-                            onChange={e => updateItemPriority(block.id, e.target.value as any)}
+                            onChange={e => updateItemPriority(block.id, e.target.value as 'critical' | 'high' | 'normal' | 'optional')}
                             className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-950 border border-white/[0.06] text-zinc-300 uppercase focus:outline-none"
                           >
                             <option value="critical">Critical</option>
@@ -884,18 +961,31 @@ export default function PlanMyDayPage() {
                     </Link>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between pt-1">
-                    <p className="text-[11px] text-zinc-500">
-                      Atomic commitment: Writes daily plan, creates calendar events, and enqueues tasks.
-                    </p>
-                    <button
-                      onClick={handleCommitPlan}
-                      disabled={commitStatus === 'committing'}
-                      className="flex items-center gap-2 px-4 py-2 bg-zinc-100 hover:bg-white text-zinc-950 rounded-md text-xs font-medium shadow-sm transition-all active:scale-[0.98] disabled:opacity-50"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      <span>{commitStatus === 'committing' ? 'Committing Schedule...' : 'Approve & Commit Plan'}</span>
-                    </button>
+                  <div className="space-y-2 pt-1">
+                    {commitStatus === 'error' && (
+                      <div
+                        role="alert"
+                        className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-md text-xs text-rose-200 flex items-start gap-2"
+                      >
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                        <span>
+                          Plan could not be committed: {commitError ?? 'the server rejected the request.'}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] text-zinc-500">
+                        Atomic commitment: Writes daily plan, creates calendar events, and enqueues tasks.
+                      </p>
+                      <button
+                        onClick={handleCommitPlan}
+                        disabled={commitStatus === 'committing'}
+                        className="flex items-center gap-2 px-4 py-2 bg-zinc-100 hover:bg-white text-zinc-950 rounded-md text-xs font-medium shadow-sm transition-all active:scale-[0.98] disabled:opacity-50"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>{commitStatus === 'committing' ? 'Committing Schedule...' : 'Approve & Commit Plan'}</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

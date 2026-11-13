@@ -1,19 +1,33 @@
 import { Decimal } from 'decimal.js';
 
+/** Every value the constrained evaluator can represent. */
+export type FormulaValue = number | string | boolean;
+
 export interface FormulaContext {
-  variables: Record<string, number | string | boolean>;
+  variables: Record<string, FormulaValue>;
 }
 
 export interface FormulaValidationResult {
   isValid: boolean;
   error?: string;
-  ast?: any;
+  /** Reserved: the validator reports syntax only and does not build a tree. */
+  ast?: unknown;
 }
 
 export interface FormulaEvaluationResult {
   success: boolean;
-  value?: number | string | boolean;
+  value?: FormulaValue;
   error?: string;
+}
+
+/**
+ * Narrowing helper: Decimal accepts `string | number | Decimal`, but the grammar
+ * can hand it a boolean. Passing the boolean through unchanged keeps the
+ * existing runtime behaviour (Decimal rejects it, the caller reports the error)
+ * instead of silently coercing it to 0/1.
+ */
+function toDecimal(value: FormulaValue): Decimal {
+  return new Decimal(value as Decimal.Value);
 }
 
 /**
@@ -141,8 +155,8 @@ export function validateFormula(expr: string): FormulaValidationResult {
     }
     // Test evaluation with empty/dummy context
     return { isValid: true };
-  } catch (err: any) {
-    return { isValid: false, error: err.message || 'Syntax error' };
+  } catch (err) {
+    return { isValid: false, error: err instanceof Error && err.message ? err.message : 'Syntax error' };
   }
 }
 
@@ -179,11 +193,11 @@ export function evaluateFormula(expr: string, context: FormulaContext): FormulaE
     // Unary -> ('-' | 'NOT') Primary | Primary
     // Primary -> NUMBER | STRING | BOOLEAN | IDENTIFIER | FunctionCall | '(' Expression ')'
 
-    function parseExpression(): any {
+    function parseExpression(): FormulaValue {
       return parseLogicalOr();
     }
 
-    function parseLogicalOr(): any {
+    function parseLogicalOr(): FormulaValue {
       let left = parseLogicalAnd();
       while (peek() && peek()?.type === 'OPERATOR' && peek()?.value.toUpperCase() === 'OR') {
         consume();
@@ -193,7 +207,7 @@ export function evaluateFormula(expr: string, context: FormulaContext): FormulaE
       return left;
     }
 
-    function parseLogicalAnd(): any {
+    function parseLogicalAnd(): FormulaValue {
       let left = parseEquality();
       while (peek() && peek()?.type === 'OPERATOR' && peek()?.value.toUpperCase() === 'AND') {
         consume();
@@ -203,7 +217,7 @@ export function evaluateFormula(expr: string, context: FormulaContext): FormulaE
       return left;
     }
 
-    function parseEquality(): any {
+    function parseEquality(): FormulaValue {
       let left = parseRelational();
       while (peek() && peek()?.type === 'OPERATOR' && (peek()?.value === '==' || peek()?.value === '!=')) {
         const op = consume().value;
@@ -214,7 +228,7 @@ export function evaluateFormula(expr: string, context: FormulaContext): FormulaE
       return left;
     }
 
-    function parseRelational(): any {
+    function parseRelational(): FormulaValue {
       let left = parseAdditive();
       while (peek() && peek()?.type === 'OPERATOR' && ['>', '<', '>=', '<='].includes(peek()!.value)) {
         const op = consume().value;
@@ -227,7 +241,7 @@ export function evaluateFormula(expr: string, context: FormulaContext): FormulaE
       return left;
     }
 
-    function parseAdditive(): any {
+    function parseAdditive(): FormulaValue {
       let left = parseMultiplicative();
       while (peek() && peek()?.type === 'OPERATOR' && (peek()?.value === '+' || peek()?.value === '-')) {
         const op = consume().value;
@@ -237,38 +251,38 @@ export function evaluateFormula(expr: string, context: FormulaContext): FormulaE
           if (typeof left === 'string' || typeof right === 'string') {
             left = String(left) + String(right);
           } else {
-            left = new Decimal(left).plus(new Decimal(right)).toNumber();
+            left = toDecimal(left).plus(toDecimal(right)).toNumber();
           }
         } else {
-          left = new Decimal(left).minus(new Decimal(right)).toNumber();
+          left = toDecimal(left).minus(toDecimal(right)).toNumber();
         }
       }
       return left;
     }
 
-    function parseMultiplicative(): any {
+    function parseMultiplicative(): FormulaValue {
       let left = parseUnary();
       while (peek() && peek()?.type === 'OPERATOR' && (peek()?.value === '*' || peek()?.value === '/')) {
         const op = consume().value;
         const right = parseUnary();
         if (op === '*') {
-          left = new Decimal(left).times(new Decimal(right)).toNumber();
+          left = toDecimal(left).times(toDecimal(right)).toNumber();
         } else {
-          const divisor = new Decimal(right);
+          const divisor = toDecimal(right);
           if (divisor.isZero()) {
             throw new Error('Division by zero');
           }
-          left = new Decimal(left).dividedBy(divisor).toNumber();
+          left = toDecimal(left).dividedBy(divisor).toNumber();
         }
       }
       return left;
     }
 
-    function parseUnary(): any {
+    function parseUnary(): FormulaValue {
       if (peek() && peek()?.type === 'OPERATOR' && peek()?.value === '-') {
         consume();
         const operand = parsePrimary();
-        return new Decimal(operand).negated().toNumber();
+        return toDecimal(operand).negated().toNumber();
       }
       if (peek() && peek()?.type === 'OPERATOR' && peek()?.value.toUpperCase() === 'NOT') {
         consume();
@@ -278,7 +292,7 @@ export function evaluateFormula(expr: string, context: FormulaContext): FormulaE
       return parsePrimary();
     }
 
-    function parsePrimary(): any {
+    function parsePrimary(): FormulaValue {
       const token = peek();
       if (!token) throw new Error('Unexpected end of expression');
 
@@ -310,7 +324,7 @@ export function evaluateFormula(expr: string, context: FormulaContext): FormulaE
         // Check if function call
         if (peek() && peek()?.type === 'LPAREN') {
           consume('LPAREN');
-          const args: any[] = [];
+          const args: FormulaValue[] = [];
           if (peek() && peek()?.type !== 'RPAREN') {
             args.push(parseExpression());
             while (peek() && peek()?.type === 'COMMA') {
@@ -334,10 +348,10 @@ export function evaluateFormula(expr: string, context: FormulaContext): FormulaE
       throw new Error(`Unexpected token: ${token.value}`);
     }
 
-    function executeFunction(fnName: string, args: any[]): any {
+    function executeFunction(fnName: string, args: FormulaValue[]): FormulaValue {
       switch (fnName) {
         case 'ROUND':
-          const val = new Decimal(args[0] || 0);
+          const val = toDecimal(args[0] || 0);
           const decs = args[1] !== undefined ? Number(args[1]) : 0;
           return Number(val.toFixed(decs));
 
@@ -361,7 +375,7 @@ export function evaluateFormula(expr: string, context: FormulaContext): FormulaE
 
     const finalValue = parseExpression();
     return { success: true, value: finalValue };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Evaluation error' };
+  } catch (err) {
+    return { success: false, error: err instanceof Error && err.message ? err.message : 'Evaluation error' };
   }
 }

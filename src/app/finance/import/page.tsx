@@ -1,50 +1,86 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import React, { useCallback, useState, useEffect } from 'react';
+import type { CsvPreviewResult } from '@/lib/finance/csv-import';
+import { apiFetch, apiSend, errorText } from '@/lib/api/client';
 import {
   FileSpreadsheet,
-  Upload,
   CheckCircle2,
   AlertTriangle,
   RotateCcw,
-  Clock,
-  ArrowRight,
-  ShieldCheck,
   FileCheck,
 } from 'lucide-react';
 
+interface ImportAccountRow {
+  accountId: string;
+  accountName: string;
+  currency: string;
+}
+
+interface ImportBatchRow {
+  id: string;
+  file_name: string;
+  account_name: string;
+  status: string;
+  accepted_rows: number;
+  created_at: string | null;
+}
+
+interface CommitImportResult {
+  success: boolean;
+  batchId: string;
+  importedCount: number;
+  skippedCount: number;
+}
+
+interface ReverseImportResult {
+  success: boolean;
+  reversedCount: number;
+  alreadyReversed?: boolean;
+}
+
 export default function CsvImportPage() {
-  const [accounts, setAccounts] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<ImportAccountRow[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<any | null>(null);
-  const [batches, setBatches] = useState<any[]>([]);
+  const [preview, setPreview] = useState<CsvPreviewResult | null>(null);
+  const [batches, setBatches] = useState<ImportBatchRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [reversingBatchId, setReversingBatchId] = useState<string | null>(null);
 
-  const loadBatches = () => {
-    fetch('/api/finance/import')
-      .then(r => r.json())
-      .then(data => setBatches(data.batches || []))
-      .catch(() => {});
-  };
+  const loadBatches = useCallback(async () => {
+    try {
+      const data = await apiFetch<{ batches: ImportBatchRow[] }>('/api/finance/import');
+      setBatches(data.batches ?? []);
+    } catch (err) {
+      setStatusMessage({ type: 'error', text: errorText(err) });
+    }
+  }, []);
+
+  const loadAccounts = useCallback(async () => {
+    try {
+      const data = await apiFetch<{ accounts: ImportAccountRow[] }>('/api/finance/accounts');
+      const accs = data.accounts ?? [];
+      setAccounts(accs);
+      setSelectedAccount(current => (current ? current : accs[0]?.accountId ?? current));
+    } catch (err) {
+      setStatusMessage({ type: 'error', text: errorText(err) });
+    }
+  }, []);
 
   useEffect(() => {
-    fetch('/api/finance/accounts')
-      .then(r => r.json())
-      .then(data => {
-        setAccounts(data.accounts || []);
-        if (data.accounts?.length > 0 && !selectedAccount) {
-          setSelectedAccount(data.accounts[0].accountId);
-        }
-      })
-      .catch(() => {});
+    void (async () => {
+      await loadAccounts();
+    })();
+  }, [loadAccounts]);
 
-    loadBatches();
-  }, []);
+  useEffect(() => {
+    void (async () => {
+      await loadBatches();
+    })();
+  }, [loadBatches]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -61,25 +97,16 @@ export default function CsvImportPage() {
 
     try {
       const text = await csvFile.text();
-      const res = await fetch('/api/finance/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'preview',
-          accountId: selectedAccount,
-          fileName: csvFile.name,
-          csvText: text,
-        }),
+      const data = await apiSend<{ preview: CsvPreviewResult }>('/api/finance/import', 'POST', {
+        action: 'preview',
+        accountId: selectedAccount,
+        fileName: csvFile.name,
+        csvText: text,
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setStatusMessage({ type: 'error', text: data.error || 'CSV parsing error. Please check format.' });
-        setPreview(null);
-        return;
-      }
       setPreview(data.preview);
-    } catch (err: any) {
-      setStatusMessage({ type: 'error', text: `CSV parse error: ${err.message}` });
+    } catch (err) {
+      setStatusMessage({ type: 'error', text: `CSV parse error: ${errorText(err)}` });
+      setPreview(null);
     } finally {
       setIsLoading(false);
     }
@@ -91,23 +118,14 @@ export default function CsvImportPage() {
     setStatusMessage(null);
 
     try {
-      const res = await fetch('/api/finance/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'commit',
-          accountId: selectedAccount,
-          fileName: preview.fileName,
-          fileHash: preview.fileHash,
-          rows: preview.rows,
-          skipDuplicates: true,
-        }),
+      const data = await apiSend<CommitImportResult>('/api/finance/import', 'POST', {
+        action: 'commit',
+        accountId: selectedAccount,
+        fileName: preview.fileName,
+        fileHash: preview.fileHash,
+        rows: preview.rows,
+        skipDuplicates: true,
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setStatusMessage({ type: 'error', text: data.error || 'Failed to commit import batch.' });
-        return;
-      }
       const skipped = Number(data.skippedCount || 0);
       const skippedNote = skipped > 0
         ? ` ${skipped} row${skipped === 1 ? '' : 's'} skipped (duplicates or malformed). Reupload after fixing them if needed.`
@@ -118,9 +136,9 @@ export default function CsvImportPage() {
       });
       setPreview(null);
       setCsvFile(null);
-      loadBatches();
-    } catch (err: any) {
-      setStatusMessage({ type: 'error', text: `Import failed: ${err.message}` });
+      await loadBatches();
+    } catch (err) {
+      setStatusMessage({ type: 'error', text: `Import failed: ${errorText(err)}` });
     } finally {
       setIsCommitting(false);
     }
@@ -129,20 +147,18 @@ export default function CsvImportPage() {
   const handleReverseBatch = async (batchId: string) => {
     setStatusMessage(null);
     try {
-      const res = await fetch(`/api/finance/import?batchId=${batchId}`, { method: 'DELETE' });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setStatusMessage({ type: 'error', text: data.error || 'Failed to reverse import batch.' });
-        return;
-      }
+      const data = await apiSend<ReverseImportResult>(
+        `/api/finance/import?batchId=${encodeURIComponent(batchId)}`,
+        'DELETE'
+      );
       setStatusMessage({
         type: 'success',
         text: `Batch reversed! ${data.reversedCount} transactions cleanly rolled back.`
       });
       setReversingBatchId(null);
-      loadBatches();
-    } catch (err: any) {
-      setStatusMessage({ type: 'error', text: `Batch reversal failed: ${err.message}` });
+      await loadBatches();
+    } catch (err) {
+      setStatusMessage({ type: 'error', text: `Batch reversal failed: ${errorText(err)}` });
     }
   };
 
@@ -160,6 +176,7 @@ export default function CsvImportPage() {
 
       {statusMessage && (
         <div
+          role={statusMessage.type === 'error' ? 'alert' : 'status'}
           className={`p-3.5 rounded-xl border text-xs flex items-center justify-between gap-3 ${
             statusMessage.type === 'success'
               ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-300'
@@ -224,7 +241,7 @@ export default function CsvImportPage() {
             <button
               onClick={handlePreview}
               disabled={isLoading}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-2 disabled:opacity-50"
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-2 disabled:opacity-50"
             >
               <FileCheck className="w-4 h-4" />
               <span>{isLoading ? 'Parsing Columns...' : 'Preview & Detect Duplicates'}</span>
@@ -257,7 +274,7 @@ export default function CsvImportPage() {
               onClick={handleCommit}
               disabled={isCommitting || preview.validRowsCount === 0}
               title={preview.validRowsCount === 0 ? 'No valid rows to commit — fix the errored rows and re-upload.' : undefined}
-              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <CheckCircle2 className="w-4 h-4" />
               <span>{isCommitting ? 'Committing Ledger...' : `Confirm & Commit (${preview.validRowsCount} rows)`}</span>
@@ -273,7 +290,7 @@ export default function CsvImportPage() {
           )}
 
           {/* Rows Preview Table */}
-          <div className="overflow-x-auto max-h-96">
+          <div tabIndex={0} role="region" aria-label="CSV preview rows" className="overflow-x-auto max-h-96">
             <table className="w-full text-left text-xs">
               <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800 uppercase text-[10px] tracking-wider sticky top-0">
                 <tr>
@@ -285,7 +302,7 @@ export default function CsvImportPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/60">
-                {preview.rows.map((r: any) => (
+                {preview.rows.map(r => (
                   <tr
                     key={r.rowIndex}
                     className={`hover:bg-zinc-800/40 ${r.isDuplicate ? 'bg-amber-500/5' : ''}`}

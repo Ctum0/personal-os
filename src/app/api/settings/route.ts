@@ -1,78 +1,74 @@
-import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
-import { readJson } from '@/lib/db/validate';
+import { withApiLogging } from '@/lib/api/log';
+import { FieldError, ok, readBody, routeError } from '@/lib/api/http';
 
-export async function GET() {
+const MAX_PREFERENCES_BYTES = 100_000;
+const PROTECTED_KEYS = ['__proto__', 'constructor', 'prototype'] as const;
+
+interface PreferencesRow {
+  preferences: string | null;
+}
+
+function parsePreferences(raw: string | null | undefined): Record<string, unknown> {
+  if (!raw) return {};
   try {
-    const session = getCurrentSession();
-    const db = getDb();
-
-    const user = db.prepare('SELECT preferences FROM users WHERE id = ? AND tenant_id = ?').get(session.userId, session.tenantId) as { preferences?: string } | undefined;
-    
-    let preferences = {};
-    if (user?.preferences) {
-      try {
-        preferences = JSON.parse(user.preferences);
-      } catch {
-        preferences = {};
-      }
-    }
-
-    return NextResponse.json({ preferences });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const parsed: unknown = JSON.parse(raw);
+    return isPlainObject(parsed) ? parsed : {};
+  } catch {
+    return {};
   }
 }
 
-export async function PUT(request: Request) {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export const GET = withApiLogging(async function GET() {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const parsedBody = await readJson(request);
-    if ("error" in parsedBody) {
-      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
-    }
-    const body = parsedBody.data;
 
-    // Preferences merge must be a flat JSON object of safe size. Rejects
-    // arrays, null, nested-injection keys (e.g. __proto__), and oversized blobs.
-    if (!body || typeof body !== 'object' || Array.isArray(body)) {
-      return NextResponse.json({ error: 'Preferences body must be a JSON object' }, { status: 400 });
+    const user = db
+      .prepare('SELECT preferences FROM users WHERE id = ? AND tenant_id = ?')
+      .get(session.userId, session.tenantId) as PreferencesRow | undefined;
+
+    return ok({ preferences: parsePreferences(user?.preferences) });
+  } catch (err) {
+    return routeError(err);
+  }
+});
+
+export const PUT = withApiLogging(async function PUT(request: Request) {
+  try {
+    const session = getCurrentSession();
+    const db = getDb();
+    const body = await readBody(request);
+
+    // Preferences merge must be a flat JSON object of safe size. `in` would walk
+    // the prototype chain (every plain object inherits `constructor`), so the
+    // protected keys are checked as own properties only.
+    if (PROTECTED_KEYS.some((key) => Object.hasOwn(body, key))) {
+      throw new FieldError('Preferences contain protected keys');
     }
-    const bodyObj = body as Record<string, unknown>;
-    if (('__proto__' in bodyObj) || ('constructor' in bodyObj) || ('prototype' in bodyObj)) {
-      return NextResponse.json({ error: 'Preferences contain protected keys' }, { status: 400 });
-    }
-    if (JSON.stringify(bodyObj).length > 100_000) {
-      return NextResponse.json({ error: 'Preferences payload too large' }, { status: 413 });
+    if (JSON.stringify(body).length > MAX_PREFERENCES_BYTES) {
+      throw new FieldError('Preferences payload too large', 413);
     }
 
-    const current = db.prepare('SELECT preferences FROM users WHERE id = ? AND tenant_id = ?').get(session.userId, session.tenantId) as { preferences?: string } | undefined;
-    let existingPrefsRaw = {};
-    if (current?.preferences) {
-      try {
-        existingPrefsRaw = JSON.parse(current.preferences);
-      } catch {
-        existingPrefsRaw = {};
-      }
-    }
-    const existingPrefs: Record<string, unknown> =
-      existingPrefsRaw && typeof existingPrefsRaw === 'object' && !Array.isArray(existingPrefsRaw)
-        ? (existingPrefsRaw as Record<string, unknown>)
-        : {};
+    const current = db
+      .prepare('SELECT preferences FROM users WHERE id = ? AND tenant_id = ?')
+      .get(session.userId, session.tenantId) as PreferencesRow | undefined;
 
-    const updated = Object.assign({}, existingPrefs, bodyObj);
-    const jsonStr = JSON.stringify(updated);
+    const updated = Object.assign({}, parsePreferences(current?.preferences), body);
 
     db.prepare(`
-      UPDATE users 
+      UPDATE users
       SET preferences = ?, updated_at = datetime('now')
       WHERE id = ? AND tenant_id = ?
-    `).run(jsonStr, session.userId, session.tenantId);
+    `).run(JSON.stringify(updated), session.userId, session.tenantId);
 
-    return NextResponse.json({ preferences: updated });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ok({ preferences: updated });
+  } catch (err) {
+    return routeError(err);
   }
-}
+});

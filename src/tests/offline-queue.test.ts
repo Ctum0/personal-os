@@ -94,7 +94,7 @@ describe('offline queue expansion', () => {
   });
 
   it('parks on network failure (fetch throws) even when navigator says online', async () => {
-    const { guardOffline, getOfflineQueue, markMutationStatus } = await import('../lib/offline/queue');
+    const { guardOffline, getOfflineQueue } = await import('../lib/offline/queue');
     const fetchImpl = vi.fn(async () => { throw new TypeError('fetch failed'); });
     const result = await guardOffline('create_calendar_event', { title: 'Lunch' }, fetchImpl);
     expect(result.queuedOffline).toBe(true);

@@ -1,18 +1,89 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import {
-  Sliders,
-  Clock,
-  Shield,
-  Bell,
-  Wallet,
-  Save,
-  CheckCircle,
-  AlertTriangle,
-} from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { CheckCircle2, RotateCcw, Sliders } from 'lucide-react';
+import { apiFetch, apiSend, errorText } from '@/lib/api/client';
 
-export default function PersonalOperatingRulesPage() {
+/**
+ * Operating rules editor.
+ *
+ * The save path is the interesting part: preferences drive the planner's work
+ * window and safe-to-spend's buffer, so a silent failure here changes real
+ * numbers. The page therefore only reports success when the server confirmed the
+ * write, and shows the server's message otherwise.
+ */
+
+interface Preferences {
+  workStart?: string;
+  workEnd?: string;
+  /** Legacy keys written by earlier builds; still honoured on read. */
+  workHoursStart?: string;
+  workHoursEnd?: string;
+  currency?: string;
+  maxDailyWorkloadHours?: string | number;
+  focusWindowMinutes?: string | number;
+  shortBreakMinutes?: string | number;
+  safetyBufferAmount?: string | number;
+  baseCurrency?: string;
+  quietHoursStart?: string;
+  quietHoursEnd?: string;
+  enableFinancialInPlanning?: boolean;
+}
+
+interface NumberFieldProps {
+  id: string;
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (value: string) => void;
+  step?: string;
+  min?: string;
+}
+
+function NumberField({ id, label, hint, value, onChange, step, min }: NumberFieldProps) {
+  return (
+    <label htmlFor={id} className="block">
+      <span className="block text-[11px] font-medium text-zinc-300 mb-1">{label}</span>
+      <input
+        id={id}
+        type="number"
+        step={step}
+        min={min}
+        value={value}
+        onChange={event => onChange(event.target.value)}
+        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-100 font-mono tabular-nums focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+      />
+      {hint && <span className="block text-[10px] text-zinc-500 mt-1">{hint}</span>}
+    </label>
+  );
+}
+
+interface TextFieldProps {
+  id: string;
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: 'text' | 'time';
+}
+
+function TextField({ id, label, hint, value, onChange, type = 'text' }: TextFieldProps) {
+  return (
+    <label htmlFor={id} className="block">
+      <span className="block text-[11px] font-medium text-zinc-300 mb-1">{label}</span>
+      <input
+        id={id}
+        type={type}
+        value={value}
+        onChange={event => onChange(event.target.value)}
+        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-100 font-mono focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+      />
+      {hint && <span className="block text-[10px] text-zinc-500 mt-1">{hint}</span>}
+    </label>
+  );
+}
+
+export default function SettingsPage() {
   const [workStart, setWorkStart] = useState('09:00');
   const [workEnd, setWorkEnd] = useState('18:00');
   const [maxDailyWorkloadHours, setMaxDailyWorkloadHours] = useState('6.5');
@@ -22,284 +93,208 @@ export default function PersonalOperatingRulesPage() {
   const [baseCurrency, setBaseCurrency] = useState('USD');
   const [quietHoursStart, setQuietHoursStart] = useState('21:00');
   const [quietHoursEnd, setQuietHoursEnd] = useState('08:00');
-  const [enableFinancialInPlanning, setEnableFinancialInPlanning] = useState(true);
-  const [savedSuccess, setSavedSuccess] = useState(false);
+  const [enableFinancialInPlanning, setEnableFinancialInPlanning] = useState(false);
 
-  useEffect(() => {
-    fetch('/api/settings')
-      .then(r => r.json())
-      .then(data => {
-        if (data.preferences) {
-          const p = data.preferences;
-          if (p.workStart) setWorkStart(p.workStart);
-          if (p.workEnd) setWorkEnd(p.workEnd);
-          if (p.maxDailyWorkloadHours) setMaxDailyWorkloadHours(p.maxDailyWorkloadHours);
-          if (p.focusWindowMinutes) setFocusWindowMinutes(p.focusWindowMinutes);
-          if (p.shortBreakMinutes) setShortBreakMinutes(p.shortBreakMinutes);
-          if (p.safetyBufferAmount) setSafetyBufferAmount(p.safetyBufferAmount);
-          if (p.baseCurrency) setBaseCurrency(p.baseCurrency);
-          if (p.quietHoursStart) setQuietHoursStart(p.quietHoursStart);
-          if (p.quietHoursEnd) setQuietHoursEnd(p.quietHoursEnd);
-          if (typeof p.enableFinancialInPlanning === 'boolean') setEnableFinancialInPlanning(p.enableFinancialInPlanning);
-        }
-      })
-      .catch(() => {});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // True once the operator has touched any field. A slow initial GET must never
+  // overwrite what they are typing — that silently reverted their edit and saved
+  // the stale values back.
+  const editedRef = useRef(false);
+  const markEdited = () => {
+    editedRef.current = true;
+  };
+
+  const applyPreferences = useCallback((preferences: Preferences, force = false) => {
+    if (editedRef.current && !force) return;
+    const start = preferences.workStart ?? preferences.workHoursStart;
+    const end = preferences.workEnd ?? preferences.workHoursEnd;
+    if (start) setWorkStart(start);
+    if (end) setWorkEnd(end);
+    if (preferences.maxDailyWorkloadHours !== undefined) setMaxDailyWorkloadHours(String(preferences.maxDailyWorkloadHours));
+    if (preferences.focusWindowMinutes !== undefined) setFocusWindowMinutes(String(preferences.focusWindowMinutes));
+    if (preferences.shortBreakMinutes !== undefined) setShortBreakMinutes(String(preferences.shortBreakMinutes));
+    if (preferences.safetyBufferAmount !== undefined) setSafetyBufferAmount(String(preferences.safetyBufferAmount));
+    const currency = preferences.baseCurrency ?? preferences.currency;
+    if (currency) setBaseCurrency(currency);
+    if (preferences.quietHoursStart) setQuietHoursStart(preferences.quietHoursStart);
+    if (preferences.quietHoursEnd) setQuietHoursEnd(preferences.quietHoursEnd);
+    if (typeof preferences.enableFinancialInPlanning === 'boolean') {
+      setEnableFinancialInPlanning(preferences.enableFinancialInPlanning);
+    }
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await apiFetch<{ preferences: Preferences }>('/api/settings');
+        if (!cancelled) applyPreferences(data.preferences);
+      } catch (err) {
+        if (!cancelled) setError(errorText(err));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [applyPreferences]);
+
   const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    setSaved(false);
     try {
-      await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workStart,
-          workEnd,
-          maxDailyWorkloadHours,
-          focusWindowMinutes,
-          shortBreakMinutes,
-          safetyBufferAmount,
-          baseCurrency,
-          quietHoursStart,
-          quietHoursEnd,
-          enableFinancialInPlanning,
-        }),
+      const data = await apiSend<{ preferences: Preferences }>('/api/settings', 'PUT', {
+        workStart,
+        workEnd,
+        maxDailyWorkloadHours: Number(maxDailyWorkloadHours),
+        focusWindowMinutes: Number(focusWindowMinutes),
+        shortBreakMinutes: Number(shortBreakMinutes),
+        safetyBufferAmount: Number(safetyBufferAmount),
+        baseCurrency,
+        quietHoursStart,
+        quietHoursEnd,
+        enableFinancialInPlanning,
       });
-      setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 3000);
-    } catch {}
+      // Re-apply the server's canonical values: what was persisted is the truth.
+      applyPreferences(data.preferences, true);
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <div className="w-full px-8 py-6 space-y-6">
+    <div className="w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-zinc-100 tracking-tight flex items-center gap-2">
             <Sliders className="w-4 h-4 text-zinc-400" />
-            <span>Personal Operating Rules & Settings</span>
+            <span>Personal Operating Rules &amp; Settings</span>
           </h1>
           <p className="text-xs text-zinc-400 mt-0.5">
-            Explicit constraints for AI planning, daily time blocking, notification quiet hours, and financial buffers.
+            Explicit constraints for AI planning, daily time blocking, quiet hours, and financial buffers.
           </p>
         </div>
-
         <button
-          onClick={handleSave}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-zinc-100 hover:bg-white text-zinc-950 rounded-md text-xs font-medium transition-all active:scale-[0.98] shadow-sm"
+          type="button"
+          onClick={() => void handleSave()}
+          disabled={saving || loading}
+          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-zinc-100 hover:bg-white text-zinc-950 rounded-md text-xs font-medium transition-all active:scale-[0.98] shadow-sm disabled:opacity-50"
         >
-          <Save className="w-3.5 h-3.5" />
-          <span>{savedSuccess ? 'Rules Applied' : 'Save Rules'}</span>
+          <Sliders className="w-3.5 h-3.5" />
+          <span>{saving ? 'Saving…' : saved ? 'Rules Applied' : 'Save Rules'}</span>
         </button>
       </div>
 
-      {savedSuccess && (
-        <div className="p-3 bg-zinc-950/80 border border-emerald-500/30 rounded-lg flex items-center gap-2 text-xs text-emerald-400">
-          <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>Operating rules saved. Future daily planning, schedule proposals, and safe-to-spend reservations will respect these bounds.</span>
+      {error && (
+        <div role="alert" className="p-3 rounded-lg border border-rose-500/30 bg-rose-500/10 text-xs text-rose-200">
+          Rules were not saved: {error}
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Productivity & Workload Rules */}
-        <div className="p-5 bg-zinc-950/60 border border-white/[0.06] rounded-lg space-y-4">
-          <div className="flex items-center gap-2 text-sm font-medium text-zinc-200">
-            <Clock className="w-4 h-4 text-zinc-400" />
-            <span>Productivity & Workload Bounds</span>
-          </div>
+      {loading && (
+        <p role="status" className="text-xs text-zinc-400">
+          Loading your operating rules…
+        </p>
+      )}
 
-          <div className="space-y-3 text-xs">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="work-day-start" className="text-zinc-400 block mb-1">Standard Work Day Start</label>
-                <input
-                  id="work-day-start"
-                  aria-label="Standard Work Day Start"
-                  type="time"
-                  value={workStart}
-                  onChange={e => setWorkStart(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-zinc-200 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-              <div>
-                <label htmlFor="work-day-end" className="text-zinc-400 block mb-1">Standard Work Day End</label>
-                <input
-                  id="work-day-end"
-                  aria-label="Standard Work Day End"
-                  type="time"
-                  value={workEnd}
-                  onChange={e => setWorkEnd(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-zinc-200 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="max-daily-workload" className="text-zinc-400 block mb-1">Maximum Daily Focus Workload (Hours)</label>
-              <input
-                id="max-daily-workload"
-                aria-label="Maximum Daily Focus Workload (Hours)"
-                type="number"
-                step="0.5"
-                value={maxDailyWorkloadHours}
-                onChange={e => setMaxDailyWorkloadHours(e.target.value)}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-zinc-200 focus:outline-none focus:border-indigo-500"
-              />
-              <span className="text-[10px] text-zinc-500 block mt-1">
-                AI daily schedule proposer will reject packing tasks exceeding this capacity.
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <div>
-                <label htmlFor="focus-block-mins" className="text-zinc-400 block mb-1">Deep Work Focus Block (Mins)</label>
-                <input
-                  id="focus-block-mins"
-                  aria-label="Deep Work Focus Block (Mins)"
-                  type="number"
-                  value={focusWindowMinutes}
-                  onChange={e => setFocusWindowMinutes(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-zinc-200 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-              <div>
-                <label htmlFor="break-duration-mins" className="text-zinc-400 block mb-1">Break Duration (Mins)</label>
-                <input
-                  id="break-duration-mins"
-                  aria-label="Break Duration (Mins)"
-                  type="number"
-                  value={shortBreakMinutes}
-                  onChange={e => setShortBreakMinutes(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-zinc-200 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-            </div>
-          </div>
+      {saved && (
+        <div
+          role="status"
+          className="p-3 bg-zinc-950/80 border border-emerald-500/30 rounded-lg flex items-center gap-2 text-xs text-emerald-300"
+        >
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>Operating rules saved. Planning, schedule proposals, and safe-to-spend now respect these bounds.</span>
         </div>
+      )}
 
-        {/* Financial Policy & Safety Buffers */}
-        <div className="p-5 bg-zinc-900 border border-zinc-800 rounded-xl space-y-4">
-          <div className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
-            <Wallet className="w-4 h-4 text-emerald-400" />
-            <span>Financial Safeguards & Base Currency</span>
-          </div>
-
-          <div className="space-y-3 text-xs">
-            <div>
-              <label htmlFor="base-currency" className="text-zinc-400 block mb-1">Default Base Currency</label>
-              <select
-                id="base-currency"
-                aria-label="Default Base Currency"
-                value={baseCurrency}
-                onChange={e => setBaseCurrency(e.target.value)}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-zinc-200 focus:outline-none focus:border-indigo-500"
-              >
-                <option value="USD">USD — US Dollar ($)</option>
-                <option value="LKR">LKR — Sri Lankan Rupee (Rs)</option>
-                <option value="EUR">EUR — Euro (€)</option>
-                <option value="GBP">GBP — British Pound (£)</option>
-                <option value="SGD">SGD — Singapore Dollar (S$)</option>
-              </select>
-              <span className="text-[10px] text-zinc-500 block mt-1">
-                Authoritative base currency for consolidated Net Worth and executive summaries.
-              </span>
-            </div>
-
-            <div>
-              <label htmlFor="safety-buffer-amount" className="text-zinc-400 block mb-1">Configured Liquid Safety Buffer</label>
-              <div className="relative">
-                <input
-                  id="safety-buffer-amount"
-                  aria-label="Configured Liquid Safety Buffer"
-                  type="text"
-                  value={safetyBufferAmount}
-                  onChange={e => setSafetyBufferAmount(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-zinc-200 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-              <span className="text-[10px] text-zinc-500 block mt-1">
-                Earmarked cash reserve subtracted from Safe-to-Spend to prevent accidental overdrafts.
-              </span>
-            </div>
-
-            <div className="pt-2">
-              <label htmlFor="enable-financial-planning" className="flex items-center gap-2 cursor-pointer">
-                <input
-                  id="enable-financial-planning"
-                  aria-label="Surface bill payment reminders in Today view & Daily planner"
-                  type="checkbox"
-                  checked={enableFinancialInPlanning}
-                  onChange={e => setEnableFinancialInPlanning(e.target.checked)}
-                  className="rounded border-zinc-800 text-indigo-600 focus:ring-0"
-                />
-                <span className="text-zinc-300">Surface bill payment reminders in Today view & Daily planner</span>
-              </label>
-              <span className="text-[10px] text-zinc-500 block ml-5 mt-0.5">
-                Opt-in cross-domain permission. When unchecked, finance records remain strictly quarantined.
-              </span>
-            </div>
-          </div>
+      <fieldset disabled={loading} className="space-y-6 border-0 p-0 m-0 min-w-0">
+      <section className="p-5 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-4" onChangeCapture={markEdited}>
+        <h2 className="text-xs font-semibold text-zinc-200 uppercase tracking-wider">Productivity &amp; Workload Bounds</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <TextField id="work-start" label="Standard Work Day Start" type="time" value={workStart} onChange={setWorkStart} />
+          <TextField id="work-end" label="Standard Work Day End" type="time" value={workEnd} onChange={setWorkEnd} />
+          <NumberField
+            id="max-workload"
+            label="Maximum Daily Focus Workload (Hours)"
+            step="0.5"
+            min="0"
+            value={maxDailyWorkloadHours}
+            onChange={setMaxDailyWorkloadHours}
+            hint="Hard ceiling for planned focus minutes per day."
+          />
+          <NumberField
+            id="focus-window"
+            label="Deep Work Focus Block (Mins)"
+            step="5"
+            min="5"
+            value={focusWindowMinutes}
+            onChange={setFocusWindowMinutes}
+          />
+          <NumberField
+            id="short-break"
+            label="Break Duration (Mins)"
+            step="5"
+            min="0"
+            value={shortBreakMinutes}
+            onChange={setShortBreakMinutes}
+          />
         </div>
+      </section>
 
-        {/* Notification Quiet Hours */}
-        <div className="p-5 bg-zinc-900 border border-zinc-800 rounded-xl space-y-4">
-          <div className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
-            <Bell className="w-4 h-4 text-amber-400" />
-            <span>Quiet Hours & Focus Protection</span>
-          </div>
-
-          <div className="space-y-3 text-xs">
-            <p className="text-zinc-400">
-              During quiet hours, local audio cues and proactive assistant toasts are muted.
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="quiet-hours-start" className="text-zinc-400 block mb-1">Quiet Hours Start</label>
-                <input
-                  id="quiet-hours-start"
-                  aria-label="Quiet Hours Start"
-                  type="time"
-                  value={quietHoursStart}
-                  onChange={e => setQuietHoursStart(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-zinc-200 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-              <div>
-                <label htmlFor="quiet-hours-end" className="text-zinc-400 block mb-1">Quiet Hours End</label>
-                <input
-                  id="quiet-hours-end"
-                  aria-label="Quiet Hours End"
-                  type="time"
-                  value={quietHoursEnd}
-                  onChange={e => setQuietHoursEnd(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-zinc-200 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-            </div>
-          </div>
+      <section className="p-5 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-4" onChangeCapture={markEdited}>
+        <h2 className="text-xs font-semibold text-zinc-200 uppercase tracking-wider">Financial Reality Bounds</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <NumberField
+            id="safety-buffer"
+            label="Safe-To-Spend Safety Buffer"
+            step="0.01"
+            min="0"
+            value={safetyBufferAmount}
+            onChange={setSafetyBufferAmount}
+            hint="Liquid funds held back from discretionary spending."
+          />
+          <TextField id="base-currency" label="Base Currency" value={baseCurrency} onChange={setBaseCurrency} />
+          <label htmlFor="financial-in-planning" className="flex items-start gap-2 pt-5">
+            <input
+              id="financial-in-planning"
+              type="checkbox"
+              checked={enableFinancialInPlanning}
+              onChange={event => setEnableFinancialInPlanning(event.target.checked)}
+              className="mt-0.5 h-3.5 w-3.5 rounded border-zinc-700 bg-zinc-950 text-indigo-500"
+            />
+            <span className="text-[11px] text-zinc-300 leading-relaxed">
+              Allow the planner to read financial obligations
+              <span className="block text-[10px] text-zinc-500">
+                Off by default: planning stays quarantined from ledger data unless you enable it.
+              </span>
+            </span>
+          </label>
         </div>
+      </section>
 
-        {/* Security & Isolation Boundaries */}
-        <div className="p-5 bg-zinc-900 border border-zinc-800 rounded-xl space-y-4">
-          <div className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
-            <Shield className="w-4 h-4 text-emerald-400" />
-            <span>Isolation & Privacy Guarantees</span>
-          </div>
-
-          <div className="space-y-2 text-xs text-zinc-400 leading-relaxed">
-            <div className="flex items-start gap-2">
-              <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-              <span>Multi-tenant isolation enforced at SQLite query layer via strict tenant_id constraints.</span>
-            </div>
-            <div className="flex items-start gap-2">
-              <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-              <span>Financial credentials are never stored. No third-party bank screen scraping.</span>
-            </div>
-            <div className="flex items-start gap-2">
-              <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-              <span>AI tool policies default to prepare_and_confirm; destructive writes require signed diff approvals.</span>
-            </div>
-          </div>
+      <section className="p-5 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-4" onChangeCapture={markEdited}>
+        <h2 className="text-xs font-semibold text-zinc-200 uppercase tracking-wider">Quiet Hours</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <TextField id="quiet-start" label="Quiet Hours Start" type="time" value={quietHoursStart} onChange={setQuietHoursStart} />
+          <TextField id="quiet-end" label="Quiet Hours End" type="time" value={quietHoursEnd} onChange={setQuietHoursEnd} />
         </div>
-      </div>
+      </section>
+
+      </fieldset>
+
+      <p className="text-[11px] text-zinc-500 flex items-center gap-1.5">
+        <RotateCcw className="w-3 h-3" aria-hidden="true" />
+        Saved values are re-read from the database after every write, so the form always shows what was persisted.
+      </p>
     </div>
   );
 }

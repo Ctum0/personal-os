@@ -1,36 +1,82 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { todayISO } from '@/lib/time';
+import { apiFetch, apiSend, errorText } from '@/lib/api/client';
 import { fmtMoney, toDecimal } from '../_shared/format';
 import {
   Receipt,
   Plus,
   Search,
-  Filter,
   ArrowRightLeft,
   Trash2,
-  Calendar,
   Tag,
-  Landmark,
   ChevronDown,
   ChevronUp,
   X,
   Check,
-  Clock,
   AlertCircle,
-  FileText,
   Repeat,
 } from 'lucide-react';
 
+interface TransactionRow {
+  id: string;
+  date: string;
+  description: string;
+  payee_name: string | null;
+  notes: string | null;
+  amount: string;
+  transaction_type: 'income' | 'expense' | 'transfer' | 'refund';
+  status: string;
+  account_name: string;
+  to_account_name: string | null;
+  category_name: string | null;
+  category_color: string | null;
+}
+
+interface AccountRow {
+  accountId: string;
+  accountName: string;
+  accountType: string;
+  currentBalance: string;
+  currency: string;
+}
+
+interface CategoryRow {
+  id: string;
+  name: string;
+  type: string;
+  color: string | null;
+}
+
+interface TransactionPayload {
+  transactionType: 'expense' | 'income' | 'transfer' | 'refund';
+  date: string;
+  accountId: string;
+  amount: string;
+  description: string;
+  status: 'posted' | 'pending';
+  notes?: string;
+  tags?: string[];
+  toAccountId?: string;
+  categoryId?: string;
+  recurringConfig?: {
+    isRecurring: boolean;
+    frequency: string;
+    nextDueDate: string;
+    ruleType: string;
+  };
+}
+
 export default function TransactionsPage() {
-  const [transactions, setTransactions] = useState<any[]>([]);
-  const [accounts, setAccounts] = useState<any[]>([]);
-  const [categories, setCategories] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<TransactionRow[]>([]);
+  const [accounts, setAccounts] = useState<AccountRow[]>([]);
+  const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<string>('all');
   const [selectedType, setSelectedType] = useState<string>('all');
   const [search, setSearch] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Progressive Disclosure Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -56,51 +102,65 @@ export default function TransactionsPage() {
   const [recurringNextDate, setRecurringNextDate] = useState<string>('');
   const [recurringRuleType, setRecurringRuleType] = useState<string>('bill');
 
-  const loadTransactions = () => {
+  // Request sequencing: this loader runs from the search effect, the
+  // data-changed listener and after every write. Without a generation check a
+  // slow pre-write GET can resolve last and overwrite the list with a snapshot
+  // that predates the row the operator just created.
+  const listRequestRef = useRef(0);
+
+  const loadTransactions = useCallback(async () => {
+    const requestId = ++listRequestRef.current;
     setIsLoading(true);
-    let url = `/api/finance/transactions?search=${encodeURIComponent(search)}`;
-    if (selectedAccount !== 'all') url += `&accountId=${selectedAccount}`;
-    if (selectedType !== 'all') url += `&type=${selectedType}`;
+    setError(null);
+    try {
+      const params = new URLSearchParams({ search });
+      if (selectedAccount !== 'all') params.set('accountId', selectedAccount);
+      if (selectedType !== 'all') params.set('type', selectedType);
+      const data = await apiFetch<{ transactions: TransactionRow[] }>(
+        `/api/finance/transactions?${params.toString()}`
+      );
+      if (requestId !== listRequestRef.current) return;
+      setTransactions(data.transactions ?? []);
+    } catch (err) {
+      if (requestId !== listRequestRef.current) return;
+      setError(errorText(err));
+    } finally {
+      if (requestId === listRequestRef.current) setIsLoading(false);
+    }
+  }, [search, selectedAccount, selectedType]);
 
-    fetch(url)
-      .then(r => r.json())
-      .then(data => setTransactions(data.transactions || []))
-      .finally(() => setIsLoading(false));
-  };
+  // Selection defaults are applied through functional updates so the loader never
+  // depends on the form state it seeds (that would refetch on every selection).
+  const loadDependencies = useCallback(async () => {
+    try {
+      const [accData, catData] = await Promise.all([
+        apiFetch<{ accounts: AccountRow[] }>('/api/finance/accounts'),
+        apiFetch<{ categories: CategoryRow[] }>('/api/finance/categories'),
+      ]);
+      const accs = accData.accounts ?? [];
+      setAccounts(accs);
+      setFormAccountId(current => (current ? current : accs[0]?.accountId ?? current));
+      setFormToAccountId(current => (current ? current : accs[1]?.accountId ?? current));
 
-  const loadDependencies = () => {
-    fetch('/api/finance/accounts')
-      .then(r => r.json())
-      .then(data => {
-        const accs = data.accounts || [];
-        setAccounts(accs);
-        if (accs.length > 0 && !formAccountId) {
-          setFormAccountId(accs[0].accountId);
-        }
-        if (accs.length > 1 && !formToAccountId) {
-          setFormToAccountId(accs[1].accountId);
-        }
-      });
-
-    fetch('/api/finance/categories')
-      .then(r => r.json())
-      .then(data => {
-        const cats = data.categories || [];
-        setCategories(cats);
-        if (cats.length > 0 && !formCategoryId) {
-          setFormCategoryId(cats[0].id);
-        }
-      })
-      .catch(() => {});
-  };
-
-  useEffect(() => {
-    loadDependencies();
+      const cats = catData.categories ?? [];
+      setCategories(cats);
+      setFormCategoryId(current => (current ? current : cats[0]?.id ?? current));
+    } catch (err) {
+      setError(errorText(err));
+    }
   }, []);
 
   useEffect(() => {
-    loadTransactions();
-  }, [selectedAccount, selectedType, search]);
+    void (async () => {
+      await loadDependencies();
+    })();
+  }, [loadDependencies]);
+
+  useEffect(() => {
+    void (async () => {
+      await loadTransactions();
+    })();
+  }, [loadTransactions]);
 
   // QuickAddModal (shared) now only calls router.refresh() after a write, which does not
   // re-run client-side effects — listen for the cross-page data-change signal so the
@@ -108,12 +168,12 @@ export default function TransactionsPage() {
   // `window.dispatchEvent(new Event('personal-os:data-changed'))`; no-op until then.
   useEffect(() => {
     const h = () => {
-      loadTransactions();
-      loadDependencies();
+      void loadTransactions();
+      void loadDependencies();
     };
     window.addEventListener('personal-os:data-changed', h);
     return () => window.removeEventListener('personal-os:data-changed', h);
-  });
+  }, [loadTransactions, loadDependencies]);
 
   const resetForm = () => {
     setFormType('expense');
@@ -132,12 +192,8 @@ export default function TransactionsPage() {
   const openModal = () => {
     resetForm();
     setFormDate(todayISO());
-    if (accounts.length > 0) {
-      setFormAccountId(accounts[0].accountId);
-      if (accounts.length > 1) {
-        setFormToAccountId(accounts[1].accountId);
-      }
-    }
+    setFormAccountId(current => current || accounts[0]?.accountId || '');
+    setFormToAccountId(current => current || accounts[1]?.accountId || accounts[0]?.accountId || '');
     setIsModalOpen(true);
   };
 
@@ -151,7 +207,7 @@ export default function TransactionsPage() {
     setSubmitError(null);
 
     if (!formAccountId) {
-      setSubmitError('Source account is required');
+      setSubmitError('Choose an account first — the ledger has no accounts loaded yet.');
       return;
     }
     if (formType === 'transfer' && !formToAccountId) {
@@ -185,7 +241,7 @@ export default function TransactionsPage() {
         ? formTags.split(',').map(t => t.trim()).filter(Boolean)
         : [];
 
-      const payload: any = {
+      const payload: TransactionPayload = {
         transactionType: formType,
         date: formDate,
         accountId: formAccountId,
@@ -211,22 +267,13 @@ export default function TransactionsPage() {
         };
       }
 
-      const res = await fetch('/api/finance/transactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to create transaction');
-      }
+      await apiSend<{ transaction: { id: string } }>('/api/finance/transactions', 'POST', payload);
 
       closeModal();
-      loadTransactions();
-      loadDependencies();
-    } catch (err: any) {
-      setSubmitError(err.message);
+      await loadTransactions();
+      await loadDependencies();
+    } catch (err) {
+      setSubmitError(errorText(err));
     } finally {
       setIsSubmitting(false);
     }
@@ -235,16 +282,16 @@ export default function TransactionsPage() {
   const voidTransaction = async (txId: string) => {
     if (!confirm('Void this transaction? A reversal ledger entry will be recorded.')) return;
     try {
-      const res = await fetch(`/api/finance/transactions?id=${txId}`, { method: 'DELETE' });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        alert(data.error || 'Failed to void transaction. Nothing was changed.');
-      }
-    } catch {
-      alert('Network error while voiding transaction. Nothing was changed.');
+      await apiSend<{ success: boolean; reversalId: string }>(
+        `/api/finance/transactions?id=${encodeURIComponent(txId)}`,
+        'DELETE'
+      );
+    } catch (err) {
+      setError(errorText(err));
+      return;
     }
-    loadTransactions();
-    loadDependencies();
+    await loadTransactions();
+    await loadDependencies();
   };
 
   const selectedSourceAccount = accounts.find(a => a.accountId === formAccountId);
@@ -264,13 +311,35 @@ export default function TransactionsPage() {
         </div>
 
         <button
+          type="button"
           onClick={openModal}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-zinc-100 hover:bg-white text-zinc-950 rounded-md text-xs font-medium shadow-sm transition-all active:scale-[0.98]"
+          disabled={accounts.length === 0}
+          title={accounts.length === 0 ? 'Loading ledger accounts…' : undefined}
+          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-zinc-100 hover:bg-white text-zinc-950 rounded-md text-xs font-medium shadow-sm transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Plus className="w-3.5 h-3.5" />
+          <Plus className="w-3.5 h-3.5" aria-hidden="true" />
           <span>Add Transaction</span>
         </button>
       </div>
+
+      {error && (
+        <div
+          role="alert"
+          className="p-3 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-3"
+        >
+          <span className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="text-[11px] underline opacity-80 hover:opacity-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Filter Strip */}
       <div className="p-3 bg-zinc-950/60 border border-white/[0.06] rounded-lg flex flex-wrap items-center gap-3">
@@ -278,6 +347,7 @@ export default function TransactionsPage() {
           <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-2.5" />
           <input
             type="text"
+            aria-label="Search payee or memo"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search payee or memo..."
@@ -328,7 +398,13 @@ export default function TransactionsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.04]">
-              {transactions.length === 0 ? (
+              {isLoading && transactions.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-16 text-center text-xs text-zinc-500">
+                    Loading ledger entries…
+                  </td>
+                </tr>
+              ) : transactions.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-16 text-center">
                     <div className="max-w-xs mx-auto space-y-3">
@@ -503,8 +579,11 @@ export default function TransactionsPage() {
 
             <form onSubmit={handleCreateTransaction} className="p-5 space-y-4">
               {submitError && (
-                <div className="p-3 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
+                <div
+                  role="alert"
+                  className="p-3 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2"
+                >
+                  <AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
                   <span>{submitError}</span>
                 </div>
               )}
@@ -544,12 +623,13 @@ export default function TransactionsPage() {
               {/* 2. Amount and Date Row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-medium uppercase tracking-wider text-zinc-400 mb-1">
+                  <label htmlFor="tx-amount" className="block text-[11px] font-medium uppercase tracking-wider text-zinc-400 mb-1">
                     Amount ($) *
                   </label>
                   <div className="relative">
                     <span className="absolute left-3 top-2 text-zinc-400 text-sm font-mono">$</span>
                     <input
+                      id="tx-amount"
                       type="number"
                       step="0.01"
                       min="0.01"
@@ -563,10 +643,11 @@ export default function TransactionsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-medium uppercase tracking-wider text-zinc-400 mb-1">
+                  <label htmlFor="tx-date" className="block text-[11px] font-medium uppercase tracking-wider text-zinc-400 mb-1">
                     Transaction Date *
                   </label>
                   <input
+                    id="tx-date"
                     type="date"
                     required
                     value={formDate}
@@ -589,10 +670,11 @@ export default function TransactionsPage() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
                     <div>
-                      <label className="block text-[10px] uppercase font-semibold text-zinc-400 mb-1">
+                      <label htmlFor="tx-source-account" className="block text-[10px] uppercase font-semibold text-zinc-400 mb-1">
                         Source Account (From / Outflow) *
                       </label>
                       <select
+                        id="tx-source-account"
                         value={formAccountId}
                         onChange={e => setFormAccountId(e.target.value)}
                         className="w-full px-3 py-1.5 bg-zinc-950 border border-white/[0.1] rounded-md text-xs text-zinc-200 focus:outline-none focus:border-sky-400"
@@ -606,10 +688,11 @@ export default function TransactionsPage() {
                     </div>
 
                     <div>
-                      <label className="block text-[10px] uppercase font-semibold text-zinc-400 mb-1">
+                      <label htmlFor="tx-destination-account" className="block text-[10px] uppercase font-semibold text-zinc-400 mb-1">
                         Destination Account (To / Inflow) *
                       </label>
                       <select
+                        id="tx-destination-account"
                         value={formToAccountId}
                         onChange={e => setFormToAccountId(e.target.value)}
                         className="w-full px-3 py-1.5 bg-zinc-950 border border-white/[0.1] rounded-md text-xs text-zinc-200 focus:outline-none focus:border-sky-400"
@@ -626,10 +709,11 @@ export default function TransactionsPage() {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-medium uppercase tracking-wider text-zinc-400 mb-1">
+                    <label htmlFor="tx-account" className="block text-[11px] font-medium uppercase tracking-wider text-zinc-400 mb-1">
                       Account *
                     </label>
                     <select
+                      id="tx-account"
                       value={formAccountId}
                       onChange={e => setFormAccountId(e.target.value)}
                       className="w-full px-3 py-1.5 bg-zinc-900 border border-white/[0.08] rounded-md text-xs text-zinc-200 focus:outline-none focus:border-zinc-400"
@@ -643,10 +727,11 @@ export default function TransactionsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-medium uppercase tracking-wider text-zinc-400 mb-1">
+                    <label htmlFor="tx-category" className="block text-[11px] font-medium uppercase tracking-wider text-zinc-400 mb-1">
                       Category
                     </label>
                     <select
+                      id="tx-category"
                       value={formCategoryId}
                       onChange={e => setFormCategoryId(e.target.value)}
                       className="w-full px-3 py-1.5 bg-zinc-900 border border-white/[0.08] rounded-md text-xs text-zinc-200 focus:outline-none focus:border-zinc-400"
@@ -664,10 +749,11 @@ export default function TransactionsPage() {
 
               {/* 4. Description / Payee */}
               <div>
-                <label className="block text-[11px] font-medium uppercase tracking-wider text-zinc-400 mb-1">
-                  Payee & Description *
+                <label htmlFor="tx-description" className="block text-[11px] font-medium uppercase tracking-wider text-zinc-400 mb-1">
+                  Payee &amp; Description *
                 </label>
                 <input
+                  id="tx-description"
                   type="text"
                   required
                   placeholder={
@@ -706,10 +792,11 @@ export default function TransactionsPage() {
                     {/* Tags & Status */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-[10px] uppercase font-semibold text-zinc-400 mb-1">
+                        <label htmlFor="tx-tags" className="block text-[10px] uppercase font-semibold text-zinc-400 mb-1">
                           Tags (comma-separated)
                         </label>
                         <input
+                          id="tx-tags"
                           type="text"
                           placeholder="e.g. tax, personal, reimburse"
                           value={formTags}
@@ -719,12 +806,13 @@ export default function TransactionsPage() {
                       </div>
 
                       <div>
-                        <label className="block text-[10px] uppercase font-semibold text-zinc-400 mb-1">
+                        <label htmlFor="tx-status" className="block text-[10px] uppercase font-semibold text-zinc-400 mb-1">
                           Settlement Status
                         </label>
                         <select
+                          id="tx-status"
                           value={formStatus}
-                          onChange={e => setFormStatus(e.target.value as any)}
+                          onChange={e => setFormStatus(e.target.value === 'pending' ? 'pending' : 'posted')}
                           className="w-full px-3 py-1.5 bg-zinc-950 border border-white/[0.08] rounded-md text-xs text-zinc-200 focus:outline-none focus:border-zinc-400"
                         >
                           <option value="posted">Posted (Settled on Ledger)</option>
@@ -738,10 +826,11 @@ export default function TransactionsPage() {
 
                     {/* Notes / Memo */}
                     <div>
-                      <label className="block text-[10px] uppercase font-semibold text-zinc-400 mb-1">
-                        Notes & Invoice Memo
+                      <label htmlFor="tx-notes" className="block text-[10px] uppercase font-semibold text-zinc-400 mb-1">
+                        Notes &amp; Invoice Memo
                       </label>
                       <textarea
+                        id="tx-notes"
                         rows={2}
                         placeholder="Internal notes, invoice numbers, check references..."
                         value={formNotes}
@@ -768,8 +857,9 @@ export default function TransactionsPage() {
                       {isRecurring && (
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pl-6 pt-1">
                           <div>
-                            <span className="block text-[10px] uppercase text-zinc-500 mb-1">Frequency</span>
+                            <label htmlFor="tx-recurring-frequency" className="block text-[10px] uppercase text-zinc-500 mb-1">Frequency</label>
                             <select
+                              id="tx-recurring-frequency"
                               value={recurringFrequency}
                               onChange={e => setRecurringFrequency(e.target.value)}
                               className="w-full px-2.5 py-1 bg-zinc-950 border border-white/[0.08] rounded text-xs text-zinc-200"
@@ -782,8 +872,9 @@ export default function TransactionsPage() {
                           </div>
 
                           <div>
-                            <span className="block text-[10px] uppercase text-zinc-500 mb-1">Next Due Date</span>
+                            <label htmlFor="tx-recurring-next-date" className="block text-[10px] uppercase text-zinc-500 mb-1">Next Due Date</label>
                             <input
+                              id="tx-recurring-next-date"
                               type="date"
                               value={recurringNextDate || formDate}
                               onChange={e => setRecurringNextDate(e.target.value)}
@@ -792,8 +883,9 @@ export default function TransactionsPage() {
                           </div>
 
                           <div>
-                            <span className="block text-[10px] uppercase text-zinc-500 mb-1">Rule Category</span>
+                            <label htmlFor="tx-recurring-rule-type" className="block text-[10px] uppercase text-zinc-500 mb-1">Rule Category</label>
                             <select
+                              id="tx-recurring-rule-type"
                               value={recurringRuleType}
                               onChange={e => setRecurringRuleType(e.target.value)}
                               className="w-full px-2.5 py-1 bg-zinc-950 border border-white/[0.08] rounded text-xs text-zinc-200"

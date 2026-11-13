@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+import type { PlanningPreferences } from './planner';
 import { todayISO, toISODate } from "@/lib/time";
 
 export interface ProjectProgressResult {
@@ -258,7 +259,7 @@ export function calculateHabitStreak(
 
   // Calculate current streak stepping backward
   let currentStreak = 0;
-  let cursor = new Date(referenceDate + 'T12:00:00Z');
+  const cursor = new Date(referenceDate + 'T12:00:00Z');
   
   // If not completed today, check if yesterday was completed
   if (!isCompletedToday) {
@@ -313,7 +314,7 @@ export function calculateHabitStreak(
     ));
     earliest.setDate(earliest.getDate() - 1);
     let run = 0;
-    let walk = new Date(earliest.getTime());
+    const walk = new Date(earliest.getTime());
     let dayCount = 0;
     while (walk.getTime() <= new Date(referenceDate + 'T12:00:00Z').getTime() && dayCount < 3650) {
       dayCount++;
@@ -427,34 +428,51 @@ export function generateDailyPlanProposal(
 
   // Load preferences for authoritative operating rules
   const user = db.prepare('SELECT preferences FROM users WHERE tenant_id = ? LIMIT 1').get(tenantId) as { preferences?: string } | undefined;
-  let prefs: any = {};
+  let prefs: PlanningPreferences = {};
   try {
-    prefs = JSON.parse(user?.preferences || '{}');
+    const parsed: unknown = JSON.parse(user?.preferences || '{}');
+    if (parsed && typeof parsed === 'object') prefs = parsed as PlanningPreferences;
   } catch {}
 
   const workStart = prefs.workStart || prefs.workHoursStart || '09:00';
   const workEnd = prefs.workEnd || prefs.workHoursEnd || '18:00';
-  const maxDailyWorkloadHours = parseFloat(prefs.maxDailyWorkloadHours || '6.5');
-  const [startHourNum] = workStart.split(':').map(Number);
-  let startHour = isNaN(startHourNum) ? 9 : startHourNum;
+  const maxDailyWorkloadHours = parseFloat(String(prefs.maxDailyWorkloadHours || '6.5'));
 
-  const proposedTimeBlocks = topPriorities.map(t => {
-    const duration = t.estimated_duration || 45;
-    const blockStart = `${targetDate}T${String(startHour).padStart(2, '0')}:00:00`;
-    const endMinutes = duration % 60;
-    const endHour = startHour + Math.floor(duration / 60);
-    const blockEnd = `${targetDate}T${String(endHour).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}:00`;
+  // Blocks are placed on a real minute axis. The previous version advanced an
+  // integer hour and dropped minutes, so a 45-minute task produced mangled
+  // ranges, and `workEnd` was read but never enforced.
+  const toMinutes = (clock: string): number => {
+    const [h, m] = clock.split(':').map(Number);
+    return (Number.isFinite(h) ? h : 9) * 60 + (Number.isFinite(m) ? m : 0);
+  };
+  const toClock = (totalMinutes: number): string => {
+    const normalized = ((totalMinutes % 1440) + 1440) % 1440;
+    return `${String(Math.floor(normalized / 60)).padStart(2, '0')}:${String(normalized % 60).padStart(2, '0')}:00`;
+  };
+  const dayStart = toMinutes(workStart);
+  const dayEnd = toMinutes(workEnd);
+  const capacityMinutes = Math.max(0, Math.round(maxDailyWorkloadHours * 60));
 
-    startHour = endHour + (endMinutes > 0 ? 1 : 0);
-
-    return {
+  let cursor = dayStart;
+  let plannedMinutes = 0;
+  const proposedTimeBlocks = topPriorities.flatMap(t => {
+    const duration = Math.max(5, t.estimated_duration || 45);
+    // Respect both the working-hours window and the daily focus ceiling.
+    if (cursor + duration > dayEnd || plannedMinutes + duration > capacityMinutes) {
+      return [];
+    }
+    const startTime = `${targetDate}T${toClock(cursor)}`;
+    const endTime = `${targetDate}T${toClock(cursor + duration)}`;
+    cursor += duration;
+    plannedMinutes += duration;
+    return [{
       taskId: t.id,
       title: t.title,
-      startTime: blockStart,
-      endTime: blockEnd,
+      startTime,
+      endTime,
       durationMinutes: duration,
       reason: t.priority === 'urgent' ? 'Urgent priority commitment' : 'Top scheduled priority',
-    };
+    }];
   });
 
   return {
@@ -462,7 +480,7 @@ export function generateDailyPlanProposal(
     availableHours: maxDailyWorkloadHours,
     workStart,
     workEnd,
-    estimatedWorkloadHours: (topPriorities.reduce((s, t) => s + (t.estimated_duration || 45), 0) / 60).toFixed(1),
+    estimatedWorkloadHours: (plannedMinutes / 60).toFixed(1),
     topPriorities,
     suggestedDeferrals: deferrals,
     proposedTimeBlocks,

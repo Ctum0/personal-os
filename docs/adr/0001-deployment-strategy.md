@@ -20,8 +20,8 @@ once:
    Superhuman-style hybrid).
 
 The audit sprint (ACCEPTANCE-REPORT §7) made the auth posture explicit: there
-is now a real API gate (`src/proxy.ts` + `PERSONAL_OS_PIN`, httpOnly session
-cookie, `/unlock` page) plus scheduled auto-backup maintenance — i.e. the
+is now a real API gate (`src/proxy.ts` + operator credentials, httpOnly session
+cookie, `/login` page) plus scheduled auto-backup maintenance — i.e. the
 app can already protect and recover a deployed database. This ADR decides
 how far toward hosting this codebase goes, because that choice drives a
 large share of remaining work (offline queue semantics, multi-tenancy depth,
@@ -31,7 +31,7 @@ observability retention).
 
 ### A. Pure local-first workstation (current default)
 
-Run Node locally; `PERSONAL_OS_PIN` set for machines that leave the desk.
+Run Node locally; operator credentials set for machines that leave the desk.
 
 - ✅ Data sovereignty; SQLite single-file portability (`data/backups`,
   JSON export, Docker `VOLUME /app/data`).
@@ -86,7 +86,7 @@ Concretely:
 - Any hosting consideration must be reached through C (local authority +
   encrypted relay), never through a direct multi-tenant fork of this
   codebase (option B is rejected for this repository).
-- The `PERSONAL_OS_PIN` gate and `/unlock` flow are the correct minimum
+- The operator credential gate and `/login` flow are the correct minimum
   viable protection for that topology; a future C relay adds remote
   authentication, not in-app per-tenant auth.
 - The schema stays single-tenant in practice (`tenant_default`); multi-tenant

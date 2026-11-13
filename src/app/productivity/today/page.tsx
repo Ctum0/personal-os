@@ -1,102 +1,129 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
-import { todayISO, addDaysISO } from "@/lib/time";
+import { todayISO, addDaysISO } from '@/lib/time';
+import { apiFetch, apiSend, errorText } from '@/lib/api/client';
+import type { PlanningContext } from '@/lib/productivity/planner';
 import {
   CheckCircle2,
   Circle,
   Flame,
-  Clock,
   ArrowRight,
   Plus,
-  Calendar,
   Sparkles,
   AlertTriangle,
-  RotateCcw,
   CalendarClock,
   Play,
   Check,
-  ChevronRight,
-  Target,
   Zap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
+interface TaskRow {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  due_date: string | null;
+  completion_at: string | null;
+  estimated_duration: number;
+  project_name?: string | null;
+}
+
+interface HabitRow {
+  id: string;
+  title: string;
+  streak: number;
+  currentStreak?: number;
+  isCompletedToday: boolean;
+}
+
+interface CalendarEventRow {
+  id: string;
+  title: string;
+  start_time: string;
+  end_time: string;
+  event_type: string | null;
+}
+
+interface PlanningResponse {
+  missedTasks?: PlanningContext['missedTasks'];
+}
+
 export default function ProductivityTodayPage() {
   const { activeSpaceId, setIsQuickAddOpen } = useWorkspace();
-  const [tasks, setTasks] = useState<any[]>([]);
-  const [habits, setHabits] = useState<any[]>([]);
-  const [events, setEvents] = useState<any[]>([]);
-  const [missedTasks, setMissedTasks] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<TaskRow[]>([]);
+  const [habits, setHabits] = useState<HabitRow[]>([]);
+  const [events, setEvents] = useState<CalendarEventRow[]>([]);
+  const [missedTasks, setMissedTasks] = useState<NonNullable<PlanningContext['missedTasks']>>([]);
   const [inlineTaskTitle, setInlineTaskTitle] = useState('');
   const [inlinePriority, setInlinePriority] = useState('normal');
   const [isSubmittingTask, setIsSubmittingTask] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [formattedDate, setFormattedDate] = useState<string>('Today');
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [today, setToday] = useState<string>('');
   const [currentHM, setCurrentHM] = useState<string>('');
 
-  const loadData = (currentDate?: string) => {
+  const loadData = useCallback(async (currentDate?: string) => {
     setIsLoading(true);
-    const activeDate = currentDate || today || todayISO();
-    const spaceQuery = activeSpaceId !== 'all' ? `?spaceId=${activeSpaceId}` : '';
+    const activeDate = currentDate || todayISO();
+    const spaceQuery = activeSpaceId !== 'all' ? `?spaceId=${encodeURIComponent(activeSpaceId)}` : '';
 
-    Promise.all([
-      fetch(`/api/tasks${spaceQuery}`).then(r => r.json()),
-      fetch(`/api/habits${spaceQuery}`).then(r => r.json()),
-      fetch(`/api/calendar?startDate=${activeDate}&endDate=${activeDate}`).then(r => r.json()),
-      fetch(`/api/planning?date=${activeDate}`).then(r => r.json()),
-    ])
-      .then(([tasksData, habitsData, eventsData, planningData]) => {
-        // Quarantine filter: strictly exclude quarantined tasks
-        const rawTasks = tasksData.tasks || [];
-        const cleanTasks = rawTasks.filter((t: any) => 
-          t.status !== 'quarantined'
-        );
-        setTasks(cleanTasks);
-
-        setHabits(habitsData.habits || []);
-        setEvents(eventsData.events || []);
-
-        if (planningData && planningData.missedTasks) {
-          const cleanMissed = (planningData.missedTasks || []).filter((t: any) =>
-            t.status !== 'quarantined'
-          );
-          setMissedTasks(cleanMissed);
-        }
-      })
-      .finally(() => setIsLoading(false));
-  };
+    try {
+      const [tasksData, habitsData, eventsData, planningData] = await Promise.all([
+        apiFetch<{ tasks?: TaskRow[] }>(`/api/tasks${spaceQuery}`),
+        apiFetch<{ habits?: HabitRow[] }>(`/api/habits${spaceQuery}`),
+        apiFetch<{ events?: CalendarEventRow[] }>(`/api/calendar?startDate=${activeDate}&endDate=${activeDate}`),
+        apiFetch<PlanningResponse>(`/api/planning?date=${activeDate}`),
+      ]);
+      // The API already excludes quarantined records; re-filtering client side
+      // would hide nothing new and drift from that single policy.
+      setTasks(tasksData.tasks ?? []);
+      setHabits(habitsData.habits ?? []);
+      setEvents(eventsData.events ?? []);
+      setMissedTasks(planningData.missedTasks ?? []);
+      setError(null);
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [activeSpaceId]);
 
   useEffect(() => {
-    const activeToday = todayISO();
-    setToday(activeToday);
-    const now = new Date();
-    setCurrentHM(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
-    setFormattedDate(
-      now.toLocaleDateString(undefined, {
-        weekday: 'long',
-        month: 'short',
-        day: 'numeric',
-      })
-    );
-    loadData(activeToday);
-  }, [activeSpaceId]);
+    void (async () => {
+      const activeToday = todayISO();
+      setToday(activeToday);
+      const now = new Date();
+      setCurrentHM(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
+      setFormattedDate(
+        now.toLocaleDateString(undefined, {
+          weekday: 'long',
+          month: 'short',
+          day: 'numeric',
+        })
+      );
+      await loadData(activeToday);
+    })();
+  }, [activeSpaceId, loadData]);
 
   const toggleTask = async (taskId: string, currentStatus: string) => {
     const newStatus = currentStatus === 'completed' ? 'in_progress' : 'completed';
+    const previous = tasks;
     // Optimistic update
     setTasks(prev =>
       prev.map(t => (t.id === taskId ? { ...t, status: newStatus } : t))
     );
-    await fetch('/api/tasks', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: taskId, status: newStatus }),
-    });
+    try {
+      await apiSend('/api/tasks', 'PUT', { id: taskId, status: newStatus });
+    } catch (err) {
+      setTasks(previous);
+      setError(errorText(err));
+    }
   };
 
   const handleQuickAdd = async (e: React.FormEvent) => {
@@ -104,23 +131,19 @@ export default function ProductivityTodayPage() {
     if (!inlineTaskTitle.trim() || isSubmittingTask) return;
     setIsSubmittingTask(true);
     try {
-      const res = await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: inlineTaskTitle.trim(),
-          status: 'next',
-          priority: inlinePriority,
-          dueDate: today,
-          spaceId: activeSpaceId !== 'all' ? activeSpaceId : 'space_personal',
-        }),
+      await apiSend('/api/tasks', 'POST', {
+        title: inlineTaskTitle.trim(),
+        status: 'next',
+        priority: inlinePriority,
+        dueDate: today,
+        spaceId: activeSpaceId !== 'all' ? activeSpaceId : 'space_personal',
       });
-      if (res.ok) {
-        setInlineTaskTitle('');
-        setActionNotice('Commitment captured for today.');
-        setTimeout(() => setActionNotice(null), 3000);
-        loadData();
-      }
+      setInlineTaskTitle('');
+      setActionNotice('Commitment captured for today.');
+      setTimeout(() => setActionNotice(null), 3000);
+      await loadData();
+    } catch (err) {
+      setError(errorText(err));
     } finally {
       setIsSubmittingTask(false);
     }
@@ -129,38 +152,35 @@ export default function ProductivityTodayPage() {
   const handleReschedule = async (taskId: string, actionType: 'rescheduled' | 'moved_to_backlog' | 'cancelled', newDate?: string) => {
     const targetDate = newDate || today;
     try {
-      const res = await fetch('/api/planning/reschedule', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          taskId,
-          newDate: targetDate,
-          actionType,
-          reason: actionType === 'rescheduled' ? 'Rescheduled to today from missed backlog' : 'Postponed during daily review',
-        }),
+      await apiSend('/api/planning/reschedule', 'POST', {
+        taskId,
+        newDate: targetDate,
+        actionType,
+        reason: actionType === 'rescheduled' ? 'Rescheduled to today from missed backlog' : 'Postponed during daily review',
       });
-      const data = await res.json();
-      if (data.success) {
-        setActionNotice(`Task ${actionType.replace(/_/g, ' ')}`);
-        setTimeout(() => setActionNotice(null), 3500);
-        loadData();
-      }
-    } catch {}
+      setActionNotice(`Task ${actionType.replace(/_/g, ' ')}`);
+      setTimeout(() => setActionNotice(null), 3500);
+      await loadData();
+    } catch (err) {
+      setError(errorText(err));
+    }
   };
 
   const toggleHabit = async (habitId: string, currentStatus: boolean) => {
+    const previous = habits;
     // Optimistic update
     setHabits(prev =>
       prev.map(h => (h.id === habitId ? { ...h, isCompletedToday: !currentStatus } : h))
     );
-    if (currentStatus) {
-      await fetch(`/api/habits/log?habitId=${habitId}&date=${today}`, { method: 'DELETE' });
-    } else {
-      await fetch('/api/habits/log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ habitId, date: today, status: 'completed', value: 1 }),
-      });
+    try {
+      if (currentStatus) {
+        await apiSend(`/api/habits/log?habitId=${encodeURIComponent(habitId)}&date=${today}`, 'DELETE');
+      } else {
+        await apiSend('/api/habits/log', 'POST', { habitId, date: today, status: 'completed', value: 1 });
+      }
+    } catch (err) {
+      setHabits(previous);
+      setError(errorText(err));
     }
   };
 
@@ -242,10 +262,23 @@ export default function ProductivityTodayPage() {
         </div>
       </div>
 
+      {error && (
+        <div role="alert" className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-xs text-rose-200 flex items-center gap-2">
+          <AlertTriangle className="w-3.5 h-3.5" />
+          <span>{error}</span>
+        </div>
+      )}
+
       {actionNotice && (
-        <div className="p-3 bg-zinc-950/80 border border-emerald-500/30 rounded-lg text-xs text-emerald-400 flex items-center gap-2">
+        <div role="status" className="p-3 bg-zinc-950/80 border border-emerald-500/30 rounded-lg text-xs text-emerald-400 flex items-center gap-2">
           <Check className="w-3.5 h-3.5" />
           <span>{actionNotice}</span>
+        </div>
+      )}
+
+      {isLoading && tasks.length === 0 && habits.length === 0 && events.length === 0 && (
+        <div className="p-3 bg-zinc-950/60 border border-white/[0.06] rounded-xl text-xs text-zinc-400 font-mono">
+          Loading today&apos;s cockpit...
         </div>
       )}
 
@@ -342,7 +375,7 @@ export default function ProductivityTodayPage() {
               <>
                 <Link
                   href="/productivity/focus"
-                  className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow transition-all active:scale-[0.98]"
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 rounded-lg text-xs font-semibold shadow transition-all active:scale-[0.98]"
                 >
                   <Play className="w-3.5 h-3.5 fill-white" />
                   <span>Start 25m Focus Block</span>
@@ -384,7 +417,7 @@ export default function ProductivityTodayPage() {
                 </button>
                 <Link
                   href="/productivity/plan"
-                  className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow transition-all active:scale-[0.98]"
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 rounded-lg text-xs font-semibold shadow transition-all active:scale-[0.98]"
                 >
                   <Sparkles className="w-3.5 h-3.5 fill-white" />
                   <span>Plan My Day</span>
@@ -485,7 +518,7 @@ export default function ProductivityTodayPage() {
               </div>
             ) : (
               <div className="space-y-2 divide-y divide-white/[0.03]">
-                {events.map((ev: any, idx: number) => {
+                {events.map((ev, idx) => {
                   const startStr = ev.start_time?.includes('T') ? ev.start_time.split('T')[1].slice(0, 5) : ev.start_time?.slice(0, 5);
                   const endStr = ev.end_time?.includes('T') ? ev.end_time.split('T')[1].slice(0, 5) : ev.end_time?.slice(0, 5);
                   return (
@@ -517,7 +550,11 @@ export default function ProductivityTodayPage() {
               Quick Capture for Today
             </h2>
             <form onSubmit={handleQuickAdd} className="space-y-2">
+              <label htmlFor="today-quick-capture" className="sr-only">
+                Quick capture a commitment for today
+              </label>
               <input
+                id="today-quick-capture"
                 type="text"
                 value={inlineTaskTitle}
                 onChange={e => setInlineTaskTitle(e.target.value)}

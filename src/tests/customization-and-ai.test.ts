@@ -1,11 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { getInMemoryDb } from '../lib/db';
-import { evaluateFormula, validateFormula } from '../lib/customization/formula';
+import { evaluateFormula } from '../lib/customization/formula';
 import {
   checkToolPermission,
   createAiActionDraft,
   applyAiActionDraft,
-  AI_TOOLS,
 } from '../lib/ai/tools';
 import type Database from 'better-sqlite3';
 

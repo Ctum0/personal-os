@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
 import {
@@ -10,14 +9,41 @@ import {
   reviseDailyPlan,
   savePlanningSession,
   getPlanningSession,
-  ParsedCommitment,
-  PlanUncertainty,
-  DailyPlanProposal,
+  type ParsedCommitment,
+  type PlanUncertainty,
+  type DailyPlanProposal,
 } from '@/lib/productivity/planner';
-import { todayISO, addDaysISO } from "@/lib/time";
-import { readJson } from '@/lib/db/validate';
+import { todayISO, addDaysISO } from '@/lib/time';
+import { withApiLogging } from '@/lib/api/log';
+import { FieldError, ok, notFound, readBody, routeError } from '@/lib/api/http';
+import { optionalISODate, optionalString, requiredArray } from '@/lib/api/fields';
 
-export async function GET(request: Request) {
+const SESSION_ID_PATTERN = /^[a-zA-Z0-9_\-:]+$/;
+
+interface ConversationTurn {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  revisedPlan?: DailyPlanProposal;
+}
+
+function readAnswers(value: unknown): Record<string, string> {
+  if (value === undefined || value === null || value === '') return {};
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new FieldError('answers must be an object');
+  }
+  const answers: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry === undefined || entry === null) continue;
+    if (typeof entry !== 'string') {
+      throw new FieldError(`answers.${key} must be a string`);
+    }
+    answers[key] = entry;
+  }
+  return answers;
+}
+
+export const GET = withApiLogging(async function GET(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
@@ -25,91 +51,83 @@ export async function GET(request: Request) {
     const sessionId = searchParams.get('sessionId');
 
     if (!sessionId) {
-      return NextResponse.json({ error: 'sessionId is required' }, { status: 400 });
+      throw new FieldError('sessionId is required');
     }
 
     const sessionData = getPlanningSession(db, session.tenantId, sessionId);
     if (!sessionData) {
-      return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+      notFound('Session');
     }
 
-    return NextResponse.json({ session: sessionData });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ok({ session: sessionData });
+  } catch (err) {
+    return routeError(err);
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withApiLogging(async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const parsedBody = await readJson(request);
-    if ("error" in parsedBody) {
-      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
-    }
-    const body = parsedBody.data;
+    const body = await readBody(request);
 
-    const {
-      message = '',
-      targetDate = addDaysISO(todayISO(), 1),
-      sessionId = `sess_${Date.now()}`,
-      answers = {},
-      existingCommitments = [],
-      action,
-    } = body;
-
-    if (typeof message !== 'string') {
-      return NextResponse.json({ error: 'message must be a string' }, { status: 400 });
+    const message = optionalString(body.message, 'message', 10_000) ?? '';
+    const targetDate = optionalISODate(body.targetDate, 'targetDate') ?? addDaysISO(todayISO(), 1);
+    const sessionId = optionalString(body.sessionId, 'sessionId', 100) ?? `sess_${Date.now()}`;
+    if (!SESSION_ID_PATTERN.test(sessionId)) {
+      throw new FieldError('invalid sessionId format');
     }
-    if (message.length > 10000) {
-      return NextResponse.json({ error: 'message cannot exceed 10,000 characters' }, { status: 400 });
-    }
-    if (sessionId && (typeof sessionId !== 'string' || sessionId.length > 100 || !/^[a-zA-Z0-9_\-:]+$/.test(sessionId))) {
-      return NextResponse.json({ error: 'invalid sessionId format' }, { status: 400 });
-    }
-    if (targetDate && (typeof targetDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(targetDate))) {
-      return NextResponse.json({ error: 'targetDate must be in YYYY-MM-DD format' }, { status: 400 });
-    }
+    const answers = readAnswers(body.answers);
+    const existingCommitments =
+      body.existingCommitments === undefined || body.existingCommitments === null
+        ? []
+        : requiredArray<ParsedCommitment>(body.existingCommitments, 'existingCommitments', 200);
+    const action = optionalString(body.action, 'action', 50);
 
     const context = getPlanningContext(db, session.tenantId, targetDate);
 
     // Hydrate existing commitments and proposed plan from database session if not passed explicitly
     let mergedCommitments: ParsedCommitment[] = [...existingCommitments];
-    let priorConversation: any[] = [];
+    let priorConversation: ConversationTurn[] = [];
     let priorProposedPlan: DailyPlanProposal | null = null;
-    let priorAnswers: Record<string, any> = {};
+    let priorAnswers: Record<string, string> = {};
 
     const existingSession = getPlanningSession(db, session.tenantId, sessionId);
     if (existingSession) {
-      priorConversation = existingSession.conversation || [];
+      priorConversation = existingSession.conversation as ConversationTurn[];
       priorProposedPlan = existingSession.proposedPlan;
-      priorAnswers = existingSession.extractedState.answers || {};
+      priorAnswers = existingSession.extractedState.answers as Record<string, string>;
 
       if (mergedCommitments.length === 0 && existingSession.extractedState.commitments.length > 0) {
         mergedCommitments = existingSession.extractedState.commitments;
       }
     }
 
-    const combinedAnswers = { ...priorAnswers, ...answers };
+    const combinedAnswers: Record<string, string> = { ...priorAnswers, ...answers };
 
     // Case 0: Adaptive Plan Revision if a proposal already exists and user requests an adjustment
     const isRevision = Boolean(
-      priorProposedPlan && (
-        action === 'revise' ||
-        /(?:move|reschedule|shift|meeting|call|sync|cancel|remove|drop|change|shorten)\b/i.test(message)
-      )
+      priorProposedPlan &&
+        (action === 'revise' ||
+          /(?:move|reschedule|shift|meeting|call|sync|cancel|remove|drop|change|shorten)\b/i.test(message))
     );
 
     if (isRevision && priorProposedPlan) {
       const revision = reviseDailyPlan(context, priorProposedPlan, message);
-      const reply: string = revision.changedItems.length > 0
-        ? `${revision.explanation}\n\nYour schedule for ${targetDate} has been updated. Unchanged blocks remain preserved.`
-        : `${revision.explanation}\n\nI could not confidently identify which block "${message.trim()}" refers to, so nothing was changed. Your schedule for ${targetDate} is untouched. Please name the block explicitly (for example: move the "Design review" to 15:00) and I will apply it.`;
+      const reply: string =
+        revision.changedItems.length > 0
+          ? `${revision.explanation}\n\nYour schedule for ${targetDate} has been updated. Unchanged blocks remain preserved.`
+          : `${revision.explanation}\n\nI could not confidently identify which block "${message.trim()}" refers to, so nothing was changed. Your schedule for ${targetDate} is untouched. Please name the block explicitly (for example: move the "Design review" to 15:00) and I will apply it.`;
 
-      const turns = [
+      const turns: ConversationTurn[] = [
         ...priorConversation,
         { role: 'user', content: message, timestamp: new Date().toISOString() },
-        { role: 'assistant', content: reply, timestamp: new Date().toISOString(), revisedPlan: revision.proposal },
+        {
+          role: 'assistant',
+          content: reply,
+          timestamp: new Date().toISOString(),
+          revisedPlan: revision.proposal,
+        },
       ];
 
       savePlanningSession(db, {
@@ -127,7 +145,7 @@ export async function POST(request: Request) {
         status: 'proposed',
       });
 
-      return NextResponse.json({
+      return ok({
         sessionId,
         status: 'proposed',
         reply,
@@ -152,12 +170,14 @@ export async function POST(request: Request) {
 
       // 1. Check for call clarification (from answers or message text)
       const callAnswer = combinedAnswers.call_time || combinedAnswers.callTime || combinedAnswers.unc_call_time;
-      const callTimeMatch = message.match(/(?:call.*?at\s*|call.*?is\s*at\s*|at\s*)(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i);
+      const callTimeMatch = message.match(
+        /(?:call.*?at\s*|call.*?is\s*at\s*|at\s*)(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i
+      );
       const rawCallTime = callAnswer || (callTimeMatch ? callTimeMatch[1] : null);
 
       if (rawCallTime) {
         const normTime = normalizeTimeString(rawCallTime);
-        const call = mergedCommitments.find(c => /call|meeting|sync/i.test(c.title));
+        const call = mergedCommitments.find((c) => /call|meeting|sync/i.test(c.title));
         if (call) {
           call.isFixed = true;
           call.startTime = normTime;
@@ -169,12 +189,14 @@ export async function POST(request: Request) {
 
       // 2. Check for gym / workout clarification
       const gymAnswer = combinedAnswers.gym_duration || combinedAnswers.gymDuration || combinedAnswers.unc_gym_travel;
-      const gymDurMatch = message.match(/(?:gym.*?takes?\s*|gym.*?duration\s*|gym.*?is\s*|workout.*?)(\d+)\s*(?:mins?|minutes?)/i);
+      const gymDurMatch = message.match(
+        /(?:gym.*?takes?\s*|gym.*?duration\s*|gym.*?is\s*|workout.*?)(\d+)\s*(?:mins?|minutes?)/i
+      );
       const rawGymDur = gymAnswer || (gymDurMatch ? gymDurMatch[1] : null);
 
       if (rawGymDur) {
-        const mins = parseInt(String(rawGymDur).match(/\d+/)?.[0] || '75', 10);
-        const gym = mergedCommitments.find(c => /gym|workout/i.test(c.title));
+        const mins = parseInt(rawGymDur.match(/\d+/)?.[0] || '75', 10);
+        const gym = mergedCommitments.find((c) => /gym|workout/i.test(c.title));
         if (gym) {
           gym.durationMinutes = mins;
         }
@@ -183,7 +205,7 @@ export async function POST(request: Request) {
       // 3. Check for assignment deadline / priority clarification
       const assignmentAnswer = combinedAnswers.assignment_deadline || combinedAnswers.unc_assignment_deadline;
       if (assignmentAnswer || /assignment.*?due/i.test(msgLower) || /tomorrow\s+evening/i.test(msgLower)) {
-        const assignment = mergedCommitments.find(c => /assignment|report/i.test(c.title));
+        const assignment = mergedCommitments.find((c) => /assignment|report/i.test(c.title));
         if (assignment) {
           assignment.priority = 'critical';
         }
@@ -194,11 +216,12 @@ export async function POST(request: Request) {
         const parsed = parseUnstructuredPlanInput(message, targetDate, context);
         for (const c of parsed.commitments) {
           const alreadyExists = mergedCommitments.some(
-            m => m.title.toLowerCase() === c.title.toLowerCase() ||
-                 (/call/i.test(m.title) && /call/i.test(c.title)) ||
-                 (/gym/i.test(m.title) && /gym/i.test(c.title)) ||
-                 (/assignment/i.test(m.title) && /assignment/i.test(c.title)) ||
-                 (/work/i.test(m.title) && /work/i.test(c.title))
+            (m) =>
+              m.title.toLowerCase() === c.title.toLowerCase() ||
+              (/call/i.test(m.title) && /call/i.test(c.title)) ||
+              (/gym/i.test(m.title) && /gym/i.test(c.title)) ||
+              (/assignment/i.test(m.title) && /assignment/i.test(c.title)) ||
+              (/work/i.test(m.title) && /work/i.test(c.title))
           );
           if (!alreadyExists) {
             mergedCommitments.push(c);
@@ -208,10 +231,17 @@ export async function POST(request: Request) {
     }
 
     // Determine if high-urgency uncertainties remain
-    const callHasFixedTime = mergedCommitments.some(c => /call|meeting|sync/i.test(c.title) && c.isFixed && c.startTime);
-    const hasCallUncertainty = mergedCommitments.some(c => /call|meeting|sync/i.test(c.title)) && !callHasFixedTime;
+    const callHasFixedTime = mergedCommitments.some(
+      (c) => /call|meeting|sync/i.test(c.title) && c.isFixed && c.startTime
+    );
+    const hasCallUncertainty = mergedCommitments.some((c) => /call|meeting|sync/i.test(c.title)) && !callHasFixedTime;
 
-    if (hasCallUncertainty && !combinedAnswers.call_time && !combinedAnswers.callTime && !/(?:at\s*|is\s*at\s*)\d{1,2}(?::\d{2})?\s*(?:am|pm)?/i.test(message)) {
+    if (
+      hasCallUncertainty &&
+      !combinedAnswers.call_time &&
+      !combinedAnswers.callTime &&
+      !/(?:at\s*|is\s*at\s*)\d{1,2}(?::\d{2})?\s*(?:am|pm)?/i.test(message)
+    ) {
       remainingUncertainties = [
         {
           id: 'call_time',
@@ -228,22 +258,25 @@ export async function POST(request: Request) {
 
     // Check if any extracted commitment was already completed in the database
     const completedTasksInDb = db.prepare(`
-      SELECT title FROM tasks 
+      SELECT title FROM tasks
       WHERE tenant_id = ? AND status = 'completed' AND is_deleted = 0
       ORDER BY updated_at DESC LIMIT 20
     `).all(session.tenantId) as Array<{ title: string }>;
-    const completedTitles = new Set(completedTasksInDb.map(t => t.title.toLowerCase().trim()));
-    const alreadyCompletedCommitments = mergedCommitments.filter(c => completedTitles.has(c.title.toLowerCase().trim()));
-    const completedNotice = alreadyCompletedCommitments.length > 0
-      ? `\n\n📌 Note: ${alreadyCompletedCommitments.map(c => `"${c.title}"`).join(', ')} is already recorded as completed in your task history.`
-      : '';
+    const completedTitles = new Set(completedTasksInDb.map((t) => t.title.toLowerCase().trim()));
+    const alreadyCompletedCommitments = mergedCommitments.filter((c) =>
+      completedTitles.has(c.title.toLowerCase().trim())
+    );
+    const completedNotice =
+      alreadyCompletedCommitments.length > 0
+        ? `\n\n📌 Note: ${alreadyCompletedCommitments.map((c) => `"${c.title}"`).join(', ')} is already recorded as completed in your task history.`
+        : '';
 
     // If there are mandatory clarification questions:
     if (remainingUncertainties.length > 0 && Object.keys(combinedAnswers).length === 0) {
-      const questionList = remainingUncertainties.map(u => `• ${u.question}`).join('\n');
-      const reply = `I've extracted your planned commitments for ${targetDate}:\n${mergedCommitments.map(c => `  - ${c.title} (${c.durationMinutes}m${c.isFixed ? `, ${c.startTime}-${c.endTime}` : ''})`).join('\n')}${completedNotice}\n\nBefore I schedule your day, I need to clarify a detail to place it properly:\n${questionList}\n\nCould you clarify so I can finalize your schedule?`;
+      const questionList = remainingUncertainties.map((u) => `• ${u.question}`).join('\n');
+      const reply = `I've extracted your planned commitments for ${targetDate}:\n${mergedCommitments.map((c) => `  - ${c.title} (${c.durationMinutes}m${c.isFixed ? `, ${c.startTime}-${c.endTime}` : ''})`).join('\n')}${completedNotice}\n\nBefore I schedule your day, I need to clarify a detail to place it properly:\n${questionList}\n\nCould you clarify so I can finalize your schedule?`;
 
-      const turns = [
+      const turns: ConversationTurn[] = [
         ...priorConversation,
         { role: 'user', content: message, timestamp: new Date().toISOString() },
         { role: 'assistant', content: reply, timestamp: new Date().toISOString() },
@@ -258,14 +291,14 @@ export async function POST(request: Request) {
         extractedState: {
           commitments: mergedCommitments,
           uncertainties: remainingUncertainties,
-          clarificationQuestions: remainingUncertainties.map(u => u.question),
+          clarificationQuestions: remainingUncertainties.map((u) => u.question),
           answers: combinedAnswers,
         },
         proposedPlan: null,
         status: 'interviewing',
       });
 
-      return NextResponse.json({
+      return ok({
         sessionId,
         status: 'interviewing',
         reply,
@@ -293,7 +326,7 @@ export async function POST(request: Request) {
     }
 
     // Persist turn in planning session
-    const turns = [
+    const turns: ConversationTurn[] = [
       ...priorConversation,
       { role: 'user', content: message, timestamp: new Date().toISOString() },
       { role: 'assistant', content: reply, timestamp: new Date().toISOString() },
@@ -314,7 +347,7 @@ export async function POST(request: Request) {
       status: 'proposed',
     });
 
-    return NextResponse.json({
+    return ok({
       sessionId,
       status: 'proposed',
       reply,
@@ -322,7 +355,7 @@ export async function POST(request: Request) {
       commitments: mergedCommitments,
       uncertainties: [],
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err);
   }
-}
+});

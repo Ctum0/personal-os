@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { getInMemoryDb } from '../lib/db';
 import {
   calculateProjectProgress,
-  calculateGoalProgress,
   calculateHabitStreak,
 } from '../lib/productivity/engine';
 import { commitApprovedDailyPlan, DailyPlanProposal } from '../lib/productivity/planner';

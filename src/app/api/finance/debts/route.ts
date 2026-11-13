@@ -1,32 +1,58 @@
-import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
-import { calculateDebtPayoffScenarios, calculateDebtLedgerReconciliations, calculateDebtPaymentSplit } from '@/lib/finance/engine';
+import {
+  calculateDebtPayoffScenarios,
+  calculateDebtLedgerReconciliations,
+  calculateDebtPaymentSplit,
+} from '@/lib/finance/engine';
+import type { DebtPaymentSplitResult } from '@/lib/finance/engine';
 import { Decimal } from 'decimal.js';
-import { readJson } from '@/lib/db/validate';
+import { withApiLogging } from '@/lib/api/log';
+import { notFound, ok, readBody, routeError } from '@/lib/api/http';
+import {
+  optionalInt,
+  optionalMoney,
+  optionalString,
+  requiredMoney,
+  requiredString,
+} from '@/lib/api/fields';
 
-export async function GET(request: Request) {
+interface DebtRow {
+  id: string;
+  name: string;
+  liability_type: string;
+  principal_balance: string;
+  interest_rate: string;
+  minimum_payment: string;
+  due_day_of_month: number | null;
+  payoff_strategy: string;
+  linked_account_id: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  linked_account_name: string | null;
+  principalBalance?: string;
+  effectiveBalance?: string;
+  balanceSource?: 'ledger' | 'principal';
+  ledgerBalance?: string | null;
+  ledgerOutstanding?: string | null;
+  ledgerPrincipalMismatch?: boolean;
+  paymentSplit?: DebtPaymentSplitResult;
+}
+
+export const GET = withApiLogging(async function GET(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
     const { searchParams } = new URL(request.url);
-    const extraPayment = searchParams.get('extra') || '100.00';
-    let extraNum: number;
-    try {
-      extraNum = new Decimal(extraPayment).toNumber();
-    } catch {
-      return NextResponse.json({ error: 'extra must be a valid numeric value' }, { status: 400 });
-    }
-    if (!isFinite(extraNum) || extraNum < 0) {
-      return NextResponse.json({ error: 'extra must be a non-negative number' }, { status: 400 });
-    }
+    const extraPayment = optionalMoney(searchParams.get('extra'), 'extra') ?? '100.00';
 
     const debts = db.prepare(`
       SELECT d.*, a.name as linked_account_name
       FROM debts d
       LEFT JOIN finance_accounts a ON d.linked_account_id = a.id
       WHERE d.tenant_id = ?
-    `).all(session.tenantId) as any[];
+    `).all(session.tenantId) as DebtRow[];
 
     debts.sort((a, b) => new Decimal(b.interest_rate || '0').minus(new Decimal(a.interest_rate || '0')).toNumber());
 
@@ -38,8 +64,9 @@ export async function GET(request: Request) {
     );
     for (const d of debts) {
       const rec = reconciliations.get(d.id);
+      const effectiveBalance = rec?.effectivePrincipal ?? d.principal_balance;
       d.principalBalance = d.principal_balance;
-      d.effectiveBalance = rec?.effectivePrincipal ?? d.principal_balance;
+      d.effectiveBalance = effectiveBalance;
       d.balanceSource = rec?.balanceSource ?? 'principal';
       d.ledgerBalance = rec?.ledgerBalance ?? null;
       d.ledgerOutstanding = rec?.ledgerOutstanding ?? null;
@@ -48,82 +75,42 @@ export async function GET(request: Request) {
       const minPay = new Decimal(d.minimum_payment || '0.00');
       // Default payment used by the UI's next-payment split preview:
       // max(minimum_payment, 1% of balance, floored at $25) — documented for the UI.
-      const defaultPayment = Decimal.max(minPay, new Decimal(d.effectiveBalance).times(0.01), new Decimal(25));
-      d.paymentSplit = calculateDebtPaymentSplit(d.effectiveBalance, d.interest_rate || '0', defaultPayment.toFixed(2));
+      const defaultPayment = Decimal.max(minPay, new Decimal(effectiveBalance).times(0.01), new Decimal(25));
+      d.paymentSplit = calculateDebtPaymentSplit(effectiveBalance, d.interest_rate || '0', defaultPayment.toFixed(2));
     }
 
     const payoffScenarios = calculateDebtPayoffScenarios(db, session.tenantId, extraPayment);
 
-    return NextResponse.json({ debts, payoffScenarios });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ok({ debts, payoffScenarios });
+  } catch (err) {
+    return routeError(err);
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withApiLogging(async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const parsedBody = await readJson(request);
-    if ("error" in parsedBody) {
-      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
-    }
-    const body = parsedBody.data;
+    const body = await readBody(request);
 
-    if (!body.name || !body.name.trim() || body.principalBalance === undefined) {
-      return NextResponse.json({ error: 'Name and principalBalance are required' }, { status: 400 });
-    }
+    const name = requiredString(body.name, 'name', 200);
+    const principal = requiredMoney(body.principalBalance, 'principalBalance');
+    const apr = optionalMoney(body.interestRate, 'interestRate') ?? '0.00';
+    const minPay = optionalMoney(body.minimumPayment, 'minimumPayment') ?? '0.00';
+    const dueDay = optionalInt(body.dueDayOfMonth, 'dueDayOfMonth', 1, 31) ?? 15;
+    const liabilityType = optionalString(body.liabilityType, 'liabilityType', 40) ?? 'credit_card';
+    const payoffStrategy = optionalString(body.payoffStrategy, 'payoffStrategy', 40) ?? 'avalanche';
+    const linkedAccountId = optionalString(body.linkedAccountId, 'linkedAccountId', 100);
+    const notes = optionalString(body.notes, 'notes', 2000) ?? '';
 
-    let principalDec: Decimal;
-    try {
-      principalDec = new Decimal(body.principalBalance);
-      if (!principalDec.isFinite() || principalDec.lte(0)) {
-        return NextResponse.json({ error: 'principalBalance must be a positive number' }, { status: 400 });
-      }
-    } catch {
-      return NextResponse.json({ error: 'Invalid principalBalance' }, { status: 400 });
-    }
-
-    let aprDec = new Decimal(0);
-    if (body.interestRate !== undefined && body.interestRate !== null && body.interestRate !== '') {
-      try {
-        aprDec = new Decimal(body.interestRate);
-        if (!aprDec.isFinite() || aprDec.lt(0)) {
-          return NextResponse.json({ error: 'interestRate must be non-negative' }, { status: 400 });
-        }
-      } catch {
-        return NextResponse.json({ error: 'Invalid interestRate' }, { status: 400 });
-      }
-    }
-
-    let minPayDec = new Decimal(0);
-    if (body.minimumPayment !== undefined && body.minimumPayment !== null && body.minimumPayment !== '') {
-      try {
-        minPayDec = new Decimal(body.minimumPayment);
-        if (!minPayDec.isFinite() || minPayDec.lt(0)) {
-          return NextResponse.json({ error: 'minimumPayment must be non-negative' }, { status: 400 });
-        }
-      } catch {
-        return NextResponse.json({ error: 'Invalid minimumPayment' }, { status: 400 });
-      }
-    }
-
-    if (body.linkedAccountId) {
-      const acc = db.prepare('SELECT id FROM finance_accounts WHERE id = ? AND tenant_id = ?').get(body.linkedAccountId, session.tenantId);
-      if (!acc) {
-        return NextResponse.json({ error: 'Linked account not found' }, { status: 404 });
-      }
-    }
-
-    const dueDay = body.dueDayOfMonth !== undefined ? Number(body.dueDayOfMonth) : 15;
-    if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) {
-      return NextResponse.json({ error: 'dueDayOfMonth must be an integer between 1 and 31' }, { status: 400 });
+    if (linkedAccountId) {
+      const acc = db
+        .prepare('SELECT id FROM finance_accounts WHERE id = ? AND tenant_id = ?')
+        .get(linkedAccountId, session.tenantId);
+      if (!acc) notFound('Linked account');
     }
 
     const debtId = `debt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const principal = principalDec.toFixed(2);
-    const apr = aprDec.toFixed(2);
-    const minPay = minPayDec.toFixed(2);
 
     db.prepare(`
       INSERT INTO debts (
@@ -132,20 +119,20 @@ export async function POST(request: Request) {
     `).run(
       debtId,
       session.tenantId,
-      body.name.trim(),
-      body.liabilityType || 'credit_card',
+      name,
+      liabilityType,
       principal,
       apr,
       minPay,
       dueDay,
-      body.payoffStrategy || 'avalanche',
-      body.linkedAccountId || null,
-      body.notes || ''
+      payoffStrategy,
+      linkedAccountId ?? null,
+      notes
     );
 
     const created = db.prepare('SELECT * FROM debts WHERE id = ? AND tenant_id = ?').get(debtId, session.tenantId);
-    return NextResponse.json({ debt: created }, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ok({ debt: created }, 201);
+  } catch (err) {
+    return routeError(err);
   }
-}
+});

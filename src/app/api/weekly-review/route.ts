@@ -1,8 +1,9 @@
-import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
-import { readJson, isISODateString } from '@/lib/db/validate';
 import { todayISO, startOfWeekISO, addDaysISO } from '@/lib/time';
+import { withApiLogging } from '@/lib/api/log';
+import { FieldError, notFound, ok, readBody, routeError } from '@/lib/api/http';
+import { optionalISODate, optionalString, requiredISODate } from '@/lib/api/fields';
 
 /**
  * Weekly Review — authoritative persistence (weekly_reviews table, migration v4).
@@ -24,12 +25,31 @@ import { todayISO, startOfWeekISO, addDaysISO } from '@/lib/time';
  *    (snapshotDatabase) automatically; JSON backup import supports
  *    domains.productivity.weeklyReviews (see /api/backup/restore).
  */
-function rowToReview(row: any) {
+
+/** Payload ceiling: a review holds free text, not a data dump. */
+const MAX_PAYLOAD_BYTES = 200_000;
+const DEFAULT_LIMIT = 52;
+const MAX_LIMIT = 261;
+
+interface WeeklyReviewRow {
+  id: string;
+  week_start: string;
+  week_end: string | null;
+  title: string | null;
+  summary: string | null;
+  payload: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+function rowToReview(row: WeeklyReviewRow | undefined) {
   if (!row) return null;
   let payload: unknown = {};
   try {
     payload = JSON.parse(row.payload || '{}');
-  } catch {}
+  } catch {
+    payload = {};
+  }
   return {
     id: row.id,
     weekStart: row.week_start,
@@ -42,23 +62,26 @@ function rowToReview(row: any) {
   };
 }
 
-export async function GET(request: Request) {
+function numOr0(v: unknown): number {
+  const n = typeof v === 'number' ? v : parseFloat(String(v ?? ''));
+  return Number.isFinite(n) ? n : 0;
+}
+
+export const GET = withApiLogging(async function GET(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
     const { searchParams } = new URL(request.url);
-    const weekStart = searchParams.get('weekStart');
-    const limitParam = parseInt(searchParams.get('limit') || '52', 10);
-    const limit = isNaN(limitParam) || limitParam < 1 ? 52 : Math.min(limitParam, 261);
+    const rawWeekStart = searchParams.get('weekStart');
+    const limitParam = parseInt(searchParams.get('limit') || String(DEFAULT_LIMIT), 10);
+    const limit = isNaN(limitParam) || limitParam < 1 ? DEFAULT_LIMIT : Math.min(limitParam, MAX_LIMIT);
 
-    if (weekStart) {
-      if (!isISODateString(weekStart)) {
-        return NextResponse.json({ error: 'weekStart must be in YYYY-MM-DD format' }, { status: 400 });
-      }
+    if (rawWeekStart) {
+      const weekStart = requiredISODate(rawWeekStart, 'weekStart');
       const row = db.prepare(`
         SELECT * FROM weekly_reviews WHERE tenant_id = ? AND week_start = ?
-      `).get(session.tenantId, weekStart);
-      return NextResponse.json({ review: rowToReview(row) });
+      `).get(session.tenantId, weekStart) as WeeklyReviewRow | undefined;
+      return ok({ review: rowToReview(row) });
     }
 
     const rows = db.prepare(`
@@ -66,66 +89,55 @@ export async function GET(request: Request) {
       WHERE tenant_id = ?
       ORDER BY week_start DESC
       LIMIT ?
-    `).all(session.tenantId, limit);
+    `).all(session.tenantId, limit) as WeeklyReviewRow[];
 
-    return NextResponse.json({ reviews: rows.map(rowToReview) });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ok({ reviews: rows.map(rowToReview) });
+  } catch (err) {
+    return routeError(err);
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withApiLogging(async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const parsedBody = await readJson(request);
-    if ("error" in parsedBody) {
-      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
-    }
-    const body = parsedBody.data;
+    const body = await readBody(request);
 
     // weekStart is the anchor; legacy key weekEnding is accepted as an anchor
     // alias. Default anchor: start of the current week.
-    const anchor = body.weekStart || body.weekEnding;
-    if (anchor !== undefined && anchor !== null && !isISODateString(anchor)) {
-      return NextResponse.json({ error: 'weekStart must be in YYYY-MM-DD format' }, { status: 400 });
-    }
+    const anchor = optionalISODate(body.weekStart, 'weekStart') ?? optionalISODate(body.weekEnding, 'weekEnding');
     const weekStart = anchor ? startOfWeekISO(anchor) : startOfWeekISO(todayISO());
-    if (body.weekEnd !== undefined && body.weekEnd !== null && !isISODateString(body.weekEnd)) {
-      return NextResponse.json({ error: 'weekEnd must be in YYYY-MM-DD format' }, { status: 400 });
-    }
-    if (body.title !== undefined && body.title !== null && (typeof body.title !== 'string' || body.title.length > 200)) {
-      return NextResponse.json({ error: 'title must be a string of at most 200 characters' }, { status: 400 });
-    }
-    if (body.summary !== undefined && body.summary !== null && typeof body.summary !== 'string') {
-      return NextResponse.json({ error: 'summary must be a string' }, { status: 400 });
-    }
-    if (body.payload !== undefined && body.payload !== null) {
-      if (!body.payload || typeof body.payload !== 'object' || Array.isArray(body.payload)) {
-        return NextResponse.json({ error: 'payload must be a JSON object' }, { status: 400 });
-      }
-      if (JSON.stringify(body.payload).length > 200_000) {
-        return NextResponse.json({ error: 'payload too large' }, { status: 413 });
-      }
-    }
+    const weekEnd = optionalISODate(body.weekEnd, 'weekEnd') ?? addDaysISO(weekStart, 6);
+    const title = optionalString(body.title, 'title', 200);
+    const summary = optionalString(body.summary, 'summary', 20_000);
 
-    const summary = body.summary ?? body.payload?.reflectionNotes ?? null;
+    if (body.payload !== undefined && body.payload !== null) {
+      if (typeof body.payload !== 'object' || Array.isArray(body.payload)) {
+        throw new FieldError('payload must be a JSON object');
+      }
+      if (JSON.stringify(body.payload).length > MAX_PAYLOAD_BYTES) {
+        throw new FieldError('payload too large', 413);
+      }
+    }
+    const payload = body.payload && typeof body.payload === 'object' && !Array.isArray(body.payload)
+      ? (body.payload as Record<string, unknown>)
+      : {};
+
     // Normalize the legacy entry shape so the table also carries what the
     // historical users.preferences.weeklyReviews consumers expect.
     const normalized = {
-      weekEnding: body.payload?.weekEnding ?? body.weekEnding ?? addDaysISO(weekStart, 6),
-      completedCount: numOr0(body.payload?.completedCount ?? body.completedCount),
-      missedCount: numOr0(body.payload?.missedCount ?? body.missedCount),
-      openCount: numOr0(body.payload?.openCount ?? body.openCount),
-      habitsCount: numOr0(body.payload?.habitsCount ?? body.habitsCount),
-      reflectionNotes: body.payload?.reflectionNotes ?? body.reflectionNotes ?? '',
-      nextWeekCommitments: body.payload?.nextWeekCommitments ?? body.nextWeekCommitments ?? '',
+      weekEnding: payload.weekEnding ?? optionalISODate(body.weekEnding, 'weekEnding') ?? weekEnd,
+      completedCount: numOr0(payload.completedCount ?? body.completedCount),
+      missedCount: numOr0(payload.missedCount ?? body.missedCount),
+      openCount: numOr0(payload.openCount ?? body.openCount),
+      habitsCount: numOr0(payload.habitsCount ?? body.habitsCount),
+      reflectionNotes: payload.reflectionNotes ?? optionalString(body.reflectionNotes, 'reflectionNotes', 20_000) ?? '',
+      nextWeekCommitments: payload.nextWeekCommitments ?? optionalString(body.nextWeekCommitments, 'nextWeekCommitments', 20_000) ?? '',
     };
-    const mergedPayload = body.payload && typeof body.payload === 'object'
-      ? { ...normalized, ...body.payload }
-      : normalized;
+    const mergedPayload = { ...normalized, ...payload };
 
     const id = `wrev_${session.tenantId}_${weekStart}`;
+    const effectiveSummary = summary ?? (typeof payload.reflectionNotes === 'string' ? payload.reflectionNotes : null);
 
     db.prepare(`
       INSERT INTO weekly_reviews (id, tenant_id, week_start, week_end, title, summary, payload, created_by)
@@ -140,54 +152,51 @@ export async function POST(request: Request) {
       id,
       session.tenantId,
       weekStart,
-      body.weekEnd || addDaysISO(weekStart, 6),
-      body.title || null,
-      typeof summary === 'string' ? summary : null,
+      weekEnd,
+      title ?? null,
+      effectiveSummary,
       JSON.stringify(mergedPayload),
       session.userId
     );
 
     const row = db.prepare(`
       SELECT * FROM weekly_reviews WHERE tenant_id = ? AND week_start = ?
-    `).get(session.tenantId, weekStart);
+    `).get(session.tenantId, weekStart) as WeeklyReviewRow | undefined;
 
-    return NextResponse.json({ review: rowToReview(row) }, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ok({ review: rowToReview(row) }, 201);
+  } catch (err) {
+    return routeError(err);
   }
-}
+});
 
-export async function DELETE(request: Request) {
+export const DELETE = withApiLogging(async function DELETE(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
     const { searchParams } = new URL(request.url);
-    const weekStart = searchParams.get('weekStart');
+    const rawWeekStart = searchParams.get('weekStart');
     const id = searchParams.get('id');
 
-    if (!id && !weekStart) {
-      return NextResponse.json({ error: 'id or weekStart is required' }, { status: 400 });
+    if (!id && !rawWeekStart) {
+      throw new FieldError('id or weekStart is required');
     }
-    if (weekStart && !isISODateString(weekStart)) {
-      return NextResponse.json({ error: 'weekStart must be in YYYY-MM-DD format' }, { status: 400 });
-    }
+    const weekStart = optionalISODate(rawWeekStart, 'weekStart');
 
     const target = (weekStart
       ? db.prepare('SELECT week_start FROM weekly_reviews WHERE tenant_id = ? AND week_start = ?').get(session.tenantId, weekStart)
-      : db.prepare('SELECT week_start FROM weekly_reviews WHERE tenant_id = ? AND id = ?').get(session.tenantId, id)) as { week_start: string } | undefined;
+      : db.prepare('SELECT week_start FROM weekly_reviews WHERE tenant_id = ? AND id = ?').get(session.tenantId, id)) as
+      | { week_start: string }
+      | undefined;
 
-    if (!target) {
-      return NextResponse.json({ error: 'Review not found' }, { status: 404 });
-    }
+    if (!target) notFound('Review');
 
-    db.prepare('DELETE FROM weekly_reviews WHERE tenant_id = ? AND week_start = ?').run(session.tenantId, target.week_start);
-    return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const result = db
+      .prepare('DELETE FROM weekly_reviews WHERE tenant_id = ? AND week_start = ?')
+      .run(session.tenantId, target.week_start);
+    if (result.changes === 0) notFound('Review');
+
+    return ok({ success: true });
+  } catch (err) {
+    return routeError(err);
   }
-}
-
-function numOr0(v: unknown): number {
-  const n = typeof v === 'number' ? v : parseFloat(String(v ?? ''));
-  return Number.isFinite(n) ? n : 0;
-}
+});

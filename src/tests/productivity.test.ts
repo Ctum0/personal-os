@@ -147,6 +147,48 @@ describe('Productivity Domain Engine', () => {
       expect(plan.topPriorities[0].title).toBe('Fix Critical Database Lock');
       expect(plan.proposedTimeBlocks.length).toBeGreaterThanOrEqual(2);
     });
+
+    it('places blocks on a real minute axis instead of dropping minutes', () => {
+      // A 45-minute task used to be emitted as 09:00–09:45 with the next block
+      // starting at 10:00 only by accident of integer-hour rounding; the minute
+      // slot was derived from the remainder, so 90-minute tasks came out wrong.
+      db.prepare(`
+        INSERT INTO tasks (id, tenant_id, title, priority, estimated_duration)
+        VALUES ('tk_45', ?, 'Forty Five', 'high', 45),
+               ('tk_90', ?, 'Ninety', 'normal', 90)
+      `).run(tenantId, tenantId);
+
+      const plan = generateDailyPlanProposal(db, tenantId, '2026-10-29');
+      const first = plan.proposedTimeBlocks[0];
+      expect(first.startTime).toBe('2026-10-29T09:00:00');
+      expect(first.endTime).toBe('2026-10-29T09:45:00');
+
+      const second = plan.proposedTimeBlocks[1];
+      // Contiguous: the next block starts exactly when the previous one ends.
+      expect(second.startTime).toBe('2026-10-29T09:45:00');
+      expect(second.endTime).toBe('2026-10-29T11:15:00');
+    });
+
+    it('never proposes a block past the configured end of day or focus ceiling', () => {
+      db.prepare(`
+        UPDATE users SET preferences = ? WHERE id = 'u_prod'
+      `).run(JSON.stringify({ workStart: '09:00', workEnd: '10:00', maxDailyWorkloadHours: '1' }));
+      db.prepare(`
+        INSERT INTO tasks (id, tenant_id, title, priority, estimated_duration)
+        VALUES ('tk_big', ?, 'Two Hour Task', 'urgent', 120),
+               ('tk_small', ?, 'Half Hour Task', 'normal', 30)
+      `).run(tenantId, tenantId);
+
+      const plan = generateDailyPlanProposal(db, tenantId, '2026-10-29');
+      // A 2h task cannot fit a 1h day; the 30m one can.
+      expect(plan.proposedTimeBlocks.map(block => block.title)).toEqual(['Half Hour Task']);
+      expect(plan.proposedTimeBlocks[0].endTime).toBe('2026-10-29T09:30:00');
+      for (const block of plan.proposedTimeBlocks) {
+        expect(block.endTime.localeCompare('2026-10-29T10:00:00')).toBeLessThanOrEqual(0);
+      }
+      // Reported workload reflects what was actually placed.
+      expect(plan.estimatedWorkloadHours).toBe('0.5');
+    });
   });
 
   describe('Test Fixture Quarantine & Operational Audit Integrity', () => {

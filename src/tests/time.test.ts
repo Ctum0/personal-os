@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { APP_TIMEZONE, toISODate, todayISO, addDaysISO, startOfWeekISO } from "@/lib/time";
+import { APP_TIMEZONE, toISODate, addDaysISO, startOfWeekISO } from "@/lib/time";
 
 describe("timezone-safe calendar dates", () => {
   it("defaults to Asia/Colombo", () => {

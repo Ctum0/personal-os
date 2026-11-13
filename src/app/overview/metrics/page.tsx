@@ -5,13 +5,9 @@ import { useWorkspace } from '@/components/layout/WorkspaceContext';
 import {
   BookOpen,
   Search,
-  Filter,
   CheckCircle,
   XCircle,
   HelpCircle,
-  Calculator,
-  ShieldCheck,
-  TrendingUp,
 } from 'lucide-react';
 
 interface MetricDefinition {
@@ -163,11 +159,12 @@ export default function MetricDictionaryPage() {
       {/* Filter and Search Bar */}
       <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
           <input
             type="text"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
+            aria-label="Search metric definitions, formulas, or rules"
             placeholder="Search metric definitions, formulas, or rules (e.g. Safe-to-Spend, Transfers, Streaks)..."
             className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
           />
@@ -191,69 +188,78 @@ export default function MetricDictionaryPage() {
       </div>
 
       {/* Metric Cards List */}
-      <div className="space-y-4">
-        {filteredMetrics.map(metric => (
-          <div
-            key={metric.id}
-            className="p-5 bg-zinc-950/60 border border-white/[0.06] rounded-lg space-y-4 hover:border-white/[0.12] transition-colors"
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-semibold text-zinc-100">{metric.name}</span>
-                <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-white/[0.06]">
-                  {metric.domain}
-                </span>
+      {filteredMetrics.length === 0 ? (
+        <div className="p-6 bg-zinc-950/60 border border-white/[0.06] rounded-lg text-center space-y-1">
+          <p className="text-sm font-medium text-zinc-200">No metrics match this filter</p>
+          <p className="text-xs text-zinc-500">
+            Clear the search term or pick a different domain to see the full dictionary.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {filteredMetrics.map(metric => (
+            <div
+              key={metric.id}
+              className="p-5 bg-zinc-950/60 border border-white/[0.06] rounded-lg space-y-4 hover:border-white/[0.12] transition-colors"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-semibold text-zinc-100">{metric.name}</span>
+                  <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-white/[0.06]">
+                    {metric.domain}
+                  </span>
+                </div>
+
+                <button
+                  onClick={() => inspectMetricInDrawer(metric)}
+                  className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200 font-medium self-start sm:self-center transition-colors"
+                >
+                  <HelpCircle className="w-3.5 h-3.5" />
+                  <span>Open in Explainer Drawer</span>
+                </button>
               </div>
 
-              <button
-                onClick={() => inspectMetricInDrawer(metric)}
-                className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200 font-medium self-start sm:self-center transition-colors"
-              >
-                <HelpCircle className="w-3.5 h-3.5" />
-                <span>Open in Explainer Drawer</span>
-              </button>
-            </div>
+              <p className="text-xs text-zinc-300 leading-relaxed">{metric.definition}</p>
 
-            <p className="text-xs text-zinc-300 leading-relaxed">{metric.definition}</p>
-
-            <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-lg">
-              <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider block mb-1">
-                Deterministic Formula
-              </span>
-              <code className="text-xs font-mono text-emerald-400">{metric.formula}</code>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-1">
-              <div className="space-y-1.5">
-                <span className="text-[11px] font-semibold text-emerald-400 flex items-center gap-1.5">
-                  <CheckCircle className="w-3.5 h-3.5" /> What Counts
+              <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-lg">
+                <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider block mb-1">
+                  Deterministic Formula
                 </span>
-                <ul className="space-y-1 text-zinc-400 list-disc list-inside">
-                  {metric.whatCounts.map((item, i) => (
-                    <li key={i}>{item}</li>
-                  ))}
-                </ul>
+                <code className="text-xs font-mono text-emerald-400">{metric.formula}</code>
               </div>
 
-              <div className="space-y-1.5">
-                <span className="text-[11px] font-semibold text-rose-400 flex items-center gap-1.5">
-                  <XCircle className="w-3.5 h-3.5" /> What Does NOT Count
-                </span>
-                <ul className="space-y-1 text-zinc-400 list-disc list-inside">
-                  {metric.whatDoesNotCount.map((item, i) => (
-                    <li key={i}>{item}</li>
-                  ))}
-                </ul>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-1">
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-semibold text-emerald-400 flex items-center gap-1.5">
+                    <CheckCircle className="w-3.5 h-3.5" /> What Counts
+                  </span>
+                  <ul className="space-y-1 text-zinc-400 list-disc list-inside">
+                    {metric.whatCounts.map((item, i) => (
+                      <li key={i}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-semibold text-rose-400 flex items-center gap-1.5">
+                    <XCircle className="w-3.5 h-3.5" /> What Does NOT Count
+                  </span>
+                  <ul className="space-y-1 text-zinc-400 list-disc list-inside">
+                    {metric.whatDoesNotCount.map((item, i) => (
+                      <li key={i}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-zinc-800/60 flex flex-col sm:flex-row justify-between gap-2 text-[11px] text-zinc-500">
+                <span>Source: {metric.sourceEvents}</span>
+                <span>Cadence: {metric.periodLogic}</span>
               </div>
             </div>
-
-            <div className="pt-2 border-t border-zinc-800/60 flex flex-col sm:flex-row justify-between gap-2 text-[11px] text-zinc-500">
-              <span>Source: {metric.sourceEvents}</span>
-              <span>Cadence: {metric.periodLogic}</span>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

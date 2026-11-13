@@ -5,10 +5,9 @@
  * section "Follow-up wave 2".
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import PluginDatabase from 'better-sqlite3';
-import Database from 'better-sqlite3';
+import type BetterSqlite3 from 'better-sqlite3';
 import { getInMemoryDb } from '@/lib/db';
-import { todayISO, toISODate, addDaysISO } from '@/lib/time';
+import { todayISO, addDaysISO } from '@/lib/time';
 import {
   calculateBudget,
   calculateSafeToSpend,
@@ -21,7 +20,7 @@ import {
 import { previewCsvImport, commitCsvImport, reverseImportBatch } from '@/lib/finance/csv-import';
 import { Decimal } from 'decimal.js';
 
-type DatabaseType = PluginDatabase.Database;
+type DatabaseType = BetterSqlite3.Database;
 
 const tenantId = 'tenant_wave2';
 
@@ -70,7 +69,6 @@ describe('B1: monthly budget period rolls forward at read time', () => {
   beforeEach(() => {
     cat('cat_hous', 'Housing', 'expense');
     cat('cat_gro', 'Groceries', 'expense');
-    const t = todayISO();
     const prevMonthISO = (() => {
       const t = todayISO();
       const [y, m] = t.slice(0, 7).split('-').map(Number);
@@ -120,7 +118,6 @@ describe('B1: monthly budget period rolls forward at read time', () => {
   });
 
   it('non-monthly budgets are never projected', () => {
-    const t = todayISO();
     db.prepare(`
       INSERT INTO budgets (id, tenant_id, name, budget_type, period_type, start_date, end_date, rollover_mode, is_active)
       VALUES ('bgt_yearly', ?, 'Holiday', 'category_limit', 'yearly', '2025-12-01', '2025-12-31', 'reset', 1)

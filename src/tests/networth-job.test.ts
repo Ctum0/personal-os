@@ -55,7 +55,6 @@ describe('maybeSnapshotNetWorth daily job', () => {
     const { getDb } = await import('../lib/db');
     const db = getDb();
     db.prepare(`DELETE FROM net_worth_snapshots`).run();
-    const { maybeSnapshotNetWorth } = await import('../lib/jobs/netWorth');
     // New memo state per file process; force a real write through the API of
     // the job by clearing cannot be done cross-module — use direct call.
     const { snapshotNetWorthForToday } = await import('../lib/jobs/netWorth');
@@ -67,7 +66,7 @@ describe('maybeSnapshotNetWorth daily job', () => {
 
   it('Net Worth API GET now returns snapshot history', async () => {
     const { GET } = await import('../app/api/finance/net-worth/route');
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/finance/net-worth'));
     const data = await res.json();
     expect(res.status).toBe(200);
     expect(Array.isArray(data.snapshots)).toBe(true);

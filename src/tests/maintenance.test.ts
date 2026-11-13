@@ -61,7 +61,7 @@ describe('auto-backup maintenance', () => {
     expect(data.autoBackups.length).toBe(10);
     expect(data.retention.maxAutoBackups).toBe(10);
 
-    const status = await (await mod.GET()).json();
+    const status = await (await mod.GET(new Request('http://localhost/api/backup/maintenance'))).json();
     expect(status.numberOfAutoBackups).toBe(10);
     expect(status.settings.intervalMs).toBe(24 * 60 * 60 * 1000);
   });

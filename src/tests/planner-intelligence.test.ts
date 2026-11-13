@@ -188,6 +188,76 @@ describe('Planner Intelligence, Task Identity & Context Hardening', () => {
       expect(context.financialContext?.enabled).toBe(true);
       expect(context.financialContext?.quarantined).toBe(false);
     });
+
+    it('surfaces real recurring obligations once finance access is enabled', () => {
+      // The context used to query a `bills` table that does not exist, so the
+      // opt-in returned an empty list no matter what the operator owed.
+      db.prepare(`
+        UPDATE users SET preferences = ? WHERE id = ?
+      `).run(JSON.stringify({ enableFinancialInPlanning: true }), userId);
+      db.prepare(`
+        INSERT INTO finance_accounts (id, tenant_id, name, type, currency, opening_balance)
+        VALUES ('acc_bills', ?, 'Checking', 'checking', 'USD', '1000.00')
+      `).run(tenantId);
+      db.prepare(`
+        INSERT INTO recurring_financial_rules (
+          id, tenant_id, name, rule_type, frequency, interval_count,
+          expected_amount, account_id, start_date, next_due_date, is_active
+        ) VALUES ('rec_context_bill', ?, 'Rent', 'bill', 'monthly', 1, '1800.00', 'acc_bills', '2026-11-01', '2026-11-16', 1)
+      `).run(tenantId);
+
+      const context = getPlanningContext(db, tenantId, '2026-11-15');
+      const bills = context.financialContext?.upcomingBills ?? [];
+      expect(bills).toHaveLength(1);
+      expect(bills[0].name).toBe('Rent');
+      // Aliased columns keep the downstream field names stable.
+      expect(Number(bills[0].amount)).toBe(1800);
+      expect(bills[0].dueDate).toBe('2026-11-16');
+    });
+
+    it('excludes obligations outside the seven-day window', () => {
+      db.prepare(`
+        UPDATE users SET preferences = ? WHERE id = ?
+      `).run(JSON.stringify({ enableFinancialInPlanning: true }), userId);
+      db.prepare(`
+        INSERT INTO finance_accounts (id, tenant_id, name, type, currency, opening_balance)
+        VALUES ('acc_bills2', ?, 'Checking', 'checking', 'USD', '0.00')
+      `).run(tenantId);
+      db.prepare(`
+        INSERT INTO recurring_financial_rules (
+          id, tenant_id, name, rule_type, frequency, interval_count,
+          expected_amount, account_id, start_date, next_due_date, is_active
+        ) VALUES ('rec_far', ?, 'Later Bill', 'bill', 'monthly', 1, '50.00', 'acc_bills2', '2026-11-01', '2026-12-20', 1)
+      `).run(tenantId);
+
+      const context = getPlanningContext(db, tenantId, '2026-11-15');
+      expect(context.financialContext?.upcomingBills ?? []).toHaveLength(0);
+    });
+  });
+
+  describe('2b. Habit context carries real streaks', () => {
+    it('reports the streak computed from habit_logs, not a constant', () => {
+      db.prepare(`
+        INSERT INTO habits (id, tenant_id, title, tracking_type, target_value, minimum_threshold, start_date)
+        VALUES ('hab_streak', ?, 'Deep Reading', 'boolean', 1, 1, '2026-11-01')
+      `).run(tenantId);
+      // Three consecutive completed days ending on the day before targetDate.
+      for (const day of ['2026-11-12', '2026-11-13', '2026-11-14']) {
+        db.prepare(`
+          INSERT INTO habit_logs (id, tenant_id, habit_id, log_date, value, status)
+          VALUES (?, ?, 'hab_streak', ?, 1, 'completed')
+        `).run(`hl_${day}`, tenantId, day);
+      }
+      db.prepare(`
+        INSERT INTO habits (id, tenant_id, title, tracking_type, target_value, minimum_threshold, start_date)
+        VALUES ('hab_none', ?, 'Cold Start', 'boolean', 1, 1, '2026-11-01')
+      `).run(tenantId);
+
+      const context = getPlanningContext(db, tenantId, '2026-11-15');
+      const byId = new Map((context.scheduledHabits ?? []).map(h => [h.id, h.streak]));
+      expect(byId.get('hab_streak')).toBe(3);
+      expect(byId.get('hab_none')).toBe(0);
+    });
   });
 
   describe('3. Intelligent Scheduling & Over-Capacity Trade-off Explanations', () => {

@@ -1,58 +1,80 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import type { ExplainerPayload } from '@/components/layout/WorkspaceContext';
+import { apiFetch, apiSend, errorText } from '@/lib/api/client';
 import { fmtMoney, fmtAbsMoney } from '../_shared/format';
 import {
   Landmark,
   Plus,
   HelpCircle,
-  CheckCircle2,
-  AlertTriangle,
-  RotateCcw,
   ShieldCheck,
   CreditCard,
-  Wallet,
 } from 'lucide-react';
+
+interface AccountRow {
+  accountId: string;
+  accountName: string;
+  accountType: string;
+  currency: string;
+  openingBalance: string;
+  currentBalance: string;
+  displayColor: string;
+  explainer: ExplainerPayload;
+}
 
 export default function AccountsPage() {
   const { setSelectedExplainer } = useWorkspace();
-  const [accounts, setAccounts] = useState<any[]>([]);
-  const [selectedReconcileAccount, setSelectedReconcileAccount] = useState<any | null>(null);
+  const [accounts, setAccounts] = useState<AccountRow[]>([]);
+  const [selectedReconcileAccount, setSelectedReconcileAccount] = useState<AccountRow | null>(null);
   const [statementBalance, setStatementBalance] = useState('');
   const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
   const [newAccName, setNewAccName] = useState('');
   const [newAccType, setNewAccType] = useState('checking');
   const [newAccOpening, setNewAccOpening] = useState('0.00');
+  const [newAccCreditLimit, setNewAccCreditLimit] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const loadAccounts = () => {
-    fetch('/api/finance/accounts')
-      .then(r => r.json())
-      .then(data => setAccounts(data.accounts || []));
-  };
+  const loadAccounts = useCallback(async () => {
+    try {
+      const data = await apiFetch<{ accounts: AccountRow[] }>('/api/finance/accounts');
+      setAccounts(data.accounts ?? []);
+    } catch (err) {
+      setError(errorText(err));
+    }
+  }, []);
 
   useEffect(() => {
-    loadAccounts();
-  }, []);
+    void (async () => {
+      await loadAccounts();
+    })();
+  }, [loadAccounts]);
 
   const handleAddAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAccName.trim()) return;
 
-    await fetch('/api/finance/accounts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    setError(null);
+    setIsSaving(true);
+    try {
+      await apiSend<{ account: AccountRow | null }>('/api/finance/accounts', 'POST', {
         name: newAccName.trim(),
         type: newAccType,
         openingBalance: newAccOpening,
+        creditLimit: newAccCreditLimit.trim() || undefined,
         currency: 'USD',
-      }),
-    });
-
-    setNewAccName('');
-    setIsAddAccountOpen(false);
-    loadAccounts();
+      });
+      setNewAccName('');
+      setNewAccCreditLimit('');
+      setIsAddAccountOpen(false);
+      await loadAccounts();
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleReconcileSubmit = async (e: React.FormEvent) => {
@@ -74,18 +96,20 @@ export default function AccountsPage() {
         `Discrepancy of $${Math.abs(parseFloat(diff)).toFixed(2)} (${parseFloat(diff) > 0 ? 'Surplus' : 'Deficit'}) detected against statement balance.\nWould you like to record an audit adjustment transaction?`
       );
       if (confirmAdjustment) {
-        await fetch('/api/finance/transactions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        setError(null);
+        try {
+          await apiSend<{ transaction: unknown }>('/api/finance/transactions', 'POST', {
             transactionType: parseFloat(diff) > 0 ? 'income' : 'expense',
             accountId: selectedReconcileAccount.accountId,
             amount: Math.abs(parseFloat(diff)).toFixed(2),
             description: `Reconciliation Balance Adjustment: ${selectedReconcileAccount.accountName}`,
             notes: `Statement balance entered: $${statementBalance}`,
-          }),
-        });
-        loadAccounts();
+          });
+          await loadAccounts();
+        } catch (err) {
+          setError(errorText(err));
+          return;
+        }
       }
     }
 
@@ -108,12 +132,28 @@ export default function AccountsPage() {
 
         <button
           onClick={() => setIsAddAccountOpen(true)}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-all"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 rounded-lg text-xs font-semibold shadow-sm transition-all"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>New Account</span>
         </button>
       </div>
+
+      {error && (
+        <div
+          role="alert"
+          className="p-3 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-3"
+        >
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="text-[11px] underline opacity-80 hover:opacity-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* New Account Modal */}
       {isAddAccountOpen && (
@@ -130,8 +170,9 @@ export default function AccountsPage() {
           </div>
           <div className="space-y-3">
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">Account Name</label>
+              <label htmlFor="new-account-name" className="block text-xs font-medium text-zinc-400 mb-1">Account Name</label>
               <input
+                id="new-account-name"
                 type="text"
                 required
                 autoFocus
@@ -143,8 +184,9 @@ export default function AccountsPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">Type</label>
+                <label htmlFor="new-account-type" className="block text-xs font-medium text-zinc-400 mb-1">Type</label>
                 <select
+                  id="new-account-type"
                   value={newAccType}
                   onChange={e => setNewAccType(e.target.value)}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500"
@@ -158,8 +200,9 @@ export default function AccountsPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">Opening Balance ($)</label>
+                <label htmlFor="new-account-opening" className="block text-xs font-medium text-zinc-400 mb-1">Opening Balance ($)</label>
                 <input
+                  id="new-account-opening"
                   type="number"
                   step="0.01"
                   required
@@ -168,12 +211,33 @@ export default function AccountsPage() {
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-emerald-500"
                 />
               </div>
+              {newAccType === 'credit_card' && (
+                <div>
+                  <label htmlFor="new-account-credit-limit" className="block text-xs font-medium text-zinc-400 mb-1">
+                    Credit Limit ($)
+                  </label>
+                  <input
+                    id="new-account-credit-limit"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={newAccCreditLimit}
+                    onChange={e => setNewAccCreditLimit(e.target.value)}
+                    placeholder="e.g. 5000.00"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-emerald-500"
+                  />
+                  <p className="text-[10px] text-zinc-500 mt-1">
+                    Used only when “Include available credit” is enabled in safe-to-spend settings.
+                  </p>
+                </div>
+              )}
             </div>
             <button
               type="submit"
-              className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold"
+              disabled={isSaving}
+              className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 rounded-lg text-xs font-semibold disabled:opacity-50"
             >
-              Create Account
+              {isSaving ? 'Creating…' : 'Create Account'}
             </button>
           </div>
         </form>
@@ -215,12 +279,13 @@ export default function AccountsPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">
+              <label htmlFor="statement-balance" className="block text-xs font-medium text-zinc-400 mb-1">
                 {selectedReconcileAccount.accountType === 'credit_card' || selectedReconcileAccount.accountType === 'loan'
                   ? 'Statement Balance Owed ($ USD)'
                   : 'Statement Ending Balance ($ USD)'}
               </label>
               <input
+                id="statement-balance"
                 type="number"
                 step="0.01"
                 required
@@ -264,7 +329,7 @@ export default function AccountsPage() {
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold"
+                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 rounded-lg text-xs font-semibold"
               >
                 Verify & Reconcile
               </button>
@@ -287,7 +352,7 @@ export default function AccountsPage() {
           </div>
           <button
             onClick={() => setIsAddAccountOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-all"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 rounded-lg text-xs font-semibold shadow-sm transition-all"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Create First Account</span>

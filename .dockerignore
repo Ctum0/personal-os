@@ -1,0 +1,21 @@
+# Never ship the operator's data or local build state into an image.
+data/
+.artifacts/
+reports/
+test-results/
+.vitest/
+.next/
+.next-e2e/
+.next-pin/
+node_modules/
+.git/
+.github/
+docs/
+e2e/
+scripts/
+*.log
+*.tsbuildinfo
+*.md
+!README.md
+Dockerfile
+.dockerignore

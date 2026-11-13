@@ -1,17 +1,37 @@
 import type Database from 'better-sqlite3';
-import { calculateAccountBalances, calculateIncomeAndExpenses, calculateBudget, calculateSafeToSpend } from '@/lib/finance/engine';
-import { calculateProjectProgress, calculateGoalProgress, calculateHabitStreak, generateDailyPlanProposal } from '@/lib/productivity/engine';
+import {
+  calculateIncomeAndExpenses,
+  calculateBudget,
+  calculateSafeToSpend,
+} from '@/lib/finance/engine';
+import { calculateGoalProgress, calculateHabitStreak, generateDailyPlanProposal } from '@/lib/productivity/engine';
 import { todayISO, toISODate } from "@/lib/time";
 import { taskVisibleClause } from '@/lib/db/visibility';
 
 export type ToolPermissionLevel = 'read_and_recommend' | 'prepare_and_confirm' | 'auto_execute';
+
+/** Arguments accepted by a tool. Untrusted: each tool narrows what it reads. */
+export type ToolArgs = Record<string, unknown>;
 
 export interface AiToolDefinition {
   name: string;
   description: string;
   defaultLevel: ToolPermissionLevel;
   isConsequential: boolean;
-  execute: (db: Database.Database, tenantId: string, userId: string, args: any) => Promise<any> | any;
+  execute: (db: Database.Database, tenantId: string, userId: string, args: ToolArgs) => Promise<unknown> | unknown;
+}
+
+/** Shape of a proposed daily-plan payload as produced by generateDailyPlanProposal. */
+interface DailyPlanBlockPayload {
+  title: string;
+  startTime: string;
+  endTime: string;
+  taskId?: string | null;
+}
+
+interface DailyPlanPayload {
+  targetDate: string;
+  proposedTimeBlocks: DailyPlanBlockPayload[];
 }
 
 export interface AiApprovalRequest {
@@ -21,7 +41,7 @@ export interface AiApprovalRequest {
   targetEntityId?: string;
   reason: string;
   diffHash: string;
-  proposedPayload: any;
+  proposedPayload: unknown;
   reversible: boolean;
 }
 
@@ -34,8 +54,8 @@ export function checkToolPermission(
   toolName: string
 ): { allowed: boolean; level: ToolPermissionLevel } {
   const policy = db.prepare(`
-    SELECT permission_level, is_enabled 
-    FROM ai_tool_policies 
+    SELECT permission_level, is_enabled
+    FROM ai_tool_policies
     WHERE tenant_id = ? AND tool_name = ?
   `).get(tenantId, toolName) as { permission_level: ToolPermissionLevel; is_enabled: number } | undefined;
 
@@ -47,6 +67,29 @@ export function checkToolPermission(
 }
 
 /**
+ * Normalizes a proposed block time to a full timestamp.
+ *
+ * `generateDailyPlanProposal` already emits `YYYY-MM-DDTHH:mm:ss`, while other
+ * producers (and hand-written plans) may supply bare `HH:mm`. Prefixing the date
+ * unconditionally produced `2026-11-13T2026-11-13T09:00:00`, which nothing can
+ * parse — so the date is only added when the value is time-only.
+ */
+function toEventTimestamp(targetDate: string, value: string): string {
+  if (value.includes('T')) return value;
+  return `${targetDate}T${value.length === 5 ? `${value}:00` : value}`;
+}
+
+/** 32-bit FNV-style rolling hash used to fingerprint a proposed change. */
+function payloadHash(payload: string): string {
+  let hash = 0;
+  for (let i = 0; i < payload.length; i++) {
+    hash = (hash << 5) - hash + payload.charCodeAt(i);
+    hash |= 0;
+  }
+  return 'diff_' + Math.abs(hash).toString(16);
+}
+
+/**
  * Creates an AI Action Draft requiring user confirmation
  */
 export function createAiActionDraft(
@@ -55,22 +98,14 @@ export function createAiActionDraft(
   userId: string,
   actionType: string,
   targetEntityType: string,
-  proposedPayload: any,
+  proposedPayload: unknown,
   reason: string,
   targetEntityId?: string
 ): AiApprovalRequest {
   const draftId = `draft_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const idempotencyKey = `idem_${draftId}`;
   const payloadStr = JSON.stringify(proposedPayload);
-  
-  // Compute deterministic hash of the change
-  let hash = 0;
-  for (let i = 0; i < payloadStr.length; i++) {
-    hash = (hash << 5) - hash + payloadStr.charCodeAt(i);
-    hash |= 0;
-  }
-  const diffHash = 'diff_' + Math.abs(hash).toString(16);
-
+  const diffHash = payloadHash(payloadStr);
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
   db.prepare(`
@@ -90,7 +125,6 @@ export function createAiActionDraft(
     expiresAt
   );
 
-  // Log in AI audit events
   db.prepare(`
     INSERT INTO ai_audit_events (
       id, tenant_id, user_id, tool_name, input_payload, result_summary, execution_status, policy_decision
@@ -116,26 +150,38 @@ export function createAiActionDraft(
   };
 }
 
+interface DraftRow {
+  id: string;
+  user_id: string;
+  action_type: string;
+  proposed_payload: string;
+  target_entity_type: string;
+  target_entity_id: string | null;
+  status: string;
+  expires_at: string;
+}
+
+export const DRAFT_DECISIONS = ['approved', 'rejected'] as const;
+export type DraftDecision = (typeof DRAFT_DECISIONS)[number];
+
 /**
- * Approves and applies an AI Action Draft
+ * Approves and applies an AI Action Draft.
+ *
+ * Guards that previously did not exist: the draft must belong to the caller's
+ * tenant (query scoping) and to the deciding user, and it must not be expired.
+ * An expired draft is a rejected proposal — applying it would commit a decision
+ * the operator can no longer see in the pending list.
  */
 export function applyAiActionDraft(
   db: Database.Database,
   tenantId: string,
   userId: string,
   draftId: string,
-  decision: 'approved' | 'rejected'
+  decision: DraftDecision
 ): { success: boolean; appliedRecordId?: string; message: string } {
   const draft = db.prepare(`
     SELECT * FROM ai_action_drafts WHERE tenant_id = ? AND id = ?
-  `).get(tenantId, draftId) as {
-    id: string;
-    action_type: string;
-    proposed_payload: string;
-    target_entity_type: string;
-    target_entity_id: string | null;
-    status: string;
-  } | undefined;
+  `).get(tenantId, draftId) as DraftRow | undefined;
 
   if (!draft) {
     return { success: false, message: 'Draft proposal not found' };
@@ -145,63 +191,123 @@ export function applyAiActionDraft(
     return { success: false, message: `Draft has already been ${draft.status}` };
   }
 
+  if (draft.expires_at <= new Date().toISOString()) {
+    db.prepare("UPDATE ai_action_drafts SET status = 'expired' WHERE id = ? AND tenant_id = ?").run(draftId, tenantId);
+    return { success: false, message: 'Draft proposal has expired' };
+  }
+
+  if (draft.user_id !== userId) {
+    return { success: false, message: 'Draft proposal belongs to a different operator' };
+  }
+
   if (decision === 'rejected') {
-    db.prepare("UPDATE ai_action_drafts SET status = 'rejected' WHERE id = ?").run(draftId);
+    db.transaction(() => {
+      db.prepare("UPDATE ai_action_drafts SET status = 'rejected' WHERE id = ? AND tenant_id = ?").run(draftId, tenantId);
+      // Rejections are audited too: an unaudited rejection is indistinguishable
+      // from a draft that was never reviewed.
+      db.prepare(`
+        INSERT INTO ai_action_approvals (id, tenant_id, draft_id, approved_by, decision, changes_applied, diff_hash)
+        VALUES (?, ?, ?, ?, 'rejected', '{}', ?)
+      `).run(`appr_${draftId}`, tenantId, draftId, userId, payloadHash(draft.proposed_payload));
+      db.prepare(`
+        INSERT INTO ai_audit_events (id, tenant_id, user_id, tool_name, input_payload, result_summary, execution_status, policy_decision)
+        VALUES (?, ?, ?, ?, ?, ?, 'rejected', 'prepare_and_confirm')
+      `).run(
+        `audit_${draftId}_rejected`,
+        tenantId,
+        userId,
+        draft.action_type,
+        draft.proposed_payload,
+        'Operator rejected the draft proposal'
+      );
+    })();
     return { success: true, message: 'Draft proposal rejected' };
   }
 
-  const payload = JSON.parse(draft.proposed_payload);
+  const payload: unknown = JSON.parse(draft.proposed_payload);
   let appliedId: string | undefined;
 
   db.transaction(() => {
     switch (draft.action_type) {
-      case 'create_task':
+      case 'create_task': {
+        const task = payload as { title: string; description?: string; priority?: string; dueDate?: string | null; spaceId?: string };
         appliedId = `task_ai_${Date.now()}`;
+        const spaceId = task.spaceId || 'space_personal';
+        const spaceExists = db.prepare('SELECT id FROM spaces WHERE id = ? AND tenant_id = ?').get(spaceId, tenantId);
         db.prepare(`
           INSERT INTO tasks (id, tenant_id, title, description, priority, due_date, space_id)
           VALUES (?, ?, ?, ?, ?, ?, ?)
         `).run(
           appliedId,
           tenantId,
-          payload.title,
-          payload.description || '',
-          payload.priority || 'normal',
-          payload.dueDate || null,
-          payload.spaceId || 'space_personal'
+          task.title,
+          task.description || '',
+          task.priority || 'normal',
+          task.dueDate || null,
+          spaceExists ? spaceId : null
         );
         break;
+      }
 
-      case 'apply_daily_plan':
-        for (const block of payload.timeBlocks || []) {
+      case 'apply_daily_plan': {
+        // The proposal is produced by generateDailyPlanProposal, whose field is
+        // `proposedTimeBlocks`. Reading `timeBlocks` silently applied nothing
+        // while reporting success.
+        const plan = payload as DailyPlanPayload;
+        const blocks = Array.isArray(plan.proposedTimeBlocks) ? plan.proposedTimeBlocks : [];
+        if (blocks.length === 0) {
+          throw new Error('Daily plan proposal contains no time blocks; nothing to apply');
+        }
+        for (const block of blocks) {
           const eventId = `ev_plan_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
           db.prepare(`
             INSERT INTO calendar_events (id, tenant_id, title, start_time, end_time, event_type, task_id)
-            VALUES (?, ?, ?, ?, ?, 'time_block', ?)
-          `).run(eventId, tenantId, block.title, block.startTime, block.endTime, block.taskId || null);
+            VALUES (?, ?, ?, ?, ?, 'daily_plan_block', ?)
+          `).run(
+            eventId,
+            tenantId,
+            block.title,
+            toEventTimestamp(plan.targetDate, block.startTime),
+            toEventTimestamp(plan.targetDate, block.endTime),
+            block.taskId || null
+          );
         }
         appliedId = 'plan_applied';
         break;
+      }
 
-      case 'update_budget_allocation':
-        db.prepare(`
-          UPDATE budget_lines 
+      case 'update_budget_allocation': {
+        const allocation = payload as { allocatedAmount: string; budgetId: string; categoryId: string };
+        const result = db.prepare(`
+          UPDATE budget_lines
           SET allocated_amount = ?
           WHERE budget_id = ? AND category_id = ? AND tenant_id = ?
-        `).run(payload.allocatedAmount, payload.budgetId, payload.categoryId, tenantId);
-        appliedId = payload.categoryId;
+        `).run(allocation.allocatedAmount, allocation.budgetId, allocation.categoryId, tenantId);
+        if (result.changes === 0) {
+          throw new Error('Budget line not found');
+        }
+        appliedId = allocation.categoryId;
         break;
+      }
 
       default:
         throw new Error(`Unknown action type: ${draft.action_type}`);
     }
 
-    db.prepare("UPDATE ai_action_drafts SET status = 'approved' WHERE id = ?").run(draftId);
+    db.prepare("UPDATE ai_action_drafts SET status = 'approved' WHERE id = ? AND tenant_id = ?").run(draftId, tenantId);
 
     db.prepare(`
       INSERT INTO ai_action_approvals (
         id, tenant_id, draft_id, approved_by, decision, changes_applied, diff_hash
-      ) VALUES (?, ?, ?, ?, 'approved', ?, 'diff_applied')
-    `).run(`appr_${draftId}`, tenantId, draftId, userId, draft.proposed_payload);
+      ) VALUES (?, ?, ?, ?, 'approved', ?, ?)
+    `).run(
+      `appr_${draftId}`,
+      tenantId,
+      draftId,
+      userId,
+      draft.proposed_payload,
+      payloadHash(draft.proposed_payload)
+    );
   })();
 
   return { success: true, appliedRecordId: appliedId, message: 'Changes approved and committed to system' };
@@ -218,8 +324,8 @@ export const AI_TOOLS: Record<string, AiToolDefinition> = {
     isConsequential: false,
     execute: (db, tenantId) => {
       const today = todayISO();
-      const openTasks = (db.prepare(`SELECT count(*) as c FROM tasks WHERE tenant_id = ? AND is_deleted = 0 AND status IN ('inbox', 'next', 'in_progress') AND ${taskVisibleClause()}`).get(tenantId) as any).c;
-      const completedToday = (db.prepare("SELECT count(*) as c FROM tasks WHERE tenant_id = ? AND status = 'completed' AND date(completion_at) = ?").get(tenantId, today) as any).c;
+      const openTasks = (db.prepare(`SELECT count(*) as c FROM tasks WHERE tenant_id = ? AND is_deleted = 0 AND status IN ('inbox', 'next', 'in_progress') AND ${taskVisibleClause('tasks')}`).get(tenantId) as { c: number }).c;
+      const completedToday = (db.prepare("SELECT count(*) as c FROM tasks WHERE tenant_id = ? AND status = 'completed' AND date(completion_at) = ?").get(tenantId, today) as { c: number }).c;
       const safeSpend = calculateSafeToSpend(db, tenantId);
       return {
         date: today,
@@ -237,13 +343,14 @@ export const AI_TOOLS: Record<string, AiToolDefinition> = {
     defaultLevel: 'read_and_recommend',
     isConsequential: false,
     execute: (db, tenantId, _, args) => {
-      const limit = args?.limit || 20;
+      const requested = typeof args.limit === 'number' ? args.limit : 20;
+      const limit = Math.max(1, Math.min(Math.trunc(requested), 200));
       return db.prepare(`
         SELECT id, title, priority, status, due_date, estimated_duration, space_id
         FROM tasks
         WHERE tenant_id = ? AND is_deleted = 0 AND status != 'completed'
-          AND ${taskVisibleClause()}
-        ORDER BY 
+          AND ${taskVisibleClause('tasks')}
+        ORDER BY
           CASE priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 ELSE 4 END ASC,
           due_date ASC
         LIMIT ?
@@ -257,7 +364,7 @@ export const AI_TOOLS: Record<string, AiToolDefinition> = {
     defaultLevel: 'read_and_recommend',
     isConsequential: false,
     execute: (db, tenantId, _, args) => {
-      const targetDate = args?.date || todayISO();
+      const targetDate = typeof args.date === 'string' ? args.date : todayISO();
       return db.prepare(`
         SELECT id, title, start_time, end_time, event_type
         FROM calendar_events
@@ -296,8 +403,8 @@ export const AI_TOOLS: Record<string, AiToolDefinition> = {
     isConsequential: false,
     execute: (db, tenantId, _, args) => {
       const today = todayISO();
-      const start = args?.startDate || today.slice(0, 7) + '-01';
-      const end = args?.endDate || today;
+      const start = typeof args.startDate === 'string' ? args.startDate : today.slice(0, 7) + '-01';
+      const end = typeof args.endDate === 'string' ? args.endDate : today;
       return calculateIncomeAndExpenses(db, tenantId, start, end);
     },
   },
@@ -318,7 +425,8 @@ export const AI_TOOLS: Record<string, AiToolDefinition> = {
     defaultLevel: 'read_and_recommend',
     isConsequential: false,
     execute: (db, tenantId, _, args) => {
-      const days = args?.days || 30;
+      const requested = typeof args.days === 'number' ? args.days : 30;
+      const days = Math.max(1, Math.min(Math.trunc(requested), 365));
       const today = todayISO();
       const future = new Date();
       future.setDate(future.getDate() + days);
@@ -340,7 +448,7 @@ export const AI_TOOLS: Record<string, AiToolDefinition> = {
     defaultLevel: 'prepare_and_confirm',
     isConsequential: true,
     execute: (db, tenantId, userId, args) => {
-      const date = args?.date || todayISO();
+      const date = typeof args.date === 'string' ? args.date : todayISO();
       const proposal = generateDailyPlanProposal(db, tenantId, date);
       return createAiActionDraft(
         db,
@@ -360,6 +468,7 @@ export const AI_TOOLS: Record<string, AiToolDefinition> = {
     defaultLevel: 'prepare_and_confirm',
     isConsequential: true,
     execute: (db, tenantId, userId, args) => {
+      const title = typeof args.title === 'string' && args.title.trim() ? args.title.trim() : 'New Action Item';
       return createAiActionDraft(
         db,
         tenantId,
@@ -367,13 +476,13 @@ export const AI_TOOLS: Record<string, AiToolDefinition> = {
         'create_task',
         'tasks',
         {
-          title: args.title,
-          description: args.description || '',
-          priority: args.priority || 'normal',
-          dueDate: args.dueDate || null,
-          spaceId: args.spaceId || 'space_personal',
+          title,
+          description: typeof args.description === 'string' ? args.description : '',
+          priority: typeof args.priority === 'string' ? args.priority : 'normal',
+          dueDate: typeof args.dueDate === 'string' ? args.dueDate : null,
+          spaceId: typeof args.spaceId === 'string' ? args.spaceId : 'space_personal',
         },
-        `Create task "${args.title}"`
+        `Create task "${title}"`
       );
     },
   },
@@ -384,9 +493,9 @@ export const AI_TOOLS: Record<string, AiToolDefinition> = {
     defaultLevel: 'read_and_recommend',
     isConsequential: false,
     execute: (db, tenantId, _, args) => {
-      const payee = args?.payee || '';
+      const payee = typeof args.payee === 'string' ? args.payee : '';
       const match = db.prepare(`
-        SELECT category_id, count(*) as freq 
+        SELECT category_id, count(*) as freq
         FROM journal_transactions
         WHERE tenant_id = ? AND payee_name LIKE ? AND category_id IS NOT NULL
         GROUP BY category_id
@@ -394,11 +503,14 @@ export const AI_TOOLS: Record<string, AiToolDefinition> = {
       `).get(tenantId, `%${payee}%`) as { category_id: string } | undefined;
 
       if (match) {
-        const cat = db.prepare('SELECT id, name, color FROM categories WHERE id = ?').get(match.category_id) as any;
+        const cat = db.prepare('SELECT id, name, color FROM categories WHERE id = ?').get(match.category_id) as {
+          id: string;
+          name: string;
+          color: string;
+        };
         return { suggestedCategory: cat, confidence: 'high' };
       }
 
-      // Default fallback
       return { suggestedCategory: null, confidence: 'low' };
     },
   },

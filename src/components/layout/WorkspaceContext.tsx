@@ -6,12 +6,24 @@ import { getOfflineQueue, syncOfflineQueue } from '@/lib/offline/queue';
 
 export type Workspace = 'productivity' | 'finance' | 'overview';
 
+/** Metric explainer payload rendered by ExplainerDrawer (shape owned by the engines). */
+export interface ExplainerPayload {
+  metricName?: string;
+  definition?: string;
+  formula?: string;
+  dateRange?: { start?: string; end?: string; label?: string };
+  currency?: string;
+  includedEntities?: string[];
+  excludedEntities?: string[];
+  assumptions?: string[];
+  inputs?: Record<string, string>;
+  lastCalculatedAt?: string;
+}
+
 interface WorkspaceContextType {
   workspace: Workspace;
   setWorkspace: (ws: Workspace) => void;
   switchWorkspace: (ws: 'productivity' | 'finance') => void;
-  lastProductivityRoute: string;
-  lastFinanceRoute: string;
   activeSpaceId: string;
   setActiveSpaceId: (spaceId: string) => void;
   isAiDrawerOpen: boolean;
@@ -20,8 +32,8 @@ interface WorkspaceContextType {
   setIsQuickAddOpen: (open: boolean) => void;
   isCommandPaletteOpen: boolean;
   setIsCommandPaletteOpen: (open: boolean) => void;
-  selectedExplainer: any | null;
-  setSelectedExplainer: (explainer: any | null) => void;
+  selectedExplainer: ExplainerPayload | null;
+  setSelectedExplainer: (explainer: ExplainerPayload | null) => void;
   offlinePendingCount: number;
   setOfflinePendingCount: (count: number) => void;
   isMobileMenuOpen: boolean;
@@ -33,48 +45,52 @@ const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefin
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [workspace, setWorkspaceState] = useState<Workspace>('productivity');
-  const [lastProductivityRoute, setLastProductivityRoute] = useState<string>('/');
-  const [lastFinanceRoute, setLastFinanceRoute] = useState<string>('/finance');
+  // Workspace is DERIVED from the URL, never stored: the address bar is the
+  // single source of truth, and a mirrored state variable only creates
+  // opportunities for the two to disagree (and for a setState-in-effect).
+  const workspace: Workspace = pathname?.startsWith('/finance')
+    ? 'finance'
+    : pathname?.startsWith('/overview') || pathname?.startsWith('/settings')
+      ? 'overview'
+      : 'productivity';
   const [activeSpaceId, setActiveSpaceId] = useState<string>('all');
   const [isAiDrawerOpen, setIsAiDrawerOpen] = useState<boolean>(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState<boolean>(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
-  const [selectedExplainer, setSelectedExplainer] = useState<any | null>(null);
+  const [selectedExplainer, setSelectedExplainer] = useState<ExplainerPayload | null>(null);
   const [offlinePendingCount, setOfflinePendingCount] = useState<number>(0);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
-  // Sync workspace strictly with active URL pathname (URL is the single source of truth)
+  const setWorkspace = useCallback((ws: Workspace) => {
+    try { localStorage.setItem('personal_os_workspace', ws); } catch { /* storage disabled */ }
+  }, []);
+
+  // Remember the last route in each domain so switching back returns there.
+  // This only writes to storage — no component state, so it cannot cascade.
   useEffect(() => {
     if (!pathname) return;
-    if (pathname.startsWith('/finance')) {
-      setWorkspaceState('finance');
-      setLastFinanceRoute(pathname);
-      try { localStorage.setItem('personal_os_last_finance', pathname); } catch {}
-    } else if (pathname.startsWith('/overview') || pathname.startsWith('/settings')) {
-      setWorkspaceState('overview');
-    } else {
-      setWorkspaceState('productivity');
-      setLastProductivityRoute(pathname);
-      try { localStorage.setItem('personal_os_last_prod', pathname); } catch {}
+    try {
+      if (pathname.startsWith('/finance')) {
+        localStorage.setItem('personal_os_last_finance', pathname);
+      } else if (!pathname.startsWith('/overview') && !pathname.startsWith('/settings')) {
+        localStorage.setItem('personal_os_last_prod', pathname);
+      }
+    } catch {
+      /* storage disabled: switching simply falls back to the domain root */
     }
   }, [pathname]);
 
-  const setWorkspace = (ws: Workspace) => {
-    setWorkspaceState(ws);
-    try { localStorage.setItem('personal_os_workspace', ws); } catch {}
-  };
-
   const switchWorkspace = useCallback((targetWs: 'productivity' | 'finance') => {
-    setWorkspace(targetWs);
-    if (targetWs === 'finance') {
-      const destination = lastFinanceRoute || '/finance';
-      router.push(destination);
-    } else {
-      const destination = lastProductivityRoute || '/';
-      router.push(destination);
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem(targetWs === 'finance' ? 'personal_os_last_finance' : 'personal_os_last_prod');
+    } catch {
+      stored = null;
     }
-  }, [lastFinanceRoute, lastProductivityRoute, router]);
+    const fallback = targetWs === 'finance' ? '/finance' : '/';
+    const destination = stored && stored.startsWith('/') && !stored.startsWith('//') ? stored : fallback;
+    router.push(destination);
+  }, [router]);
 
   // Keyboard shortcuts (Cmd+K for command palette, Cmd+N for quick add)
   useEffect(() => {
@@ -116,8 +132,6 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         workspace,
         setWorkspace,
         switchWorkspace,
-        lastProductivityRoute,
-        lastFinanceRoute,
         activeSpaceId,
         setActiveSpaceId,
         isAiDrawerOpen,

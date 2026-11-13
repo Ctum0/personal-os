@@ -1,13 +1,79 @@
-import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
-import { Decimal } from 'decimal.js';
-import { todayISO } from "@/lib/time";
-import { readJson } from '@/lib/db/validate';
+import { todayISO } from '@/lib/time';
 import { detectDuplicateTransaction, transactionFingerprint } from '@/lib/finance/engine';
 import { withApiLogging } from '@/lib/api/log';
+import { FieldError, notFound, ok, readBody, routeError } from '@/lib/api/http';
+import {
+  optionalBoolean,
+  optionalEnum,
+  optionalISODate,
+  optionalString,
+  requiredMoney,
+  requiredString,
+} from '@/lib/api/fields';
 
-export async function GET(request: Request) {
+const TRANSACTION_TYPES = ['income', 'expense', 'transfer', 'refund'] as const;
+const TRANSACTION_STATUSES = ['posted', 'pending'] as const;
+const RECURRING_FREQUENCIES = ['daily', 'weekly', 'biweekly', 'monthly', 'quarterly', 'yearly'] as const;
+const RECURRING_RULE_TYPES = ['bill', 'subscription', 'loan_payment', 'income'] as const;
+
+interface TransactionRow {
+  id: string;
+}
+
+interface AccountRow {
+  id: string;
+  currency: string;
+}
+
+interface RecurringConfigInput {
+  isRecurring: boolean;
+  frequency: string;
+  nextDueDate: string | undefined;
+  ruleType: string;
+}
+
+/**
+ * Normalizes the `tags` payload into the JSON string stored on the row.
+ * Arrays are serialized as-is, a JSON string is passed through, a bare string
+ * becomes a single-element array, and anything else is a client error.
+ */
+function readTags(value: unknown): string {
+  if (value === undefined || value === null || value === '') return '[]';
+  if (Array.isArray(value)) {
+    return JSON.stringify(
+      value.map((tag, index) => {
+        if (typeof tag !== 'string') {
+          throw new FieldError(`tags[${index}] must be a string`);
+        }
+        return tag;
+      })
+    );
+  }
+  if (typeof value === 'string') {
+    return value.trim().startsWith('[') ? value : JSON.stringify([value]);
+  }
+  throw new FieldError('tags must be an array of strings');
+}
+
+function readRecurringConfig(value: unknown, txType: string): RecurringConfigInput | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new FieldError('recurringConfig must be an object');
+  }
+  const cfg = value as Record<string, unknown>;
+  return {
+    isRecurring: optionalBoolean(cfg.isRecurring, 'recurringConfig.isRecurring') ?? false,
+    frequency: optionalEnum(cfg.frequency, 'recurringConfig.frequency', RECURRING_FREQUENCIES) ?? 'monthly',
+    nextDueDate: optionalISODate(cfg.nextDueDate, 'recurringConfig.nextDueDate'),
+    ruleType:
+      optionalEnum(cfg.ruleType, 'recurringConfig.ruleType', RECURRING_RULE_TYPES) ??
+      (txType === 'income' ? 'income' : 'bill'),
+  };
+}
+
+export const GET = withApiLogging(async function GET(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
@@ -28,7 +94,7 @@ export async function GET(request: Request) {
       LEFT JOIN categories c ON t.category_id = c.id
       WHERE t.tenant_id = ?
     `;
-    const params: any[] = [session.tenantId];
+    const params: Array<string | number> = [session.tenantId];
 
     if (accountId && accountId !== 'all') {
       query += ' AND (t.account_id = ? OR t.to_account_id = ?)';
@@ -74,106 +140,61 @@ export async function GET(request: Request) {
     query = query.replace(/\sLIMIT\s+\d+\s*$/i, '') + ' LIMIT ? OFFSET ?';
     const transactions = db.prepare(query).all(...params, limit, offset);
 
-    return NextResponse.json({
-      transactions,
-      total,
-      limit,
-      offset,
-      hasMore: offset + limit < total,
-    });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ok({ transactions, total, limit, offset, hasMore: offset + limit < total });
+  } catch (err) {
+    return routeError(err);
   }
-}
+});
 
 export const POST = withApiLogging(async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const parsedBody = await readJson(request);
-    if ("error" in parsedBody) {
-      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
-    }
-    const body = parsedBody.data;
+    const body = await readBody(request);
 
-    const {
-      transactionType,
-      date,
-      accountId,
-      toAccountId,
-      amount,
-      categoryId,
-      payeeName,
-      description,
-      notes,
-      tags,
-      status: reqStatus,
-      recurringConfig,
-    } = body;
+    const accountId = requiredString(body.accountId, 'accountId', 100);
+    const amount = requiredMoney(body.amount, 'amount');
+    const description = requiredString(body.description, 'description', 2000);
+    const txType = optionalEnum(body.transactionType, 'transactionType', TRANSACTION_TYPES) ?? 'expense';
+    const date = optionalISODate(body.date, 'date');
+    const toAccountId = optionalString(body.toAccountId, 'toAccountId', 100);
+    const categoryId = optionalString(body.categoryId, 'categoryId', 100);
+    const payeeName = optionalString(body.payeeName, 'payeeName', 200);
+    const notes = optionalString(body.notes, 'notes', 2000);
+    const txStatus = optionalEnum(body.status, 'status', TRANSACTION_STATUSES) ?? 'posted';
+    const tagsJson = readTags(body.tags);
+    const recurringConfig = readRecurringConfig(body.recurringConfig, txType);
 
-    if (!accountId || amount === undefined || amount === null || !description || !String(description).trim()) {
-      return NextResponse.json({ error: 'Account, amount, and description are required' }, { status: 400 });
-    }
-
-    let parsedDecimal: Decimal;
-    try {
-      parsedDecimal = new Decimal(amount);
-      if (!parsedDecimal.isFinite() || parsedDecimal.isNaN() || parsedDecimal.isZero() || parsedDecimal.isNegative()) {
-        return NextResponse.json({ error: 'Amount must be a positive number' }, { status: 400 });
-      }
-    } catch {
-      return NextResponse.json({ error: 'Amount must be a valid numeric value' }, { status: 400 });
-    }
-    const decAmount = parsedDecimal.toFixed(2);
-
-    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      return NextResponse.json({ error: 'Date must be in YYYY-MM-DD format' }, { status: 400 });
-    }
-
-    const validTxTypes = ['income', 'expense', 'transfer', 'refund'];
-    const txType = transactionType || 'expense';
-    if (!validTxTypes.includes(txType)) {
-      return NextResponse.json({ error: `Invalid transactionType. Must be one of: ${validTxTypes.join(', ')}` }, { status: 400 });
-    }
-
-    // Verify account exists and belongs to current tenant
-    const acc = db.prepare('SELECT id, currency FROM finance_accounts WHERE id = ? AND tenant_id = ?').get(accountId, session.tenantId) as { id: string; currency: string } | undefined;
-    if (!acc) {
-      return NextResponse.json({ error: 'Source account not found' }, { status: 404 });
-    }
+    // Source account is also the currency source for the whole entry.
+    const acc = db
+      .prepare('SELECT id, currency FROM finance_accounts WHERE id = ? AND tenant_id = ?')
+      .get(accountId, session.tenantId) as AccountRow | undefined;
+    if (!acc) notFound('Source account');
 
     // Category must exist within the tenant (prevents cross-tenant category ids)
     if (categoryId) {
-      const cat = db.prepare('SELECT id FROM categories WHERE id = ? AND tenant_id = ?').get(categoryId, session.tenantId);
-      if (!cat) {
-        return NextResponse.json({ error: 'Category not found' }, { status: 404 });
-      }
-    }
-    if (payeeName !== undefined && payeeName !== null && typeof payeeName !== 'string') {
-      return NextResponse.json({ error: 'payeeName must be a string' }, { status: 400 });
-    }
-    if (notes !== undefined && notes !== null && typeof notes !== 'string') {
-      return NextResponse.json({ error: 'notes must be a string' }, { status: 400 });
+      const cat = db
+        .prepare('SELECT id FROM categories WHERE id = ? AND tenant_id = ?')
+        .get(categoryId, session.tenantId);
+      if (!cat) notFound('Category');
     }
 
     // For transfers, verify destination account exists and belongs to current tenant
     if (txType === 'transfer') {
       if (!toAccountId) {
-        return NextResponse.json({ error: 'Destination account is required for transfer' }, { status: 400 });
+        throw new FieldError('Destination account is required for transfer');
       }
       if (toAccountId === accountId) {
-        return NextResponse.json({ error: 'Destination account must be different from source account' }, { status: 400 });
+        throw new FieldError('Destination account must be different from source account');
       }
-      const toAcc = db.prepare('SELECT id FROM finance_accounts WHERE id = ? AND tenant_id = ?').get(toAccountId, session.tenantId);
-      if (!toAcc) {
-        return NextResponse.json({ error: 'Destination account not found' }, { status: 404 });
-      }
+      const toAcc = db
+        .prepare('SELECT id FROM finance_accounts WHERE id = ? AND tenant_id = ?')
+        .get(toAccountId, session.tenantId);
+      if (!toAcc) notFound('Destination account');
     }
 
     const txId = `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const txDate = date || todayISO();
-    const txStatus = reqStatus === 'pending' ? 'pending' : 'posted';
-    const tagsJson = Array.isArray(tags) ? JSON.stringify(tags) : (typeof tags === 'string' && tags.trim().startsWith('[') ? tags : JSON.stringify(tags ? [tags] : []));
+    const txDate = date ?? todayISO();
     const currency = acc.currency || 'USD';
 
     // Strict mode (?strict=1): hard-reject a byte-identical posted duplicate
@@ -183,23 +204,25 @@ export const POST = withApiLogging(async function POST(request: Request) {
       accountId,
       date: txDate,
       transactionType: txType,
-      amount: decAmount,
+      amount,
     });
     const strictMode = new URL(request.url).searchParams.get('strict') === '1';
     if (strictMode && txStatus === 'posted') {
-      const existing = db.prepare(
-        `SELECT id FROM journal_transactions
-         WHERE tenant_id = ? AND dup_fingerprint = ? AND status = 'posted'
-         LIMIT 1`
-      ).get(session.tenantId, fingerprint);
+      const existing = db
+        .prepare(
+          `SELECT id FROM journal_transactions
+           WHERE tenant_id = ? AND dup_fingerprint = ? AND status = 'posted'
+           LIMIT 1`
+        )
+        .get(session.tenantId, fingerprint) as TransactionRow | undefined;
       if (existing) {
-        return NextResponse.json(
+        return ok(
           {
             error: 'Duplicate transaction rejected (strict mode)',
-            duplicateOf: (existing as { id: string }).id,
+            duplicateOf: existing.id,
             fingerprint,
           },
-          { status: 409 }
+          409
         );
       }
     }
@@ -216,14 +239,14 @@ export const POST = withApiLogging(async function POST(request: Request) {
         txType,
         txDate,
         accountId,
-        toAccountId || null,
-        decAmount,
+        toAccountId ?? null,
+        amount,
         currency,
-        decAmount,
-        payeeName || null,
-        categoryId || null,
-        description.trim(),
-        notes || null,
+        amount,
+        payeeName ?? null,
+        categoryId ?? null,
+        description,
+        notes ?? null,
         tagsJson,
         txStatus,
         fingerprint
@@ -235,33 +258,33 @@ export const POST = withApiLogging(async function POST(request: Request) {
           db.prepare(`
             INSERT INTO journal_lines (id, tenant_id, transaction_id, account_id, entry_type, amount, currency, base_amount, description)
             VALUES (?, ?, ?, ?, 'debit', ?, ?, ?, ?)
-          `).run(`jl_${txId}_1`, session.tenantId, txId, accountId, decAmount, currency, decAmount, description);
+          `).run(`jl_${txId}_1`, session.tenantId, txId, accountId, amount, currency, amount, description);
         } else if (txType === 'expense') {
           db.prepare(`
             INSERT INTO journal_lines (id, tenant_id, transaction_id, account_id, entry_type, amount, currency, base_amount, description)
             VALUES (?, ?, ?, ?, 'credit', ?, ?, ?, ?)
-          `).run(`jl_${txId}_1`, session.tenantId, txId, accountId, decAmount, currency, decAmount, description);
+          `).run(`jl_${txId}_1`, session.tenantId, txId, accountId, amount, currency, amount, description);
         } else if (txType === 'transfer') {
           if (!toAccountId) {
-            throw new Error('Destination account is required for transfer');
+            throw new FieldError('Destination account is required for transfer');
           }
           // Credit source account (money out)
           db.prepare(`
             INSERT INTO journal_lines (id, tenant_id, transaction_id, account_id, entry_type, amount, currency, base_amount, description)
             VALUES (?, ?, ?, ?, 'credit', ?, ?, ?, ?)
-          `).run(`jl_${txId}_1`, session.tenantId, txId, accountId, decAmount, currency, decAmount, `Transfer to ${toAccountId}`);
+          `).run(`jl_${txId}_1`, session.tenantId, txId, accountId, amount, currency, amount, `Transfer to ${toAccountId}`);
 
           // Debit destination account (money in)
           db.prepare(`
             INSERT INTO journal_lines (id, tenant_id, transaction_id, account_id, entry_type, amount, currency, base_amount, description)
             VALUES (?, ?, ?, ?, 'debit', ?, ?, ?, ?)
-          `).run(`jl_${txId}_2`, session.tenantId, txId, toAccountId, decAmount, currency, decAmount, `Transfer from ${accountId}`);
+          `).run(`jl_${txId}_2`, session.tenantId, txId, toAccountId, amount, currency, amount, `Transfer from ${accountId}`);
         } else if (txType === 'refund') {
           // Refund is debit into asset account
           db.prepare(`
             INSERT INTO journal_lines (id, tenant_id, transaction_id, account_id, entry_type, amount, currency, base_amount, description)
             VALUES (?, ?, ?, ?, 'debit', ?, ?, ?, ?)
-          `).run(`jl_${txId}_1`, session.tenantId, txId, accountId, decAmount, currency, decAmount, `Refund: ${description}`);
+          `).run(`jl_${txId}_1`, session.tenantId, txId, accountId, amount, currency, amount, `Refund: ${description}`);
         }
       }
 
@@ -275,16 +298,16 @@ export const POST = withApiLogging(async function POST(request: Request) {
         `).run(
           recId,
           session.tenantId,
-          description.trim(),
-          recurringConfig.ruleType || (txType === 'income' ? 'income' : 'bill'),
-          recurringConfig.frequency || 'monthly',
+          description,
+          recurringConfig.ruleType,
+          recurringConfig.frequency,
           txDate,
-          recurringConfig.nextDueDate || txDate,
-          decAmount,
+          recurringConfig.nextDueDate ?? txDate,
+          amount,
           currency,
           accountId,
-          toAccountId || null,
-          categoryId || null
+          toAccountId ?? null,
+          categoryId ?? null
         );
       }
 
@@ -295,7 +318,9 @@ export const POST = withApiLogging(async function POST(request: Request) {
       `).run(`aud_${txId}`, session.tenantId, session.userId, txId, JSON.stringify(body));
     })();
 
-    const created = db.prepare('SELECT * FROM journal_transactions WHERE id = ? AND tenant_id = ?').get(txId, session.tenantId);
+    const created = db
+      .prepare('SELECT * FROM journal_transactions WHERE id = ? AND tenant_id = ?')
+      .get(txId, session.tenantId);
 
     // Advisory duplicate warning (B6): same account + date + type + amount already
     // posted. Response-only flag; nothing is blocked or mutated.
@@ -303,17 +328,17 @@ export const POST = withApiLogging(async function POST(request: Request) {
       accountId,
       date: txDate,
       transactionType: txType,
-      amount: decAmount,
+      amount,
       excludeTransactionId: txId,
     });
 
-    return NextResponse.json({ transaction: created, duplicateWarning }, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ok({ transaction: created, duplicateWarning }, 201);
+  } catch (err) {
+    return routeError(err);
   }
 });
 
-export async function DELETE(request: Request) {
+export const DELETE = withApiLogging(async function DELETE(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
@@ -321,25 +346,28 @@ export async function DELETE(request: Request) {
     const id = searchParams.get('id');
 
     if (!id) {
-      return NextResponse.json({ error: 'Transaction ID is required' }, { status: 400 });
+      return ok({ error: 'Transaction ID is required' }, 400);
     }
 
+    let updated = 0;
     db.transaction(() => {
       // Per spec: financial corrections preserve history or mark as reversed/voided.
       // journal_lines are preserved intact for immutable audit history.
-      const existing = db.prepare('SELECT id, status FROM journal_transactions WHERE id = ? AND tenant_id = ?').get(id, session.tenantId) as { id: string; status: string } | undefined;
-      if (!existing) {
-        return;
-      }
-      const alreadyVoided = existing.status === 'voided';
-      db.prepare(`
-        UPDATE journal_transactions
-        SET status = 'voided', updated_at = datetime('now')
-        WHERE id = ? AND tenant_id = ?
-      `).run(id, session.tenantId);
+      const existing = db
+        .prepare('SELECT id, status FROM journal_transactions WHERE id = ? AND tenant_id = ?')
+        .get(id, session.tenantId) as { id: string; status: string } | undefined;
+      if (!existing) return;
+
+      updated = db
+        .prepare(
+          `UPDATE journal_transactions
+           SET status = 'voided', updated_at = datetime('now')
+           WHERE id = ? AND tenant_id = ?`
+        )
+        .run(id, session.tenantId).changes;
 
       // Idempotent: re-voiding a voided transaction does not duplicate audit rows.
-      if (!alreadyVoided) {
+      if (existing.status !== 'voided') {
         db.prepare(`
           INSERT INTO audit_events (id, tenant_id, actor_id, domain, action, entity_type, entity_id, changes)
           VALUES (?, ?, ?, 'finance', 'void_transaction', 'journal_transaction', ?, '{}')
@@ -347,8 +375,10 @@ export async function DELETE(request: Request) {
       }
     })();
 
-    return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (updated === 0) notFound('Transaction');
+
+    return ok({ success: true });
+  } catch (err) {
+    return routeError(err);
   }
-}
+});

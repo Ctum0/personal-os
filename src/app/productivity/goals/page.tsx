@@ -1,62 +1,90 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import { apiFetch, apiSend, errorText } from '@/lib/api/client';
 import {
   Target,
   Plus,
-  TrendingUp,
-  Calendar,
-  CheckCircle2,
-  Clock,
-  Sparkles,
-  ArrowRight,
 } from 'lucide-react';
+
+interface GoalProgressLogRow {
+  id: string;
+  value: number;
+  delta: number;
+  note: string | null;
+  logged_at: string;
+}
+
+interface GoalRow {
+  id: string;
+  title: string;
+  description: string | null;
+  type: string;
+  direction: string;
+  current_value: number;
+  target_value: number;
+  unit: string;
+  cadence: string;
+  deadline: string | null;
+  status: string;
+  progress: number;
+  recentLogs: GoalProgressLogRow[];
+}
 
 export default function GoalsPage() {
   const { activeSpaceId, setIsQuickAddOpen } = useWorkspace();
-  const [goals, setGoals] = useState<any[]>([]);
-  const [selectedGoal, setSelectedGoal] = useState<any | null>(null);
+  const [goals, setGoals] = useState<GoalRow[]>([]);
+  const [selectedGoal, setSelectedGoal] = useState<GoalRow | null>(null);
   const [newLogVal, setNewLogVal] = useState<string>('');
   const [newLogNote, setNewLogNote] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const loadGoals = () => {
+  const loadGoals = useCallback(async () => {
     setIsLoading(true);
-    const spaceQuery = activeSpaceId !== 'all' ? `?spaceId=${activeSpaceId}` : '';
-    fetch(`/api/goals${spaceQuery}`)
-      .then(r => r.json())
-      .then(data => setGoals(data.goals || []))
-      .finally(() => setIsLoading(false));
-  };
+    try {
+      const spaceQuery = activeSpaceId !== 'all' ? `?spaceId=${encodeURIComponent(activeSpaceId)}` : '';
+      const data = await apiFetch<{ goals?: GoalRow[] }>(`/api/goals${spaceQuery}`);
+      setGoals(data.goals ?? []);
+      setError(null);
+    } catch (err) {
+      setError(errorText(err));
+      setGoals([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [activeSpaceId]);
 
   useEffect(() => {
-    loadGoals();
-  }, [activeSpaceId]);
+    void (async () => {
+      await loadGoals();
+    })();
+  }, [loadGoals]);
 
   const handleRecordMeasurement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedGoal || !newLogVal) return;
 
-    await fetch('/api/goals', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    try {
+      await apiSend('/api/goals', 'PUT', {
         id: selectedGoal.id,
         newLogValue: parseFloat(newLogVal),
         note: newLogNote || 'Progress update',
-      }),
-    });
-
-    setNewLogVal('');
-    setNewLogNote('');
-    setSelectedGoal(null);
-    loadGoals();
+      });
+      setNewLogVal('');
+      setNewLogNote('');
+      setSelectedGoal(null);
+      await loadGoals();
+    } catch (err) {
+      setError(errorText(err));
+    }
   };
 
-  const handleQuickIncrement = async (goal: any) => {
-    const current = parseFloat(goal.current_value) || 0;
+  const handleQuickIncrement = async (goal: GoalRow) => {
+    const current = parseFloat(String(goal.current_value)) || 0;
     const nextVal = current + 1;
+    const previous = goals;
     // Optimistic update
     setGoals(prev =>
       prev.map(g =>
@@ -64,21 +92,22 @@ export default function GoalsPage() {
           ? {
               ...g,
               current_value: nextVal,
-              progress: Math.min(100, Math.round((nextVal / (parseFloat(goal.target_value) || 1)) * 100)),
+              progress: Math.min(100, Math.round((nextVal / (parseFloat(String(goal.target_value)) || 1)) * 100)),
             }
           : g
       )
     );
-    await fetch('/api/goals', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    try {
+      await apiSend('/api/goals', 'PUT', {
         id: goal.id,
         newLogValue: nextVal,
         note: '1-click increment check-in',
-      }),
-    });
-    loadGoals();
+      });
+      await loadGoals();
+    } catch (err) {
+      setGoals(previous);
+      setError(errorText(err));
+    }
   };
 
   return (
@@ -104,6 +133,12 @@ export default function GoalsPage() {
         </button>
       </div>
 
+      {error && (
+        <div role="alert" className="p-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-xs text-rose-200">
+          {error}
+        </div>
+      )}
+
       {/* Log Measurement Modal */}
       {selectedGoal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
@@ -123,10 +158,11 @@ export default function GoalsPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">
+              <label htmlFor="goal-log-value" className="block text-xs font-medium text-zinc-400 mb-1">
                 New Measured Value ({selectedGoal.unit})
               </label>
               <input
+                id="goal-log-value"
                 type="number"
                 step="any"
                 required
@@ -139,8 +175,9 @@ export default function GoalsPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">Measurement Note</label>
+              <label htmlFor="goal-log-note" className="block text-xs font-medium text-zinc-400 mb-1">Measurement Note</label>
               <input
+                id="goal-log-note"
                 type="text"
                 value={newLogNote}
                 onChange={e => setNewLogNote(e.target.value)}
@@ -170,7 +207,11 @@ export default function GoalsPage() {
 
       {/* Goals Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {goals.length === 0 ? (
+        {isLoading ? (
+          <div className="col-span-full p-12 text-center text-xs text-zinc-500 bg-zinc-950/40 border border-white/[0.06] rounded-lg">
+            Loading goals...
+          </div>
+        ) : goals.length === 0 ? (
           <div className="col-span-full p-12 text-center text-xs text-zinc-500 bg-zinc-950/40 border border-white/[0.06] rounded-lg">
             No goals tracked in this space yet.
           </div>

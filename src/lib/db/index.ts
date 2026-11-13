@@ -1,11 +1,21 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { todayISO } from "@/lib/time";
 import { mkdirSync as __mkdirSync } from "node:fs";
 import { dirname as __dirnameOf, join as __joinPath } from "node:path";
 import { maybeRunMaintenance, registerDbPath } from "./maintenance";
 import { maybeSnapshotNetWorth } from "@/lib/jobs/netWorth";
+
+/**
+ * `next build` executes route modules while prerendering. Without a guard that
+ * would open, migrate, back up and snapshot the operator's live database as a
+ * side effect of building — mutating real data and sweeping it into the traced
+ * standalone output. Builds therefore always resolve to a throwaway profile
+ * unless PERSONAL_OS_DB_PATH is set explicitly.
+ */
+const IS_BUILD_PHASE = process.env.NEXT_PHASE === 'phase-production-build';
 
 // Database directory in project root; path is resolvable at call time so
 // sandboxed tests and isolated profiles can override PERSONAL_OS_DB_PATH
@@ -15,6 +25,11 @@ function resolveDbPath(): string {
   if (configured) {
     __mkdirSync(__dirnameOf(configured), { recursive: true });
     return configured;
+  }
+  if (IS_BUILD_PHASE) {
+    const buildDb = path.join(os.tmpdir(), 'personal-os-build', 'profile.db');
+    __mkdirSync(__dirnameOf(buildDb), { recursive: true });
+    return buildDb;
   }
   const DB_DIR = path.join(process.cwd(), 'data');
   if (!fs.existsSync(DB_DIR)) {
@@ -34,6 +49,12 @@ export function resolveLiveDbPath(): string {
 export function getDb(): Database.Database {
   const dbPath = resolveDbPath();
   if (!dbInstance || dbInstancePath !== dbPath) {
+    // A path switch (tests, restore, sandboxed profiles) must not leak the
+    // previous handle — an open SQLite handle keeps its WAL pinned forever.
+    if (dbInstance) {
+      try { dbInstance.close(); } catch { /* already closed */ }
+      dbInstance = null;
+    }
     dbInstance = new Database(dbPath);
     dbInstance.pragma('journal_mode = WAL');
     dbInstance.pragma('busy_timeout = 5000');
@@ -53,10 +74,34 @@ export function getDb(): Database.Database {
   return dbInstance;
 }
 
+/**
+ * Closes the live handle and forgets it.
+ *
+ * Tests switch `PERSONAL_OS_DB_PATH` per suite; without this the next suite in
+ * the same worker could inherit a handle to a directory the previous one
+ * deleted. Also used by tooling that restores a database file in place.
+ */
+export function closeDb(): void {
+  if (dbInstance) {
+    try {
+      dbInstance.close();
+    } catch {
+      /* already closed */
+    }
+    dbInstance = null;
+    dbInstancePath = null;
+  }
+}
+
+/**
+ * In-memory database for unit tests. Runs the full migration chain (not just the
+ * baseline DDL) so test schema matches production: user_version, v4
+ * weekly_reviews, v5 dup_fingerprint and every index must all be present.
+ */
 export function getInMemoryDb(): Database.Database {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
-  initSchema(db);
+  runMigrations(db);
   return db;
 }
 
@@ -493,6 +538,7 @@ export function initSchema(db: Database.Database) {
         opening_date TEXT NOT NULL DEFAULT (date('now')),
         institution TEXT,
         masked_number TEXT,
+        credit_limit TEXT,
         is_active INTEGER NOT NULL DEFAULT 1,
         display_color TEXT NOT NULL DEFAULT '#10b981',
         sort_order INTEGER NOT NULL DEFAULT 0,
@@ -1158,6 +1204,33 @@ export function backfillTransactionFingerprints(db: Database.Database): void {
       ON journal_transactions(tenant_id, dup_fingerprint, status);
   `);
 }
+
+/**
+ * `users.preferences` as read by migration 4: free-form JSON where only
+ * `weeklyReviews` is structured, and its entries may carry pre-v4 shapes.
+ */
+interface MigratedPreferences {
+  weeklyReviews?: unknown[];
+  [key: string]: unknown;
+}
+
+/** A pre-v4 `weeklyReviews` entry; every field is optional and unvalidated. */
+interface LegacyWeeklyReview {
+  id?: string;
+  title?: string;
+  weekEnding?: string;
+  weekStart?: string;
+  date?: string;
+  completedCount?: number;
+  missedCount?: number;
+  openCount?: number;
+  habitsCount?: number;
+  reflectionNotes?: string;
+  reflection?: string;
+  nextWeekCommitments?: string;
+  createdBy?: string;
+}
+
 const MIGRATIONS: Migration[] = [
   { version: 1, name: "baseline", up: (db) => initSchema(db) },
   {
@@ -1282,47 +1355,49 @@ const MIGRATIONS: Migration[] = [
           updated_at = datetime('now')
       `);
       for (const u of users) {
-        let prefs: any = {};
+        let prefs: MigratedPreferences = {};
         try {
-          prefs = JSON.parse(u.preferences || '{}');
+          const parsed: unknown = JSON.parse(u.preferences || '{}');
+          if (parsed && typeof parsed === 'object') prefs = parsed as MigratedPreferences;
         } catch {
           continue;
         }
-        const entries = prefs?.weeklyReviews;
+        const entries = prefs.weeklyReviews;
         if (!Array.isArray(entries)) continue;
         const migrated: unknown[] = [];
-        entries.forEach((e: any, idx: number) => {
+        entries.forEach((e, idx: number) => {
           try {
             if (!e || typeof e !== 'object') {
               migrated.push(e);
               return;
             }
+            const review = e as LegacyWeeklyReview;
             // A review needs a week anchor: weekEnding / weekStart / date — else it
             // stays in preferences as an unknown-shape entry (preserved, not dropped).
-            const anchor: string | undefined = e.weekEnding || e.weekStart || e.date;
+            const anchor: string | undefined = review.weekEnding || review.weekStart || review.date;
             if (!anchor || !/^\d{4}-\d{2}-\d{2}/.test(String(anchor))) {
               migrated.push(e);
               return;
             }
             const weekStart = String(anchor).slice(0, 10);
             const payload = {
-              weekEnding: e.weekEnding,
-              completedCount: e.completedCount ?? 0,
-              missedCount: e.missedCount ?? e.openCount ?? 0,
-              openCount: e.openCount,
-              habitsCount: e.habitsCount,
-              reflectionNotes: e.reflectionNotes ?? e.reflection ?? '',
-              nextWeekCommitments: e.nextWeekCommitments ?? '',
+              weekEnding: review.weekEnding,
+              completedCount: review.completedCount ?? 0,
+              missedCount: review.missedCount ?? review.openCount ?? 0,
+              openCount: review.openCount,
+              habitsCount: review.habitsCount,
+              reflectionNotes: review.reflectionNotes ?? review.reflection ?? '',
+              nextWeekCommitments: review.nextWeekCommitments ?? '',
             };
             insertReview.run(
-              e.id || `wrev_${u.tenant_id}_${weekStart}_${idx}`,
+              review.id || `wrev_${u.tenant_id}_${weekStart}_${idx}`,
               u.tenant_id,
               weekStart,
               weekStart,
-              e.title || null,
+              review.title || null,
               payload.reflectionNotes || null,
               JSON.stringify(payload),
-              e.createdBy || u.id
+              review.createdBy || u.id
             );
             migrated.push(e);
           } catch {
@@ -1349,18 +1424,81 @@ const MIGRATIONS: Migration[] = [
       backfillTransactionFingerprints(db);
     },
   },
+  {
+    version: 6,
+    name: "account_credit_limit",
+    up: (db) => {
+      // Credit lines need an explicit limit before "include available credit in
+      // safe-to-spend" can mean anything (headroom = limit - balance owed).
+      const columns = (db.prepare(`PRAGMA table_info(finance_accounts)`).all() as { name: string }[])
+        .map(c => c.name);
+      if (!columns.includes("credit_limit")) {
+        db.exec(`ALTER TABLE finance_accounts ADD COLUMN credit_limit TEXT`);
+      }
+    },
+  },
+  {
+    version: 7,
+    name: "idempotency_keys",
+    up: (db) => {
+      // Server-side replay protection for offline mutations. The client sends
+      // X-Idempotency-Key; a retry of a committed request returns the stored
+      // response instead of creating a second record.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS idempotency_keys (
+          tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          key TEXT NOT NULL,
+          method TEXT NOT NULL,
+          path TEXT NOT NULL,
+          status INTEGER NOT NULL,
+          body TEXT NOT NULL,
+          content_type TEXT NOT NULL DEFAULT 'application/json',
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          PRIMARY KEY (tenant_id, key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_idempotency_created
+          ON idempotency_keys(created_at);
+      `);
+    },
+  },
 ];
+
+/**
+ * Highest schema version this build knows how to produce. Tests and migration
+ * tooling must derive expectations from this instead of hardcoding a number,
+ * which repeatedly left them asserting a stale version after new migrations.
+ */
+export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;
+
+/** Every shipped migration version, ascending. */
+export const MIGRATION_VERSIONS: readonly number[] = MIGRATIONS.map((m) => m.version);
 
 export function schemaVersion(db: Database.Database): number {
   return Number(db.pragma("user_version", { simple: true }) ?? 0);
 }
 
-/** Snapshot with VACUUM INTO (WAL-safe). A raw file copy can miss uncommitted WAL pages. */
-export function snapshotDatabase(db: Database.Database, version: number): string {
-  const dir = __joinPath(__dirnameOf(resolveDbPath()), "backups");
+/**
+ * Snapshot with VACUUM INTO (WAL-safe). A raw file copy can miss uncommitted WAL pages.
+ *
+ * The destination directory is derived from the *handle being snapshotted*, not
+ * from the currently configured live path: tests and migrations on in-memory or
+ * throwaway profile DBs must never write snapshots into the operator's data dir.
+ * In-memory databases are skipped entirely (nothing durable to preserve).
+ */
+export function snapshotDatabase(db: Database.Database, version: number): string | null {
+  const sourcePath = db.name;
+  if (!sourcePath || sourcePath === ':memory:' || sourcePath.startsWith('file::memory:')) {
+    return null;
+  }
+  const dir = __joinPath(__dirnameOf(sourcePath), "backups");
   __mkdirSync(dir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const file = __joinPath(dir, "personal_os-v" + version + "-" + stamp + ".db");
+  const base = __joinPath(dir, "personal_os-v" + version + "-" + stamp);
+  let file = base + ".db";
+  let n = 1;
+  while (fs.existsSync(file)) {
+    file = base + "-" + n++ + ".db";
+  }
   db.exec("VACUUM INTO '" + file.replace(/'/g, "''") + "'");
   return file;
 }

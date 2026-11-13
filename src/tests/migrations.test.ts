@@ -1,15 +1,15 @@
 import { describe, it, expect } from "vitest";
 import Database from "better-sqlite3";
-import { initSchema, runMigrations, schemaVersion } from "@/lib/db";
+import { initSchema, runMigrations, schemaVersion, LATEST_SCHEMA_VERSION, MIGRATION_VERSIONS } from "@/lib/db";
 
 const fresh = () => new Database(":memory:");
 
 describe("schema migrations", () => {
-  it("stamps a fresh database at latest version (version 5)", () => {
+  it("stamps a fresh database at the latest shipped version", () => {
     const db = fresh();
     const result = runMigrations(db);
-    expect(schemaVersion(db)).toBe(5);
-    expect(result.applied).toEqual([1, 2, 3, 4, 5]);
+    expect(schemaVersion(db)).toBe(LATEST_SCHEMA_VERSION);
+    expect(result.applied).toEqual([...MIGRATION_VERSIONS]);
     expect(result.backup).toBeNull();
     db.close();
   });
@@ -19,7 +19,7 @@ describe("schema migrations", () => {
     runMigrations(db);
     const second = runMigrations(db);
     expect(second.applied).toEqual([]);
-    expect(schemaVersion(db)).toBe(5);
+    expect(schemaVersion(db)).toBe(LATEST_SCHEMA_VERSION);
     db.close();
   });
 
@@ -37,7 +37,7 @@ describe("schema migrations", () => {
     expect(before).toBeGreaterThan(40);
     const result = runMigrations(db);
     expect(result.from).toBe(0);
-    expect(result.to).toBe(5);
+    expect(result.to).toBe(LATEST_SCHEMA_VERSION);
     expect(countTables()).toBeGreaterThanOrEqual(before);
     db.close();
   });
@@ -46,9 +46,14 @@ describe("schema migrations", () => {
     const db = fresh();
     runMigrations(db);
     const again = runMigrations(db);
-    expect(again.from).toBe(5);
-    expect(again.to).toBe(5);
+    expect(again.from).toBe(LATEST_SCHEMA_VERSION);
+    expect(again.to).toBe(LATEST_SCHEMA_VERSION);
     expect(again.applied).toHaveLength(0);
     db.close();
+  });
+
+  it("every migration is unique and strictly ascending", () => {
+    expect([...MIGRATION_VERSIONS]).toEqual([...MIGRATION_VERSIONS].sort((a, b) => a - b));
+    expect(new Set(MIGRATION_VERSIONS).size).toBe(MIGRATION_VERSIONS.length);
   });
 });

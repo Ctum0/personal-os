@@ -1,21 +1,35 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import React, { useCallback, useState, useEffect } from 'react';
 import { Decimal } from 'decimal.js';
+import { apiFetch, apiSend, errorText } from '@/lib/api/client';
 import { fmtMoney, sumDecimalParts, toDecimal } from '../_shared/format';
 import {
   PiggyBank,
   Plus,
   Target,
-  Landmark,
-  Calendar,
-  CheckCircle2,
 } from 'lucide-react';
 
+interface SavingsGoalRow {
+  id: string;
+  name: string;
+  target_amount: string;
+  current_amount: string;
+  linked_account_name: string | null;
+  notes: string | null;
+  status: string;
+  progressPercent: number;
+}
+
+interface SavingsAccountRow {
+  accountId: string;
+  accountName: string;
+  accountType: string;
+}
+
 export default function SavingsGoalsPage() {
-  const [savingsGoals, setSavingsGoals] = useState<any[]>([]);
-  const [accounts, setAccounts] = useState<any[]>([]);
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoalRow[]>([]);
+  const [accounts, setAccounts] = useState<SavingsAccountRow[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [name, setName] = useState('');
   const [targetAmount, setTargetAmount] = useState('');
@@ -24,22 +38,38 @@ export default function SavingsGoalsPage() {
   const [linkedAccountId, setLinkedAccountId] = useState('');
   const [notes, setNotes] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const loadGoals = () => {
-    fetch('/api/finance/savings-goals')
-      .then(r => r.json())
-      .then(data => setSavingsGoals(data.savingsGoals || []))
-      .catch(() => {});
-  };
+  const loadGoals = useCallback(async () => {
+    try {
+      const data = await apiFetch<{ savingsGoals: SavingsGoalRow[] }>('/api/finance/savings-goals');
+      setSavingsGoals(data.savingsGoals ?? []);
+      setError(null);
+    } catch (err) {
+      setError(errorText(err));
+    }
+  }, []);
+
+  const loadAccounts = useCallback(async () => {
+    try {
+      const data = await apiFetch<{ accounts: SavingsAccountRow[] }>('/api/finance/accounts');
+      setAccounts(data.accounts ?? []);
+    } catch (err) {
+      setError(errorText(err));
+    }
+  }, []);
 
   useEffect(() => {
-    loadGoals();
+    void (async () => {
+      await loadGoals();
+    })();
+  }, [loadGoals]);
 
-    fetch('/api/finance/accounts')
-      .then(r => r.json())
-      .then(data => setAccounts(data.accounts || []))
-      .catch(() => {});
-  }, []);
+  useEffect(() => {
+    void (async () => {
+      await loadAccounts();
+    })();
+  }, [loadAccounts]);
 
   const handleAddGoal = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,24 +80,14 @@ export default function SavingsGoalsPage() {
     }
 
     try {
-      const res = await fetch('/api/finance/savings-goals', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: name.trim(),
-          targetAmount,
-          currentAmount: currentAmount || '0.00',
-          targetDate: targetDate || null,
-          linkedAccountId: linkedAccountId || null,
-          notes: notes.trim() || null,
-        }),
+      await apiSend<{ savingsGoal: { id: string } }>('/api/finance/savings-goals', 'POST', {
+        name: name.trim(),
+        targetAmount,
+        currentAmount: currentAmount || '0.00',
+        targetDate: targetDate || null,
+        linkedAccountId: linkedAccountId || null,
+        notes: notes.trim() || null,
       });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        setFormError(err.error || 'Failed to create savings goal');
-        return;
-      }
 
       setName('');
       setTargetAmount('');
@@ -76,9 +96,9 @@ export default function SavingsGoalsPage() {
       setLinkedAccountId('');
       setNotes('');
       setIsAddOpen(false);
-      loadGoals();
-    } catch (err: any) {
-      setFormError(err.message || 'Network error creating savings goal');
+      await loadGoals();
+    } catch (err) {
+      setFormError(errorText(err));
     }
   };
 
@@ -101,12 +121,28 @@ export default function SavingsGoalsPage() {
 
         <button
           onClick={() => setIsAddOpen(true)}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-all"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 rounded-lg text-xs font-semibold shadow-sm transition-all"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>New Savings Goal</span>
         </button>
       </div>
+
+      {error && (
+        <div
+          role="alert"
+          className="p-3 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-3"
+        >
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="text-[11px] underline opacity-80 hover:opacity-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Summary Metrics */}
       {savingsGoals.length > 0 && (
@@ -149,14 +185,15 @@ export default function SavingsGoalsPage() {
           </div>
 
           {formError && (
-            <div className="p-2.5 bg-red-950/40 border border-red-800/60 rounded-lg text-xs text-red-300">
+            <div role="alert" className="p-2.5 bg-red-950/40 border border-red-800/60 rounded-lg text-xs text-red-300">
               {formError}
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Goal Name</label>
+            <label htmlFor="goal-name" className="block text-xs font-medium text-zinc-400 mb-1">Goal Name</label>
             <input
+              id="goal-name"
               type="text"
               required
               autoFocus
@@ -168,8 +205,9 @@ export default function SavingsGoalsPage() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">Target Amount ($)</label>
+              <label htmlFor="goal-target-amount" className="block text-xs font-medium text-zinc-400 mb-1">Target Amount ($)</label>
               <input
+                id="goal-target-amount"
                 type="number"
                 step="0.01"
                 required
@@ -180,8 +218,9 @@ export default function SavingsGoalsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">Current Saved ($)</label>
+              <label htmlFor="goal-current-amount" className="block text-xs font-medium text-zinc-400 mb-1">Current Saved ($)</label>
               <input
+                id="goal-current-amount"
                 type="number"
                 step="0.01"
                 value={currentAmount}
@@ -193,8 +232,9 @@ export default function SavingsGoalsPage() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">Target Date (Optional)</label>
+              <label htmlFor="goal-target-date" className="block text-xs font-medium text-zinc-400 mb-1">Target Date (Optional)</label>
               <input
+                id="goal-target-date"
                 type="date"
                 value={targetDate}
                 onChange={e => setTargetDate(e.target.value)}
@@ -202,8 +242,9 @@ export default function SavingsGoalsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">Linked Account (Optional)</label>
+              <label htmlFor="goal-linked-account" className="block text-xs font-medium text-zinc-400 mb-1">Linked Account (Optional)</label>
               <select
+                id="goal-linked-account"
                 value={linkedAccountId}
                 onChange={e => setLinkedAccountId(e.target.value)}
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-200"
@@ -216,8 +257,9 @@ export default function SavingsGoalsPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Notes / Description (Optional)</label>
+            <label htmlFor="goal-notes" className="block text-xs font-medium text-zinc-400 mb-1">Notes / Description (Optional)</label>
             <input
+              id="goal-notes"
               type="text"
               value={notes}
               onChange={e => setNotes(e.target.value)}
@@ -225,7 +267,7 @@ export default function SavingsGoalsPage() {
               className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-100"
             />
           </div>
-          <button type="submit" className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold">
+          <button type="submit" className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 rounded-lg text-xs font-semibold">
             Create Savings Goal
           </button>
         </form>
@@ -245,7 +287,7 @@ export default function SavingsGoalsPage() {
           </div>
           <button
             onClick={() => setIsAddOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-all"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 rounded-lg text-xs font-semibold shadow-sm transition-all"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Create First Savings Goal</span>

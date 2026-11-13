@@ -49,7 +49,11 @@ data/backups/
 data/logs/
 # playwright run artifacts (CI uploads these; local traces are ephemeral)
 test-results/
-.artifacts/final-audit/e2e-html/
 .vitest/
 
-.next-e2e/
+# audit/verification output (screenshots, JSON probes, cloned app trees).
+# These have historically contained real operator DB snapshots — never commit.
+.artifacts/
+reports/
+
+.next-*/

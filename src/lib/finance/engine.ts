@@ -43,6 +43,8 @@ export interface AccountBalanceResult {
   openingBalance: string;
   currentBalance: string;
   pendingBalance: string;
+  /** Configured credit limit for credit accounts ('0.00' when unset). */
+  creditLimit: string;
   displayColor: string;
   explainer: FinancialMetricExplainer;
 }
@@ -141,6 +143,7 @@ export function calculateAccountBalances(db: Database.Database, tenantId: string
     currency: string;
     opening_balance: string;
     display_color: string;
+    credit_limit: string | null;
   }>;
 
   return accounts.map(acc => {
@@ -243,6 +246,7 @@ export function calculateAccountBalances(db: Database.Database, tenantId: string
       openingBalance: opening.toFixed(2),
       currentBalance: current.toFixed(2),
       pendingBalance: pending.toFixed(2),
+      creditLimit: acc.credit_limit ?? '0.00',
       displayColor: acc.display_color,
       explainer: {
         metricName: `${acc.name} Balance`,
@@ -575,18 +579,27 @@ export function calculateSafeToSpend(
     daysHorizon?: number;
   }
 ): SafeToSpendResult {
-  const settings = db.prepare('SELECT * FROM safe_to_spend_settings WHERE tenant_id = ?').get(tenantId) as {
+  const rawSettings = db.prepare('SELECT * FROM safe_to_spend_settings WHERE tenant_id = ?').get(tenantId) as {
     safety_buffer: string;
     include_credit_lines: number;
     days_horizon: number;
-  } || { safety_buffer: '500.00', include_credit_lines: 0, days_horizon: 30 };
+  } | undefined;
 
-  const buffer = new Decimal(settings.safety_buffer || '500.00');
-  const horizonDays = options?.daysHorizon ?? (settings.days_horizon || 30);
+  // Settings are operator input, not a trusted invariant: a previously persisted
+  // non-numeric buffer ('NaN' from an unvalidated write) must degrade to the
+  // default instead of poisoning every downstream number in the app.
+  const parsedBuffer = new Decimal(rawSettings?.safety_buffer ?? '500.00');
+  const buffer = parsedBuffer.isFinite() && !parsedBuffer.isNegative() ? parsedBuffer : new Decimal('500.00');
+  const rawHorizon = options?.daysHorizon ?? rawSettings?.days_horizon ?? 30;
+  const horizonDays = Number.isFinite(rawHorizon) && rawHorizon > 0 ? Math.trunc(rawHorizon) : 30;
+  const includeCreditLines = Boolean(rawSettings?.include_credit_lines);
 
-  // 1. Calculate liquid funds (cash, checking, and savings accounts)
+  // 1. Calculate liquid funds (cash, checking, and savings accounts).
+  // An overdrawn account is a liability, not a zero: dropping the negative part
+  // would inflate safe-to-spend by exactly the amount the operator owes.
   const balances = calculateAccountBalances(db, tenantId);
   let liquidFunds = new Decimal(0);
+  let overdrawnLiquid = new Decimal(0);
   const liquidAccountIds = new Set<string>();
 
   for (const acc of balances) {
@@ -595,8 +608,27 @@ export function calculateSafeToSpend(
       const b = new Decimal(acc.currentBalance);
       if (b.greaterThan(0)) {
         liquidFunds = liquidFunds.plus(b);
+      } else if (b.isNegative()) {
+        overdrawnLiquid = overdrawnLiquid.plus(b.abs());
       }
     }
+  }
+  liquidFunds = liquidFunds.minus(overdrawnLiquid);
+
+  // Opt-in: count available credit as spendable capacity (a credit line is
+  // borrowing capacity, so it is off by default). Only the headroom between the
+  // credit limit and the current (negative) balance is added.
+  let availableCredit = new Decimal(0);
+  if (includeCreditLines) {
+    for (const acc of balances) {
+      if (acc.accountType !== 'credit_card') continue;
+      const limit = new Decimal(acc.creditLimit);
+      if (!limit.isFinite() || limit.lte(0)) continue;
+      const owed = Decimal.max(0, new Decimal(acc.currentBalance).neg());
+      const headroom = limit.minus(owed);
+      if (headroom.greaterThan(0)) availableCredit = availableCredit.plus(headroom);
+    }
+    liquidFunds = liquidFunds.plus(availableCredit);
   }
 
   // 2. Pending transactions on liquid accounts (reduce available liquid capital)
@@ -770,7 +802,7 @@ export function calculateSafeToSpend(
     earmarkedSavings: earmarkedSavings.toFixed(2),
     safetyBuffer: buffer.toFixed(2),
     daysHorizon: horizonDays,
-    isCreditIncluded: Boolean(settings.include_credit_lines),
+    isCreditIncluded: includeCreditLines,
     breakdown,
     explainer: {
       metricName: 'Safe-To-Spend Projection',
@@ -1073,11 +1105,11 @@ function simulatePayoff(
   debts: Array<{ id: string; name: string; principal_balance: string; interest_rate: string; minimum_payment: string }>,
   extraPayment: Decimal
 ) {
-  let totalBalance = debts.reduce((sum, d) => sum.plus(new Decimal(d.principal_balance)), new Decimal(0));
+  const totalBalance = debts.reduce((sum, d) => sum.plus(new Decimal(d.principal_balance)), new Decimal(0));
   let totalInterest = new Decimal(0);
   let months = 0;
 
-  let balances = debts.map(d => ({
+  const balances = debts.map(d => ({
     ...d,
     currentPrincipal: new Decimal(d.principal_balance),
     rate: new Decimal(d.interest_rate).dividedBy(100).dividedBy(12),
@@ -1319,7 +1351,7 @@ export function advanceRecurringNextDueDate(
       const months = frequency === 'quarterly' ? interval * 3 : interval;
       const anchorDay = dayOfMonth && dayOfMonth >= 1 && dayOfMonth <= 31 ? dayOfMonth : d;
       let targetMonth = m - 1 + months;
-      let targetYear = y + Math.floor(targetMonth / 12);
+      const targetYear = y + Math.floor(targetMonth / 12);
       targetMonth = ((targetMonth % 12) + 12) % 12;
       return clamp(targetYear, targetMonth, anchorDay);
     }
@@ -1331,7 +1363,7 @@ export function advanceRecurringNextDueDate(
       // Unknown cadence: conservative monthly step with clamping.
       const anchorDay = dayOfMonth && dayOfMonth >= 1 && dayOfMonth <= 31 ? dayOfMonth : d;
       let targetMonth = m - 1 + interval;
-      let targetYear = y + Math.floor(targetMonth / 12);
+      const targetYear = y + Math.floor(targetMonth / 12);
       targetMonth = ((targetMonth % 12) + 12) % 12;
       return clamp(targetYear, targetMonth, anchorDay);
     }

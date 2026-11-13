@@ -1,3 +1,5 @@
+import { IDEMPOTENCY_HEADER } from '@/lib/api/idempotency-key';
+
 export type OfflineMutationType =
   | 'create_task'
   | 'quick_capture'
@@ -10,7 +12,7 @@ export interface OfflineMutation {
   id: string;
   idempotencyKey: string;
   type: OfflineMutationType;
-  payload: any;
+  payload: unknown;
   createdAt: string;
   status: 'queued' | 'syncing' | 'synced' | 'conflict' | 'failed';
   retryCount: number;
@@ -38,10 +40,19 @@ export function saveOfflineQueue(queue: OfflineMutation[]): void {
   }
 }
 
-export function enqueueOfflineMutation(type: OfflineMutationType, payload: any): OfflineMutation {
+/**
+ * Parks a mutation for later replay. `idempotencyKey` is passed in by the caller
+ * when a live attempt already used one, so the retry replays under the same key
+ * and the server can recognize it as the same operation.
+ */
+export function enqueueOfflineMutation(
+  type: OfflineMutationType,
+  payload: unknown,
+  idempotencyKey?: string
+): OfflineMutation {
   const mutation: OfflineMutation = {
     id: `mut_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-    idempotencyKey: `idem_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    idempotencyKey: idempotencyKey ?? `idem_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     type,
     payload,
     createdAt: new Date().toISOString(),
@@ -110,7 +121,7 @@ export interface GuardOfflineResult {
  */
 export async function guardOffline(
   type: OfflineMutationType,
-  payload: any,
+  payload: unknown,
   fetchImpl: typeof fetch = fetch
 ): Promise<GuardOfflineResult> {
   if (typeof window === 'undefined') {
@@ -118,8 +129,12 @@ export async function guardOffline(
     return { queuedOffline: false };
   }
 
+  // One key for this operation, shared by the live attempt and any replay, so a
+  // lost response cannot become a duplicate record on reconnect.
+  const idempotencyKey = `idem_${type}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    const mutation = enqueueOfflineMutation(type, payload);
+    const mutation = enqueueOfflineMutation(type, payload, idempotencyKey);
     return { queuedOffline: true, mutation };
   }
 
@@ -129,18 +144,18 @@ export async function guardOffline(
       method,
       headers: {
         'Content-Type': 'application/json',
-        'X-Idempotency-Key': `idem_${type}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+        [IDEMPOTENCY_HEADER]: idempotencyKey,
       },
       body: JSON.stringify(payload),
     });
     if (!response.ok && response.status >= 500) {
       // Server is there but failing: park for replay instead of losing input.
-      const mutation = enqueueOfflineMutation(type, payload);
+      const mutation = enqueueOfflineMutation(type, payload, idempotencyKey);
       return { queuedOffline: true, mutation };
     }
     return { queuedOffline: false, response };
   } catch {
-    const mutation = enqueueOfflineMutation(type, payload);
+    const mutation = enqueueOfflineMutation(type, payload, idempotencyKey);
     return { queuedOffline: true, mutation };
   }
 }
@@ -163,7 +178,7 @@ export async function syncOfflineQueue(): Promise<{ synced: number; failed: numb
         method,
         headers: {
           'Content-Type': 'application/json',
-          'X-Idempotency-Key': item.idempotencyKey,
+          [IDEMPOTENCY_HEADER]: item.idempotencyKey,
         },
         body: JSON.stringify(item.payload),
       });
@@ -174,8 +189,8 @@ export async function syncOfflineQueue(): Promise<{ synced: number; failed: numb
 
       markMutationStatus(item.id, 'synced');
       synced++;
-    } catch (err: any) {
-      markMutationStatus(item.id, 'failed', err.message);
+    } catch (err) {
+      markMutationStatus(item.id, 'failed', err instanceof Error ? err.message : 'Replay failed');
       failed++;
     }
   }

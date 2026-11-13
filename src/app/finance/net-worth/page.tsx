@@ -1,7 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
+import type { ExplainerPayload } from '@/components/layout/WorkspaceContext';
+import { apiFetch, apiSend, errorText } from '@/lib/api/client';
 import { fmtMoney, fmtAbsMoney } from '../_shared/format';
 import {
   BarChart3,
@@ -12,34 +14,74 @@ import {
   CreditCard,
 } from 'lucide-react';
 
+interface NetWorthLineItem {
+  name: string;
+  type: string;
+  balance: string;
+  color: string;
+}
+
+interface NetWorthRow {
+  totalAssets: string;
+  totalLiabilities: string;
+  netWorth: string;
+  currency: string;
+  asOfDate: string;
+  assetsList: NetWorthLineItem[];
+  liabilitiesList: NetWorthLineItem[];
+  explainer: ExplainerPayload;
+}
+
+interface NetWorthSnapshotRow {
+  id: string;
+  snapshot_date: string;
+  total_assets: string;
+  total_liabilities: string;
+  net_worth: string;
+}
+
 export default function NetWorthPage() {
   const { setSelectedExplainer } = useWorkspace();
-  const [netWorth, setNetWorth] = useState<any | null>(null);
-  const [snapshots, setSnapshots] = useState<any[]>([]);
+  const [netWorth, setNetWorth] = useState<NetWorthRow | null>(null);
+  const [snapshots, setSnapshots] = useState<NetWorthSnapshotRow[]>([]);
   const [isTakingSnapshot, setIsTakingSnapshot] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadNetWorth = () => {
+  const loadNetWorth = useCallback(async () => {
     setIsLoading(true);
-    fetch('/api/finance/net-worth')
-      .then(r => r.json())
-      .then(data => {
-        setNetWorth(data.netWorth || null);
-        setSnapshots(data.snapshots || []);
-      })
-      .finally(() => setIsLoading(false));
-  };
+    try {
+      const data = await apiFetch<{ netWorth: NetWorthRow | null; snapshots: NetWorthSnapshotRow[] }>(
+        '/api/finance/net-worth'
+      );
+      setNetWorth(data.netWorth ?? null);
+      setSnapshots(data.snapshots ?? []);
+      setError(null);
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    loadNetWorth();
-  }, []);
+    void (async () => {
+      await loadNetWorth();
+    })();
+  }, [loadNetWorth]);
 
   const handleCaptureSnapshot = async () => {
     setIsTakingSnapshot(true);
-    await fetch('/api/finance/net-worth', { method: 'POST' });
-    setIsTakingSnapshot(false);
-    loadNetWorth();
+    setError(null);
+    try {
+      await apiSend<{ success: boolean; netWorth: NetWorthRow }>('/api/finance/net-worth', 'POST');
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setIsTakingSnapshot(false);
+    }
+    await loadNetWorth();
   };
 
   return (
@@ -77,6 +119,22 @@ export default function NetWorthPage() {
         </div>
       </div>
 
+      {error && (
+        <div
+          role="alert"
+          className="p-3 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-3"
+        >
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="text-[11px] underline opacity-80 hover:opacity-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Main Net Worth Metric Card */}
       {netWorth ? (
         <div className="p-6 bg-gradient-to-r from-zinc-900 via-zinc-900 to-blue-950/40 border border-zinc-800 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-sm">
@@ -107,7 +165,9 @@ export default function NetWorthPage() {
           <h2 className="text-sm font-semibold text-zinc-200">No Net Worth Data Available</h2>
           <p className="text-xs text-zinc-400">Connect accounts or post transactions to generate your financial net worth balance sheet.</p>
         </div>
-      ) : null}
+      ) : (
+        <div className="p-8 text-center text-xs text-zinc-500">Loading net worth valuation…</div>
+      )}
 
       {/* Double Counting Protection Banner */}
       {netWorth && (
@@ -132,7 +192,7 @@ export default function NetWorthPage() {
             </div>
 
             <div className="divide-y divide-zinc-800/60">
-              {netWorth.assetsList?.map((a: any, i: number) => (
+              {netWorth.assetsList?.map((a, i) => (
                 <div key={i} className="py-2.5 flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2">
                     <Landmark className="w-3.5 h-3.5 text-emerald-400" />
@@ -160,7 +220,7 @@ export default function NetWorthPage() {
               {netWorth.liabilitiesList?.length === 0 ? (
                 <div className="p-6 text-center text-xs text-zinc-500">No outstanding liabilities.</div>
               ) : (
-                netWorth.liabilitiesList?.map((l: any, i: number) => (
+                netWorth.liabilitiesList?.map((l, i) => (
                   <div key={i} className="py-2.5 flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
                       <CreditCard className="w-3.5 h-3.5 text-red-400" />
@@ -212,7 +272,7 @@ export default function NetWorthPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/60 font-mono">
-                {snapshots.map((s: any) => (
+                {snapshots.map(s => (
                   <tr key={s.id} className="hover:bg-zinc-800/40">
                     <td className="py-2.5 px-3 text-zinc-300 font-sans">{s.snapshot_date}</td>
                     <td className="py-2.5 px-3 text-right text-emerald-400 tabular-nums">+{fmtAbsMoney(s.total_assets)}</td>

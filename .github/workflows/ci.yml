@@ -14,6 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       E2E_CHROMIUM_PATH: ""
+      # Every step that can boot the app points at a per-run throwaway database.
+      # A shared path would let one step's data (or a previous run's) seed the
+      # next — the build step migrates the DB it opens, so this matters.
+      SCRATCH: /tmp/personal-os-ci/${{ github.run_id }}
     steps:
       - uses: actions/checkout@v4
 
@@ -29,25 +33,41 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Lint
+        run: pnpm lint
+
       - name: Typecheck
-        run: npx tsc --noEmit
+        run: pnpm typecheck
 
       - name: Unit tests
         run: pnpm test
+        env:
+          PERSONAL_OS_DB_PATH: ${{ env.SCRATCH }}/unit/profile.db
 
       - name: Build
         run: pnpm build
         env:
-          # Open mode in CI: no PERSONAL_OS_PIN is set by design.
-          PERSONAL_OS_DB_PATH: /tmp/personal-os-ci/profile.db
+          PERSONAL_OS_DB_PATH: ${{ env.SCRATCH }}/build/profile.db
 
       - name: Install Playwright chromium
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: E2E tests
+      - name: E2E tests (open mode + PIN gate)
         run: pnpm exec playwright test
         env:
           CI: "true"
+          # The `pin` project boots its own server with this PIN, so the gate
+          # specs run instead of skipping.
+          # Credentials for the `authed` project. The digest is PBKDF2 of the
+          # fixture password over the fixture salt — test-only values, never a
+          # deployment credential.
+          E2E_USERNAME: ctum
+          E2E_PASSWORD: "<redacted-password>"
+          E2E_PASSWORD_SALT: e2e-salt-fixed-value
+          E2E_PASSWORD_HASH: 5d9f8e9c1f0e408a3d9308c0f66e96b89b31138fcbfb19ea6c1edf7e065e5712
+          E2E_SESSION_SECRET: e2e-session-secret-fixed-value
+          E2E_DB_PATH: ${{ env.SCRATCH }}/e2e/profile.db
+          E2E_PIN_DB_PATH: ${{ env.SCRATCH }}/e2e/profile-pin.db
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -55,5 +75,5 @@ jobs:
           name: playwright-artifacts
           path: |
             test-results/
-            .artifacts/final-audit/e2e-html/
+            .artifacts/e2e-html/
           retention-days: 7

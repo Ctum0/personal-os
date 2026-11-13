@@ -1,10 +1,37 @@
-import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentSession } from '@/lib/auth';
-import { applyAiActionDraft } from '@/lib/ai/tools';
-import { readJson } from '@/lib/db/validate';
+import { DRAFT_DECISIONS, DraftDecision, applyAiActionDraft } from '@/lib/ai/tools';
+import { withApiLogging } from '@/lib/api/log';
+import { FieldError, ok, readBody, routeError } from '@/lib/api/http';
+import { requiredString } from '@/lib/api/fields';
 
-export async function GET() {
+/** Accepts the canonical decisions plus the short verbs older clients send. */
+const DECISION_ALIASES: Record<string, DraftDecision> = {
+  approved: 'approved',
+  approve: 'approved',
+  rejected: 'rejected',
+  reject: 'rejected',
+};
+
+interface DraftRow {
+  id: string;
+  proposed_payload: string;
+  [column: string]: unknown;
+}
+
+/** Raw draft row plus the parsed payload the drawer renders. */
+type DraftResponse = DraftRow & { proposedPayload: unknown };
+
+function parsePayload(raw: unknown): unknown {
+  if (typeof raw !== 'string') return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+export const GET = withApiLogging(async function GET() {
   try {
     const session = getCurrentSession();
     const db = getDb();
@@ -13,37 +40,35 @@ export async function GET() {
       SELECT * FROM ai_action_drafts
       WHERE tenant_id = ? AND status = 'draft' AND expires_at > datetime('now')
       ORDER BY created_at DESC
-    `).all(session.tenantId) as any[];
+    `).all(session.tenantId) as DraftRow[];
 
-    const formatted = drafts.map(d => ({
-      ...d,
-      proposedPayload: JSON.parse(d.proposed_payload),
+    const pendingDrafts: DraftResponse[] = drafts.map((draft) => ({
+      ...draft,
+      proposedPayload: parsePayload(draft.proposed_payload),
     }));
 
-    return NextResponse.json({ pendingDrafts: formatted });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ok({ pendingDrafts });
+  } catch (err) {
+    return routeError(err);
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withApiLogging(async function POST(request: Request) {
   try {
     const session = getCurrentSession();
     const db = getDb();
-    const parsedBody = await readJson(request);
-    if ("error" in parsedBody) {
-      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
-    }
-    const body = parsedBody.data;
+    const body = await readBody(request);
 
-    const { draftId, decision } = body;
-    if (!draftId || !decision) {
-      return NextResponse.json({ error: 'draftId and decision (approved|rejected) are required' }, { status: 400 });
+    const draftId = requiredString(body.draftId, 'draftId', 200);
+    const rawDecision = requiredString(body.decision, 'decision', 20).toLowerCase();
+    const decision = DECISION_ALIASES[rawDecision];
+    if (!decision) {
+      throw new FieldError(`decision must be one of: ${DRAFT_DECISIONS.join(', ')}`);
     }
 
     const result = applyAiActionDraft(db, session.tenantId, session.userId, draftId, decision);
-    return NextResponse.json(result);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ok(result);
+  } catch (err) {
+    return routeError(err);
   }
-}
+});

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useWorkspace } from '@/components/layout/WorkspaceContext';
 import { todayISO, addDaysISO } from "@/lib/time";
@@ -15,112 +15,149 @@ import {
   Calendar,
   Sparkles,
   AlertTriangle,
-  RotateCcw,
   CalendarClock,
-  CalendarCheck,
   Check,
   ChevronRight,
-  Play,
-  ListFilter,
   CheckSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { apiFetch, apiSend, errorText } from '@/lib/api/client';
+
+interface TaskRow {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  due_date: string | null;
+  due_time?: string | null;
+  project_id: string | null;
+  project_name?: string | null;
+  estimated_duration?: number;
+  /** Present only on the planner's missed-task payload. */
+  daysOverdue?: number;
+  originalDueDate?: string;
+}
+
+interface HabitRow {
+  id: string;
+  title: string;
+  current_streak?: number;
+  streak?: number;
+  isCompletedToday?: boolean;
+}
+
+interface TodayContext {
+  date: string;
+  clock: string;
+  label: string;
+}
+
+interface CalendarEventRow {
+  id: string;
+  title: string;
+  start_time: string;
+  end_time: string;
+}
+
+interface PlanningPayload {
+  tasks: TaskRow[];
+}
+
+interface PlanningResponse {
+  context?: { operatingRules?: { workStart: string; workEnd: string; maxDailyWorkloadHours: number } };
+  missedTasks?: TaskRow[];
+  proposal?: unknown;
+  approvedPlan?: unknown;
+}
 
 export default function ProductivityExecutionDashboard() {
-  const { activeSpaceId, setIsQuickAddOpen, setIsAiDrawerOpen } = useWorkspace();
-  const [tasks, setTasks] = useState<any[]>([]);
-  const [habits, setHabits] = useState<any[]>([]);
-  const [events, setEvents] = useState<any[]>([]);
-  const [missedTasks, setMissedTasks] = useState<any[]>([]);
-  const [planProposal, setPlanProposal] = useState<any | null>(null);
+  const { activeSpaceId, setIsQuickAddOpen } = useWorkspace();
+  const [tasks, setTasks] = useState<TaskRow[]>([]);
+  const [habits, setHabits] = useState<HabitRow[]>([]);
+  const [events, setEvents] = useState<CalendarEventRow[]>([]);
+  const [missedTasks, setMissedTasks] = useState<TaskRow[]>([]);
   const [inlineTaskTitle, setInlineTaskTitle] = useState('');
   const [inlinePriority, setInlinePriority] = useState('normal');
   const [isSubmittingTask, setIsSubmittingTask] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [formattedDate, setFormattedDate] = useState<string>('Today');
   const [rescheduleMessage, setRescheduleMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [operatingRules, setOperatingRules] = useState({ workStart: '09:00', workEnd: '18:00', maxDailyWorkloadHours: 6.5 });
 
   const [today, setToday] = useState<string>('');
   const [nowHM, setNowHM] = useState<string>('');
 
-  const loadData = (currentDate?: string) => {
-    setIsLoading(true);
+  const loadData = useCallback((currentDate?: string) => {
     const activeDate = currentDate || today || todayISO();
     const spaceQuery = activeSpaceId !== 'all' ? `?spaceId=${activeSpaceId}` : '';
 
+    setError(null);
     Promise.all([
-      fetch(`/api/tasks${spaceQuery}`).then(r => r.json()),
-      fetch(`/api/habits${spaceQuery}`).then(r => r.json()),
-      fetch(`/api/calendar?startDate=${activeDate}&endDate=${activeDate}`).then(r => r.json()),
-      fetch(`/api/planning?date=${activeDate}`).then(r => r.json()),
+      apiFetch<PlanningPayload>(`/api/tasks${spaceQuery}`),
+      apiFetch<{ habits: HabitRow[] }>(`/api/habits${spaceQuery}`),
+      apiFetch<{ events: CalendarEventRow[] }>(`/api/calendar?startDate=${activeDate}&endDate=${activeDate}`),
+      apiFetch<PlanningResponse>(`/api/planning?date=${activeDate}`),
     ])
       .then(([tasksData, habitsData, eventsData, planningData]) => {
-        setTasks(tasksData.tasks || []);
-        setHabits(habitsData.habits || []);
-        setEvents(eventsData.events || []);
-        if (planningData) {
-          if (planningData.context?.operatingRules) {
-            setOperatingRules(planningData.context.operatingRules);
-          }
-          setMissedTasks(planningData.missedTasks || []);
-          if (planningData.approvedPlan) {
-            setPlanProposal(planningData.approvedPlan);
-          } else if (planningData.proposal) {
-            setPlanProposal(planningData.proposal);
-          }
+        setTasks(tasksData.tasks ?? []);
+        setHabits(habitsData.habits ?? []);
+        setEvents(eventsData.events ?? []);
+        if (planningData.context?.operatingRules) {
+          setOperatingRules(planningData.context.operatingRules);
         }
+        setMissedTasks(planningData.missedTasks ?? []);
       })
-      .finally(() => setIsLoading(false));
-  };
+      .catch(err => setError(errorText(err)));
+  }, [activeSpaceId, today]);
 
+  // One snapshot of "now" per mount, taken after hydration. Reading the clock
+  // during render would be an unstable value and break prerendering.
   useEffect(() => {
-    const activeToday = todayISO();
-    setToday(activeToday);
-    const now = new Date();
-    setNowHM(now.toTimeString().slice(0, 5));
-    setFormattedDate(
-      now.toLocaleDateString(undefined, {
-        weekday: 'long',
-        month: 'short',
-        day: 'numeric',
-      })
-    );
-    loadData(activeToday);
-  }, [activeSpaceId]);
+    const snapshot: TodayContext = {
+      date: todayISO(),
+      clock: new Date().toTimeString().slice(0, 5),
+      label: new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' }),
+    };
+    const frame = requestAnimationFrame(() => {
+      setToday(snapshot.date);
+      setNowHM(snapshot.clock);
+      setFormattedDate(snapshot.label);
+    });
+    void (async () => {
+      await loadData(snapshot.date);
+    })();
+    return () => cancelAnimationFrame(frame);
+  }, [activeSpaceId, loadData]);
 
   const toggleTask = async (taskId: string, currentStatus: string) => {
     const newStatus = currentStatus === 'completed' ? 'in_progress' : 'completed';
-    await fetch('/api/tasks', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: taskId, status: newStatus }),
-    });
-    setTasks(prev =>
-      prev.map(t => (t.id === taskId ? { ...t, status: newStatus } : t))
-    );
+    const previous = tasks;
+    setTasks(current => current.map(task => (task.id === taskId ? { ...task, status: newStatus } : task)));
+    try {
+      await apiSend('/api/tasks', 'PUT', { id: taskId, status: newStatus });
+    } catch (err) {
+      setTasks(previous);
+      setError(errorText(err));
+    }
   };
 
   const handleQuickAddPriority = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inlineTaskTitle.trim() || isSubmittingTask) return;
     setIsSubmittingTask(true);
+    setError(null);
     try {
-      const res = await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: inlineTaskTitle.trim(),
-          status: 'next',
-          priority: inlinePriority,
-          dueDate: today,
-          spaceId: activeSpaceId !== 'all' ? activeSpaceId : 'space_personal',
-        }),
+      await apiSend('/api/tasks', 'POST', {
+        title: inlineTaskTitle.trim(),
+        status: 'next',
+        priority: inlinePriority,
+        dueDate: today || undefined,
+        spaceId: activeSpaceId !== 'all' ? activeSpaceId : 'space_personal',
       });
-      if (res.ok) {
-        setInlineTaskTitle('');
-        loadData();
-      }
+      setInlineTaskTitle('');
+      loadData();
+    } catch (err) {
+      setError(errorText(err));
     } finally {
       setIsSubmittingTask(false);
     }
@@ -128,37 +165,34 @@ export default function ProductivityExecutionDashboard() {
 
   const handleReschedule = async (taskId: string, actionType: 'rescheduled' | 'moved_to_backlog' | 'cancelled', newDate?: string) => {
     const targetDate = newDate || today;
+    setError(null);
     try {
-      const res = await fetch('/api/planning/reschedule', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          taskId,
-          newDate: targetDate,
-          actionType,
-          reason: actionType === 'rescheduled' ? 'Rescheduled to today from missed backlog' : 'Postponed during daily execution review',
-        }),
+      await apiSend('/api/planning/reschedule', 'POST', {
+        taskId,
+        newDate: targetDate,
+        actionType,
+        reason: actionType === 'rescheduled' ? 'Rescheduled to today from missed backlog' : 'Postponed during daily execution review',
       });
-      const data = await res.json();
-      if (data.success) {
-        setRescheduleMessage(`Task updated (${actionType.replace(/_/g, ' ')})`);
-        setTimeout(() => setRescheduleMessage(null), 3500);
-        loadData();
-      }
-    } catch {}
+      setRescheduleMessage(`Task updated (${actionType.replace(/_/g, ' ')})`);
+      window.setTimeout(() => setRescheduleMessage(null), 3500);
+      loadData();
+    } catch (err) {
+      setError(errorText(err));
+    }
   };
 
   const logHabit = async (habitId: string, currentStatus: boolean) => {
-    if (currentStatus) {
-      await fetch(`/api/habits/log?habitId=${habitId}&date=${today}`, { method: 'DELETE' });
-    } else {
-      await fetch('/api/habits/log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ habitId, date: today, status: 'completed', value: 1 }),
-      });
+    setError(null);
+    try {
+      if (currentStatus) {
+        await apiSend(`/api/habits/log?habitId=${encodeURIComponent(habitId)}&date=${today}`, 'DELETE');
+      } else {
+        await apiSend('/api/habits/log', 'POST', { habitId, date: today, status: 'completed', value: 1 });
+      }
+      loadHabitLocal(habitId, !currentStatus);
+    } catch (err) {
+      setError(errorText(err));
     }
-    loadHabitLocal(habitId, !currentStatus);
   };
 
   const loadHabitLocal = (habitId: string, isCompleted: boolean) => {
@@ -171,9 +205,6 @@ export default function ProductivityExecutionDashboard() {
   const completedTodayTasks = tasks.filter(t => t.status === 'completed');
   const criticalTasks = activeTasks.filter(t => t.priority === 'urgent' || t.priority === 'critical');
   const highTasks = activeTasks.filter(t => t.priority === 'high');
-  const normalTasks = activeTasks.filter(t => t.priority === 'normal');
-  const optionalTasks = activeTasks.filter(t => t.priority === 'low' || t.priority === 'optional');
-
   const oneBigThing = criticalTasks[0] || highTasks[0] || activeTasks[0];
   const upcomingDeadlinesCount = tasks.filter(t => t.due_date && t.due_date >= today && t.status !== 'completed').length;
 
@@ -237,6 +268,13 @@ export default function ProductivityExecutionDashboard() {
           </Button>
         </div>
       </div>
+
+      {error && (
+        <div role="alert" className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-xs text-rose-200 flex items-center gap-2">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+          <span>{error}</span>
+        </div>
+      )}
 
       {rescheduleMessage && (
         <div className="p-3 bg-zinc-950/80 border border-emerald-500/30 rounded-lg text-xs text-emerald-400 flex items-center gap-2">
@@ -337,7 +375,7 @@ export default function ProductivityExecutionDashboard() {
                   </h3>
                   <div className="flex items-center gap-3 mt-1.5 text-[11px] text-zinc-500 font-mono">
                     {oneBigThing.due_date && <span>Due Today</span>}
-                    {oneBigThing.estimated_duration > 0 && (
+                    {(oneBigThing.estimated_duration ?? 0) > 0 && (
                       <span>{oneBigThing.estimated_duration}m duration</span>
                     )}
                     <span className="uppercase text-[9px] px-1.5 py-0.2 rounded bg-zinc-900 border border-white/[0.06] text-zinc-400">
@@ -388,7 +426,7 @@ export default function ProductivityExecutionDashboard() {
                 {(() => {
                   let identifiedNext = false;
 
-                  return events.map((ev, idx) => {
+                  return events.map(ev => {
                     const startStr = ev.start_time.includes('T') ? ev.start_time.split('T')[1].slice(0, 5) : ev.start_time.slice(0, 5);
                     const endStr = ev.end_time.includes('T') ? ev.end_time.split('T')[1].slice(0, 5) : ev.end_time.slice(0, 5);
                     const isCurrent = nowHM >= startStr && nowHM <= endStr;
@@ -466,7 +504,11 @@ export default function ProductivityExecutionDashboard() {
 
             {/* Inline Quick Add Priority Task */}
             <form onSubmit={handleQuickAddPriority} className="flex items-center gap-2 pb-2">
+              <label htmlFor="priority-task-title" className="sr-only">
+                Add a priority task for today
+              </label>
               <input
+                id="priority-task-title"
                 type="text"
                 value={inlineTaskTitle}
                 onChange={e => setInlineTaskTitle(e.target.value)}
@@ -517,7 +559,7 @@ export default function ProductivityExecutionDashboard() {
                       }`}>
                         {task.priority}
                       </span>
-                      {task.estimated_duration > 0 && (
+                      {(task.estimated_duration ?? 0) > 0 && (
                         <span className="text-zinc-500">{task.estimated_duration}m</span>
                       )}
                     </div>
@@ -552,18 +594,14 @@ export default function ProductivityExecutionDashboard() {
               {habits.slice(0, 4).map(habit => (
                 <div
                   key={habit.id}
-                  onClick={() => logHabit(habit.id, habit.isCompletedToday)}
+                  onClick={() => logHabit(habit.id, Boolean(habit.isCompletedToday))}
                   role="button"
                   tabIndex={0}
-                  aria-label={
-                    habit.isCompletedToday
-                      ? `${habit.title} — habit completed today`
-                      : `${habit.title} — mark habit as done today`
-                  }
+                  aria-pressed={Boolean(habit.isCompletedToday)}
                   onKeyDown={e => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      logHabit(habit.id, habit.isCompletedToday);
+                      logHabit(habit.id, Boolean(habit.isCompletedToday));
                     }
                   }}
                   className="p-2.5 bg-zinc-900/60 border border-white/[0.04] rounded-md flex items-center justify-between text-xs cursor-pointer hover:border-white/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-zinc-300 transition-colors"
@@ -574,7 +612,7 @@ export default function ProductivityExecutionDashboard() {
                     ) : (
                       <Circle className="w-4 h-4 text-zinc-600 shrink-0" />
                     )}
-                    <span className={`truncate font-medium ${habit.isCompletedToday ? 'line-through text-zinc-500' : 'text-zinc-200'}`}>
+                    <span className={`truncate font-medium ${habit.isCompletedToday ? 'line-through text-zinc-400' : 'text-zinc-200'}`}>
                       {habit.title}
                     </span>
                   </div>

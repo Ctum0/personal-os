@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { getInMemoryDb } from '../lib/db';
 import {
-  calculateAccountBalances,
   calculateSafeToSpend,
   calculateNetWorth,
 } from '../lib/finance/engine';
@@ -9,7 +8,6 @@ import {
   calculateDurationMinutes,
   buildIntelligentDailySchedule,
   commitApprovedDailyPlan,
-  getPlanningContext,
 } from '../lib/productivity/planner';
 import type Database from 'better-sqlite3';
 

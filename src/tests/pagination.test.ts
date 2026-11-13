@@ -13,6 +13,21 @@ const TMP_DIR = '/tmp/opencode/personal-os-pagination-test';
 const DB_FILE = path.join(TMP_DIR, 'personal_os.test.db');
 const BASE = 'http://localhost/api/tasks';
 
+/** Baseline row counts measured after bootstrap seeding. */
+interface PaginationBaseline {
+  tasksTotal: number;
+  tasksUrgent: number;
+  txTotal: number;
+}
+
+/** A task row as returned by GET /api/tasks (only the columns these tests read). */
+interface TaskPageRow {
+  id: string;
+  priority: string;
+}
+
+let baseline: PaginationBaseline;
+
 beforeAll(async () => {
   fs.rmSync(TMP_DIR, { recursive: true, force: true });
   process.env.PERSONAL_OS_DB_PATH = DB_FILE;
@@ -43,10 +58,10 @@ beforeAll(async () => {
     seedTx.run(`seed_tx_${i}`, '10.00', '10.00', '2026-11-10', `Tx ${i}`);
   }
 
-  (globalThis as any).__PAG_TEST__ = {
-    tasksTotal: (db.prepare(`SELECT COUNT(*) c FROM tasks WHERE tenant_id='tenant_default'`).get() as any).c,
-    tasksUrgent: (db.prepare(`SELECT COUNT(*) c FROM tasks WHERE tenant_id='tenant_default' AND priority='urgent'`).get() as any).c,
-    txTotal: (db.prepare(`SELECT COUNT(*) c FROM journal_transactions WHERE tenant_id='tenant_default' AND account_id='acc_test_checking'`).get() as any).c,
+  baseline = {
+    tasksTotal: (db.prepare(`SELECT COUNT(*) c FROM tasks WHERE tenant_id='tenant_default'`).get() as { c: number }).c,
+    tasksUrgent: (db.prepare(`SELECT COUNT(*) c FROM tasks WHERE tenant_id='tenant_default' AND priority='urgent'`).get() as { c: number }).c,
+    txTotal: (db.prepare(`SELECT COUNT(*) c FROM journal_transactions WHERE tenant_id='tenant_default' AND account_id='acc_test_checking'`).get() as { c: number }).c,
   };
 });
 
@@ -56,15 +71,13 @@ afterAll(() => {
 });
 
 describe('GET /api/tasks pagination contract', () => {
-  const T = () => (globalThis as any).__PAG_TEST__;
-
   it('default limit is 1000: full small dataset returned with total/hasMore metadata', async () => {
     const { GET } = await import('../app/api/tasks/route');
     const res = await GET(new Request(BASE));
     const data = await res.json();
     expect(res.status).toBe(200);
-    expect(data.tasks.length).toBe(T().tasksTotal);
-    expect(data.total).toBe(T().tasksTotal);
+    expect(data.tasks.length).toBe(baseline.tasksTotal);
+    expect(data.total).toBe(baseline.tasksTotal);
     expect(data.hasMore).toBe(false);
     expect(data.limit).toBe(1000);
     expect(data.offset).toBe(0);
@@ -72,7 +85,7 @@ describe('GET /api/tasks pagination contract', () => {
 
   it('limit/offset windows slice correctly across pages with no overlap or loss', async () => {
     const { GET } = await import('../app/api/tasks/route');
-    const total = T().tasksTotal;
+    const total = baseline.tasksTotal;
     const page1 = await (await GET(new Request(`${BASE}?limit=5&offset=0`))).json();
     const page2 = await (await GET(new Request(`${BASE}?limit=5&offset=5`))).json();
     const page3 = await (await GET(new Request(`${BASE}?limit=5&offset=10`))).json();
@@ -81,7 +94,7 @@ describe('GET /api/tasks pagination contract', () => {
     expect(page3.tasks.length).toBe(Math.max(0, Math.min(5, total - 10))); // LIMIT caps the window
     expect(page1.hasMore).toBe(total > 5);
     expect(page3.hasMore).toBe(total > 15); // newer pages exist when rows remain
-    const ids = new Set([...page1.tasks, ...page2.tasks, ...page3.tasks].map((t: any) => t.id));
+    const ids = new Set([...page1.tasks, ...page2.tasks, ...page3.tasks].map((t: TaskPageRow) => t.id));
     // union of three 5-row windows: disjoint, covers the first 15 ordered rows
     expect(ids.size).toBe([
       page1.tasks.length,
@@ -108,31 +121,30 @@ describe('GET /api/tasks pagination contract', () => {
   it('filters compose with pagination (urgent priority, limit 2)', async () => {
     const { GET } = await import('../app/api/tasks/route');
     const r = await (await GET(new Request(`${BASE}?priority=urgent&limit=2`))).json();
-    expect(r.total).toBe(T().tasksUrgent);
-    expect(r.tasks.length).toBe(Math.min(2, T().tasksUrgent));
-    expect(r.hasMore).toBe(T().tasksUrgent > 2);
-    expect(r.tasks.every((t: any) => t.priority === 'urgent')).toBe(true);
+    expect(r.total).toBe(baseline.tasksUrgent);
+    expect(r.tasks.length).toBe(Math.min(2, baseline.tasksUrgent));
+    expect(r.hasMore).toBe(baseline.tasksUrgent > 2);
+    expect(r.tasks.every((t: TaskPageRow) => t.priority === 'urgent')).toBe(true);
   });
 });
 
 describe('GET /api/finance/transactions pagination contract', () => {
-  const T = () => (globalThis as any).__PAG_TEST__;
 
   it('paged request returns the exact window plus truthful total/hasMore', async () => {
     const { GET } = await import('../app/api/finance/transactions/route');
     const res = await GET(new Request('http://localhost/api/finance/transactions?limit=3&offset=0&accountId=acc_test_checking'));
     const data = await res.json();
     expect(res.status).toBe(200);
-    expect(data.total).toBe(T().txTotal);
+    expect(data.total).toBe(baseline.txTotal);
     expect(data.transactions.length).toBe(3);
-    expect(data.hasMore).toBe(T().txTotal > 3);
+    expect(data.hasMore).toBe(baseline.txTotal > 3);
   });
 
   it('no paging params keeps the historical default-cap behavior plus total', async () => {
     const { GET } = await import('../app/api/finance/transactions/route');
     const plain = await (await GET(new Request('http://localhost/api/finance/transactions?accountId=acc_test_checking'))).json();
-    expect(plain.transactions.length).toBe(T().txTotal);
-    expect(plain.total).toBe(T().txTotal);
+    expect(plain.transactions.length).toBe(baseline.txTotal);
+    expect(plain.total).toBe(baseline.txTotal);
     expect(plain.limit).toBe(100);
   });
 });

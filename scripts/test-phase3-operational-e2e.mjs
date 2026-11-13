@@ -54,8 +54,6 @@ async function main() {
   // Journey 1: Seed 90 Days of Realistic Productivity & Execution History
   // --------------------------------------------------------------------------
   await runJourney('Journey 1: Seed 90 Days Realistic Productivity History', async () => {
-    const startDate = addDaysISO(today, -90);
-
     db.transaction(() => {
       // Clean up previous test seed if present
       db.prepare("DELETE FROM tasks WHERE id LIKE 'task_hist_%' OR id LIKE 'task_p3_%' OR id LIKE 'task_backup_dr_%'").run();

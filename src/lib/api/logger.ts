@@ -4,16 +4,12 @@ import path from "path";
 /**
  * Structured JSON-lines request logger for local observability.
  *
- * Correlation: the Next proxy (`src/proxy.ts`) assigns x-request-id on every
- * /api/* response. This logger subscribes nothing on its own — routes call
- * `logApiRequest()` from a small helper or the proxy emits the pair through
- * `AsyncLocalStorage`-free plumbing: to stay edge-runtime compatible, the
- * proxy cannot write Node files, so it forwards trace context in response
- * headers and the logger is invoked from Node-side API routes via
- * `withApiLogging(handler)` in src/lib/api/log.ts wrapping.
+ * Correlation: `src/proxy.ts` assigns an x-request-id to the request and the
+ * response of every /api/* call; `withApiLogging()` records that same id, so a
+ * client-visible header can be looked up directly in the log file.
  *
- * Appends one JSON object per line under <dbdir>/logs/requests-YYYYMMDD.log
- * (dbdir honors PERSONAL_OS_DB_PATH, so sandboxes log sandbox-side).
+ * One JSON object per line under <dbdir>/logs/requests-YYYYMMDD.log, where
+ * dbdir honors PERSONAL_OS_DB_PATH (sandboxes log sandbox-side).
  */
 
 export interface ApiLogEntry {
@@ -27,20 +23,25 @@ export interface ApiLogEntry {
   tenantId?: string;
 }
 
-let logsDirCached: string | null = null;
+// Cache is keyed by the resolved directory so a PERSONAL_OS_DB_PATH switch
+// (tests, restore tooling, sandboxed profiles) is honored instead of silently
+// pinning the first process-wide answer.
+const logsDirCache = new Map<string, string>();
 
 function logsDir(): string {
-  if (logsDirCached) return logsDirCached;
   const dbDir = path.dirname(
     process.env.PERSONAL_OS_DB_PATH || path.join(process.cwd(), "data", "personal_os.db")
   );
-  logsDirCached = path.join(dbDir, "logs");
+  const cached = logsDirCache.get(dbDir);
+  if (cached) return cached;
+  const dir = path.join(dbDir, "logs");
   try {
-    fs.mkdirSync(logsDirCached, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true });
   } catch {
     /* logging must never crash a request */
   }
-  return logsDirCached;
+  logsDirCache.set(dbDir, dir);
+  return dir;
 }
 
 export function appendApiLog(entry: ApiLogEntry): void {

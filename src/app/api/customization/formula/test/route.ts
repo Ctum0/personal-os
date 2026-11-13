@@ -1,33 +1,37 @@
-import { NextResponse } from 'next/server';
 import { evaluateFormula, validateFormula } from '@/lib/customization/formula';
-import { readJson } from '@/lib/db/validate';
+import { withApiLogging } from '@/lib/api/log';
+import { FieldError, ok, readBody, routeError } from '@/lib/api/http';
+import { requiredString } from '@/lib/api/fields';
 
-export async function POST(request: Request) {
+const MAX_FORMULA_LENGTH = 2000;
+
+export const POST = withApiLogging(async function POST(request: Request) {
   try {
-    const parsedBody = await readJson(request);
-    if ("error" in parsedBody) {
-      return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
-    }
-    const body = parsedBody.data;
-    const { formula, variables } = body;
+    const body = await readBody(request);
 
-    if (!formula || typeof formula !== 'string') {
-      return NextResponse.json({ error: 'formula string is required' }, { status: 400 });
+    // Length is enforced before tokenizing so an oversized expression never
+    // reaches the parser.
+    const formula = requiredString(body.formula, 'formula', MAX_FORMULA_LENGTH);
+    if (typeof body.variables !== 'undefined' && body.variables !== null) {
+      if (typeof body.variables !== 'object' || Array.isArray(body.variables)) {
+        throw new FieldError('variables must be an object');
+      }
     }
+    const variables = (body.variables ?? {}) as Parameters<typeof evaluateFormula>[1]['variables'];
 
     const validation = validateFormula(formula);
     if (!validation.isValid) {
-      return NextResponse.json({ isValid: false, error: validation.error });
+      return ok({ isValid: false, error: validation.error });
     }
 
-    const evaluation = evaluateFormula(formula, { variables: variables || {} });
-    return NextResponse.json({
+    const evaluation = evaluateFormula(formula, { variables });
+    return ok({
       isValid: true,
       success: evaluation.success,
       value: evaluation.value,
       error: evaluation.error,
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err);
   }
-}
+});
