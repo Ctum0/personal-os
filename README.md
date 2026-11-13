@@ -102,8 +102,8 @@ A plain `pnpm build` therefore cannot migrate, snapshot, or ship your database.
 
 ```bash
 pnpm verify           # lint + typecheck + unit + build (the CI gate)
-pnpm test             # vitest: 27 files / 235 tests
-pnpm test:e2e         # Playwright: 103 specs on ports 3457 (open) + 3458 (PIN)
+pnpm test             # vitest: 27 files / 251 tests
+pnpm test:e2e         # Playwright: 103 specs on ports 3457 (open) + 3458 (authed)
 ```
 
 The E2E suite runs with `workers: 1`: every spec mutates the same isolated
@@ -119,8 +119,8 @@ single-operator profile, so parallel workers would race each other. It covers:
 - the write surfaces (settings save/reject, task archive persistence, AI
   governance toggle persistence);
 - the backup export→restore round trip;
-- and — given `E2E_PIN` plus a PIN-protected server — the full gate/unlock
-  contract.
+- the sign-in gate: pages redirect to `/login` before rendering, the API returns
+  401, wrong credentials are rejected, and a deep link survives the round trip.
 
 The suites are isolated by construction: every test database is either
 in-memory or a temp file via `PERSONAL_OS_DB_PATH`, and the E2E server always
@@ -204,9 +204,9 @@ src/
     jobs/         # scheduled jobs (net worth daily snapshot)
     time/         # calendar-day helpers in the configured timezone
     ui/           # contrast helpers for operator-supplied colors
-  proxy.ts        # Next 16 API gate (replaces deprecated middleware.ts)
+  proxy.ts        # Next 16 gate for pages and /api/* (replaces middleware.ts)
   tests/          # vitest suites incl. direct route-handler contracts
-e2e/              # Playwright workflows (incl. PIN gate + a11y)
+e2e/              # Playwright workflows (incl. sign-in gate + a11y)
 docs/adr/         # architecture decision records
 ```
 
