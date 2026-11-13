@@ -20,16 +20,17 @@ What is broken is narrower and more interesting. The palette advertised ten comm
 | Routes fully audited (UI + interaction) | **4** |
 | Routes partially audited (loaded, visual, console) | **26** |
 | Interactive controls measured | **367 buttons, 37 inputs, 4 tables** |
-| Interaction tests written and run | **25** |
+| Interaction tests written and run | **18** (11 behavioural + 7 accessibility) |
 | Viewport measurements | **64** (8 viewports × 8 routes) |
 | Findings recorded | **14** |
-| Confirmed defects | **5** (`BUG-001..003`, `A11Y-008`, `A11Y-009`) |
-| Usability / UI concerns | **6** (`UX-001..003`, `UI-001..004`) |
-| Accessibility findings | **2** + 3 violations inside `A11Y-008` |
+| Confirmed defects | **3** (`BUG-001..003`) |
+| Usability / UI concerns | **7** (`UX-001..003`, `UI-001..004`) |
+| Accessibility findings | **2** (`A11Y-008`, containing 3 violations; `A11Y-009`) |
 | Performance findings | **2**, neither a measured defect |
-| Fixed during the audit | **3** (`BUG-001`, `BUG-002`, `A11Y-008`) |
+| *Category totals* | *3 + 7 + 2 + 2 = **14*** |
+| Resolved during the audit | **4** (`BUG-001`, `BUG-002`, `A11Y-008`, `A11Y-009`) |
 | Fixed with a proven regression gate | **3** — each gate was verified by reverting its fix and watching it fail |
-| Still open | **8** |
+| Still open | **10** |
 
 ---
 
@@ -41,7 +42,7 @@ What is broken is narrower and more interesting. The palette advertised ten comm
 
 **BUG-001 — typing in the palette destroyed the command list (P2, fixed).** Re-graded down from P1 during review: nothing was unreachable, since arrowing with an empty query still lists all ten commands and every destination is also in the sidebar. The defect is that type-to-filter didn't cover commands, which is friction. Fixed by merging commands and records into one filtered row list.
 
-## What is still open
+## What is still open (10)
 
 | ID | Severity | Finding |
 | --- | --- | --- |
@@ -53,8 +54,8 @@ What is broken is narrower and more interesting. The palette advertised ten comm
 | `UI-002` | P3 | Sub-11px text carries real information (weekday labels, table meta) |
 | `UI-003` | P3 | Destructive archive control is icon-only and adjacent to a benign toggle |
 | `UI-004` | P3 | Large empty band above the fold on `/productivity/plan` and `/focus` |
-| `A11Y-009` | P2 | ~~The sweep never opens dialogs~~ — **RESOLVED**, three gates added |
 | `PERF-001` | P3 | Palette issues one request per keystroke (150ms debounce, no abort) — latent, not measured as a problem |
+| `PERF-002` | P3 | *Informational*: route-level code splitting is healthy; no action recommended |
 
 ## Root causes, not symptoms
 

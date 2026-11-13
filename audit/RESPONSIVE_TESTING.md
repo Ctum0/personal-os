@@ -21,7 +21,7 @@ No page produces a horizontal document scrollbar. That is genuinely good — the
 
 | ID | Route | Viewport | Behaviour | Reachable? | Severity |
 | --- | --- | --- | --- | --- | --- |
-| RESP-001 | `/productivity/calendar` | 390×844 | Last weekday column extends to x=438 in a 390px viewport; ancestors are `overflow: visible` up to `main`, which is `overflow-x: hidden` | **No** — permanently clipped | **P1** |
+| ~~RESP-001~~ → **BUG-002** | `/productivity/calendar` | 390×844 | Last weekday column reached x=438 in a 390px viewport with no ancestor scroller | **Was No — RESOLVED**: the grid now scrolls with a 96px column floor, and the fix is guarded by a mutation-tested spec | **P1** |
 | RESP-002 | `/finance/budgets` | 390×844 | Table overflows its wrapper by 312px | **Yes** — inside `overflow-x-auto` | P3 (no scroll affordance) |
 | RESP-003 | `/finance/net-worth` | 390×844 | Table overflows its wrapper by 149px | **Yes** — inside `overflow-x-auto` | P3 |
 | RESP-004 | `/finance/transactions` | 390×844 | 8-column table is 745px wide in a 356px wrapper; 4 of 8 columns sit off-screen | **Yes** — scrollable, but no visual cue that more exists | P2 |
