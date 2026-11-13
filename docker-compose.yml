@@ -1,0 +1,45 @@
+# One-command install.
+#
+#   cp .env.example .env      # then fill in the four credential values
+#   docker compose up -d
+#
+# The app is a single Node process with SQLite on a named volume. Nothing else is
+# required: no database server, no external cache, no reverse proxy. Put your own
+# reverse proxy in front for TLS (see docs/DEPLOYMENT.md).
+services:
+  personal-os:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: personal-os:local
+    container_name: personal-os
+    restart: unless-stopped
+    ports:
+      # Bind to loopback by default: expose it through your reverse proxy, not
+      # directly to the internet.
+      - "127.0.0.1:3000:3000"
+    environment:
+      PERSONAL_OS_DB_PATH: /app/data/personal_os.db
+      PERSONAL_OS_TZ: ${PERSONAL_OS_TZ:-Asia/Colombo}
+      # Required. With none of these set the app runs in open mode.
+      PERSONAL_OS_USERNAME: ${PERSONAL_OS_USERNAME:?set PERSONAL_OS_USERNAME in .env}
+      PERSONAL_OS_PASSWORD_SALT: ${PERSONAL_OS_PASSWORD_SALT:?set PERSONAL_OS_PASSWORD_SALT in .env}
+      PERSONAL_OS_PASSWORD_HASH: ${PERSONAL_OS_PASSWORD_HASH:?set PERSONAL_OS_PASSWORD_HASH in .env}
+      PERSONAL_OS_PASSWORD_ITERATIONS: ${PERSONAL_OS_PASSWORD_ITERATIONS:-210000}
+      PERSONAL_OS_SESSION_SECRET: ${PERSONAL_OS_SESSION_SECRET:?set PERSONAL_OS_SESSION_SECRET in .env}
+      NODE_OPTIONS: --max-old-space-size=256
+      NEXT_TELEMETRY_DISABLED: "1"
+    volumes:
+      - personal-os-data:/app/data
+    # Small footprint: this workload is one operator.
+    mem_limit: 384m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  personal-os-data:

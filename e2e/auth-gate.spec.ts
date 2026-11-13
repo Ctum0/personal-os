@@ -45,10 +45,17 @@ test.describe('sign-in gate', () => {
     expect(authorized.status()).toBe(200);
   });
 
-  test('the page shell still renders while signed out', async ({ page }) => {
-    const response = await page.goto('/');
-    expect(response?.status()).toBe(200);
-    await expect(page.locator('h1').first()).toBeVisible();
+  test('pages are gated, not just the API', async ({ page }) => {
+    // The regression this pins: the shell used to render while signed out, so a
+    // visitor could browse the navbar and see empty containers.
+    await page.goto('/finance/transactions');
+    await page.waitForURL(url => url.pathname.startsWith('/login'), { timeout: 20_000 });
+    expect(new URL(page.url()).searchParams.get('next')).toBe('/finance/transactions');
+
+    // No application chrome on the sign-in page.
+    await expect(page.getByRole('navigation')).toHaveCount(0);
+    await expect(page.getByLabel('Username')).toBeVisible();
+    await expect(page.getByLabel('Password')).toBeVisible();
   });
 
   test('the sign-in form reaches the dashboard', async ({ page }) => {

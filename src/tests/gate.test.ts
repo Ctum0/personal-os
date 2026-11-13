@@ -164,6 +164,18 @@ describe('gate', () => {
     expect(result.authorized).toBe(true);
   });
 
+  it('keeps the sign-in route reachable while signed out', async () => {
+    // Regression: the proxy used to reject every /api/* request it had not
+    // already authorized, including the exempt one — which made it impossible to
+    // ever obtain a session. The gate's own answer must be authoritative.
+    configureAuth();
+    const exempt = await gateRequest(requestWith(), '/api/auth/session');
+    expect(exempt.authorized, '/api/auth/session must pass the gate').toBe(true);
+
+    const blocked = await gateRequest(requestWith(), '/api/tasks');
+    expect(blocked.authorized).toBe(false);
+  });
+
   it('parses a cookie out of a multi-cookie header', () => {
     expect(readCookie('theme=dark; personal_os_session=abc.def.ghi; other=1', SESSION_COOKIE)).toBe('abc.def.ghi');
     expect(readCookie('theme=dark', SESSION_COOKIE)).toBeUndefined();

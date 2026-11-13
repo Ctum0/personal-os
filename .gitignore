@@ -57,3 +57,6 @@ test-results/
 reports/
 
 .next-*/
+
+# Agent tooling is local configuration, not part of the product.
+.agents/
