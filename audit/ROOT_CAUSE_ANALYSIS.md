@@ -44,4 +44,4 @@ The account menu assumes a username exists. Authentication is *optional by desig
 
 ## What this clustering implies for the roadmap
 
-Fixing the 3 root causes resolves 6 of the 9 reported findings and prevents the next instance of each. Fixing the 9 findings one at a time would leave both the palette and the tables ready to reproduce the same class of defect on their next edit. This is why the roadmap is organised by root cause, not by page.
+Mapping to the register's 14 findings: **RC-1** covers BUG-001 and UX-002; **RC-2** covers BUG-002 and RESP-002/003/004; **RC-3** covers A11Y-008 and A11Y-009. That is 8 of 14, and it prevents the next instance of each. Fixing the 9 findings one at a time would leave both the palette and the tables ready to reproduce the same class of defect on their next edit. This is why the roadmap is organised by root cause, not by page.

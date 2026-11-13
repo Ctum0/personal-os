@@ -8,7 +8,7 @@ Confirmed defects only. Each entry has a reproduction that was actually run.
 
 ## BUG-001 — Command palette loses its own commands when you type
 
-**Severity: P1 (High)** · Route: global (Ctrl+K) · Category: functional / search · **Status: RESOLVED**
+**Severity: P2 (Medium)** · Route: global (Ctrl+K) · Category: functional / search · **Status: RESOLVED**
 
 **Resolution:** the palette now renders one flat row list — commands filtered
 client-side (title, subtitle and a keyword list per command) followed by record
@@ -32,7 +32,7 @@ Also reproduces with `backup` → 0 results. Typing `finance` returns one *data*
 
 **Root cause** (`src/components/modals/CommandPaletteModal.tsx`): `rowCount` is `query.trim() ? results.length : commands.length`. The command array is only consulted when the query is empty; there is no client-side command filter. Verified by reading the component *after* observing the behaviour.
 
-**Impact:** the palette advertises 10 commands and then hides all of them the moment the user types — the primary way users reach a command. Navigation by keyboard is effectively broken for anyone who types instead of arrowing.
+**Impact:** typing a command's name yields nothing, so anyone who types rather than arrowing must clear the query first. It is friction, not a broken workflow: with an empty query all 10 commands are listed and ↑/↓/Enter activate them, and every destination they point to is also reachable from the sidebar. Graded P2 on that basis — an earlier draft called this P1, which overstated it.
 
 **Recommended fix:** filter `commands` locally by label/keywords and merge with backend results (commands first, records after), so a query never reduces reachable commands to zero.
 

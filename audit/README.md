@@ -10,6 +10,7 @@
 
 | File | Contents |
 | --- | --- |
+| [EXECUTIVE_SUMMARY.md](EXECUTIVE_SUMMARY.md) | **Start here** — verdict, coverage numbers, open findings, readiness |
 | [MASTER_PROGRESS.md](MASTER_PROGRESS.md) | Control document: counts, coverage, exact next task |
 | [APPLICATION_INVENTORY.md](APPLICATION_INVENTORY.md) | Every route, purpose, primary controls |
 | [ROUTE_COVERAGE.md](ROUTE_COVERAGE.md) | Per-route coverage status |

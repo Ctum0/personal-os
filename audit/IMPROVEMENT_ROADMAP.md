@@ -6,9 +6,9 @@ Organised by root cause (see `ROOT_CAUSE_ANALYSIS.md`), so each stage removes a 
 
 ## Stage A — Critical fixes
 
-Nothing here is a data-loss or security defect; A-1 and A-2 are the two the user is most likely to hit within a day.
+Nothing here is a data-loss or security defect. A-2 is the one a phone user hits immediately; A-1 was re-graded to P2 during review because arrowing still reached every command.
 
-### A-1 — Make the command palette filter its own commands · **P1**
+### A-1 — Make the command palette filter its own commands · **P2** · DONE
 
 | | |
 | --- | --- |
@@ -21,7 +21,7 @@ Nothing here is a data-loss or security defect; A-1 and A-2 are the two the user
 
 **Approach:** change the result model to `{ kind: 'command' | 'record' }`, filter `commands` client-side by label + keywords on every keystroke, and concatenate with the debounced server results. Commands first.
 
-### A-2 — Give wide content one overflow primitive, and use it everywhere · **P1**
+### A-2 — Give wide content one overflow primitive, and use it everywhere · **P1** · DONE for the calendar; tables pending
 
 | | |
 | --- | --- |
@@ -32,7 +32,7 @@ Nothing here is a data-loss or security defect; A-1 and A-2 are the two the user
 | Complexity | Small component + mechanical adoption at 4 call sites |
 | Acceptance | At 390px the calendar's last column is reachable (scroll or fit); every table and the calendar share one wrapper; a visible edge fade appears when content overflows; no horizontal document scroll at any of the 8 audited viewports |
 
-### A-3 — Fix the palette's three AA violations · **P1**
+### A-3 — Fix the palette's three AA violations · **P1** · DONE
 
 | | |
 | --- | --- |

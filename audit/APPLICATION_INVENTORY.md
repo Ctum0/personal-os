@@ -1,6 +1,6 @@
 # Application Inventory
 
-29 user-facing routes were discovered from the filesystem (`src/app/**/page.tsx`), cross-checked against the sidebar navigation (28 entries) and the in-app link graph.
+30 user-facing routes were discovered from the filesystem (`src/app/**/page.tsx`), cross-checked against the sidebar navigation (28 entries) and the in-app link graph.
 
 ## Shell
 
@@ -50,4 +50,4 @@
 
 ## Control inventory (measured, not estimated)
 
-Total interactive controls observed across the 29 application routes: **367 buttons**, **37 inputs/selects/textareas**, **4 data tables** (measured, from `evidence/reports/route-scan.json`). Global dialogs add a command palette (10 commands, searchable) and a Quick Add form.
+Total interactive controls observed across the 29 routes loaded by the scan: **367 buttons**, **37 inputs/selects/textareas**, **4 data tables** (measured, from `evidence/reports/route-scan.json`). Global dialogs add a command palette (10 commands, searchable) and a Quick Add form.

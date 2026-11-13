@@ -106,7 +106,9 @@ test.describe('sign-in gate', () => {
     await page.getByRole('menuitem', { name: /sign out/i }).click();
 
     await page.waitForURL(url => url.pathname.startsWith('/login'), { timeout: 20_000 });
-    // The cookie must be gone server-side: a reload of a deep link cannot restore it.
+    // The browser's copy of the cookie is cleared. Sessions are stateless HMACs
+    // with no server-side store, so this is not revocation: a token captured
+    // before sign-out stays valid until it expires (see docs/DEPLOYMENT.md).
     expect((await page.request.get('/api/tasks')).status()).toBe(401);
     await page.goto('/finance/transactions');
     await page.waitForURL(url => url.pathname.startsWith('/login'), { timeout: 20_000 });

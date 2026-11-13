@@ -85,6 +85,18 @@ which is the intended effect of a rotation).
 
 ## Operations
 
+### Sign-out is client-side only
+
+Sessions are stateless HMAC tokens — `v1.<expiresAt>.<HMAC>` with no session table
+and no denylist. Signing out deletes the cookie in the browser, so the device no
+longer sends it. A token that was already copied off the device stays valid until
+it expires (7 days), because there is nothing server-side to revoke.
+
+If that matters — shared machines, a suspected stolen cookie — rotate
+`PERSONAL_OS_SESSION_SECRET` and redeploy. That invalidates every issued token at
+once, which is also why rotation is the documented answer rather than a per-session
+revoke.
+
 ### Sign-in
 
 `POST /api/auth/session` with `{ username, password }` sets

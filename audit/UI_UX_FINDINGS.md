@@ -89,7 +89,7 @@ This is **not** the BUG-001 defect (which was that *existing* commands became un
 ## What is genuinely good (stated so the report is calibrated, not one-sided)
 
 - **No horizontal document overflow at any of the 8 viewports** — the shell adapts properly, which is the failure most apps of this shape exhibit.
-- **377/377 audited static-route controls produce no console errors**; zero failed requests across 29 routes.
+- **Zero console errors across the 29 scanned routes, and zero failed requests** — with one recorded exception: the `/productivity/insights` redirect stub aborts its own `_rsc` prefetch when it `router.replace()`s, which is expected navigation behaviour, not a defect (`evidence/reports/route-scan.json`). Console errors are per page load, not per control.
 - **Skip link, focus traps, Escape handling and dialog focus-on-open all work** in both global dialogs.
 - **Duplicate submission is prevented** under rapid Enter (INT-003) — a real robustness detail many apps get wrong.
 - **Empty states exist** for no-results search rather than rendering a blank region.

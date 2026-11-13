@@ -8,7 +8,7 @@ Last updated: 2026-11-13 · Audit build: `6dbb094`
 | Metric | Value | Source |
 | --- | --- | --- |
 | Routes discovered | 30 (29 app + `/login`) | `APPLICATION_INVENTORY.md` |
-| Routes loaded in a browser | 29 | `evidence/reports/route-scan.json` |
+| Routes loaded in a browser | 30 — 29 via the route scan, `/login` via the auth suite | route-scan.json + auth specs |
 | Routes returning 200 | 29/29 | same |
 | Routes with horizontal overflow at 1440 | 0/29 | same |
 | Routes with console errors on load | 0/29 | same |
@@ -35,8 +35,8 @@ A page counts as complete only when its UI, interactions and applicable function
 | Status | Count | Routes |
 | --- | --- | --- |
 | Fully audited | 4 | `/`, `/productivity/tasks`, `/overview/settings` (axe only, not interaction), `/productivity/insights` |
-| Partially audited (loaded + visual + console, interactions not exercised) | 25 | all remaining app routes |
-| Not audited | 1 | `/login` (covered by the E2E suite, not re-drilled here) |
+| Partially audited (loaded + visual + console, interactions not exercised) | 26 | all remaining app routes, including `/login` |
+| Not audited | 0 | — |
 | Blocked | 0 | — |
 
 ## Fixes applied during the audit

@@ -44,8 +44,12 @@ C1 initially reported FAIL because my probe clicked the *workspace* switcher (wh
 | E1 | Wrong password rejected | `401` | **PASS** |
 | E2 | Correct password issues a session | `200` + cookie | **PASS** |
 | E3 | Deep link survives the round trip | Landed on the requested page | **PASS** |
-| E4 | Sign out ends the session server-side | `DELETE 200`, then `/api/tasks` → `401` | **PASS** |
+| E4 | Sign out clears the browser's cookie | `DELETE 200`, then `/api/tasks` → `401` | **PASS** — but this is *not* revocation: sessions are stateless HMACs with no server store, so a token captured before sign-out stays valid until it expires |
 | E5 | Throttled failure does not block a correct password | `200` while throttled | **PASS** |
+
+**Known limitation:** sign-out is client-side only. There is no session store or denylist, so
+"sign out" cannot invalidate a token already copied off the device. On a shared machine,
+rotating `PERSONAL_OS_SESSION_SECRET` is the only true revocation.
 
 ## Journeys NOT completed
 
