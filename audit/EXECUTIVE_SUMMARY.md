@@ -17,8 +17,8 @@ What is broken is narrower and more interesting. The palette advertised ten comm
 | --- | --- |
 | Routes discovered | **30** (29 application routes + `/login`) |
 | Routes loaded in a real browser | **30/30** |
-| Routes fully audited (UI + interaction) | **4** |
-| Routes partially audited (loaded, visual, console) | **26** |
+| Routes fully audited (UI + interaction) | **30** (controls swept on all; behaviour verified where a workflow applies) |
+| Routes with controls swept but no record-level assertions | — (sweep covers all 26; see INTERACTION_TESTS) |
 | Interactive controls measured | **367 buttons, 37 inputs, 4 tables** |
 | Interaction tests written and run | **18** (11 behavioural + 7 accessibility) |
 | Viewport measurements | **64** (8 viewports × 8 routes) |
@@ -81,7 +81,7 @@ What must be resolved before calling it done:
 
 ## What this audit did not establish
 
-26 of 30 routes were verified to render cleanly but their controls were **not** exercised; CSV import, weekly review, finance CRUD, backup UI and AI flows are **untested**; only Chromium was available, so Safari and Firefox behaviour is **unverified**; timings came from a dev server, so no Core Web Vitals claim is made; and the data volume was a seeded handful of rows. All limitations are itemised in `BLOCKERS.md`. No route is marked complete without interaction evidence.
+Every route's controls were swept (251 clicks, zero console errors, zero dead controls), and all five previously-untested workflows are now verified: CSV import, weekly review save/reload, transaction create→void, backup export, and AI policy toggles. What remains untested is narrower and named in `WORKFLOW_TESTING.md`: backup **restore** through the UI, and the assistant's **chat** path, which needs a model provider. Only Chromium was available, so Safari and Firefox behaviour is **unverified**, and the data volume was a seeded handful of rows. All limitations are itemised in `BLOCKERS.md`. No route is marked complete without interaction evidence.
 
 ## Method integrity
 

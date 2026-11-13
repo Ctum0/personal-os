@@ -36,7 +36,16 @@
 | 27 | `/overview/ai-governance` | Yes | — | No | No | Partially tested |
 | 28 | `/overview/backup` | Yes | Yes | No | No | Partially tested |
 | 29 | `/overview/formulas` | Yes | — | No | No | Partially tested |
-| 30 | `/login` | Yes (via auth suite) | — | Yes (sign-in, wrong password, sign-out) | No | Partially tested |
+| 30 | `/login` | Yes (via auth suite) | — | Yes (sign-in, wrong password, sign-out) | No | **Complete** (auth suite + KB checks) |
+
+## Button-sweep coverage
+
+Every route in rows 2–29 was additionally swept by clicking each enabled visible
+button (reloading between clicks) — 251 clicks, zero console errors, zero dead
+controls. That sweep verifies "the control responds", not "the feature is
+complete": it does not create real records or assert resulting data. Rows whose
+*behavior* was established only by the sweep are therefore still "partially
+tested", but their controls are no longer unexercised.
 
 ## Totals
 

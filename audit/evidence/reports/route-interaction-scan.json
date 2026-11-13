@@ -1,0 +1,1584 @@
+[
+ {
+  "route": "/productivity/today",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Finance",
+    "effect": "navigated"
+   },
+   {
+    "button": "Space:All",
+    "effect": "menu"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "Quick Capture",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Capture",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "urgent",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "high",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "normal",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Open Next.js Dev Tools",
+    "effect": "no-visible-change"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Quick Capture",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "urgent",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "high",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "normal",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Open Next.js Dev Tools",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/productivity/plan",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Finance",
+    "effect": "navigated"
+   },
+   {
+    "button": "Space:All",
+    "effect": "menu"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "Today",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Tomorrow",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "\"Work 9-5, assignment, cybersecurity, gym, g",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "\"Client meetings & design review\"",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Auto-Draft Day",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Open Next.js Dev Tools",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Schedule",
+    "effect": "no-visible-change"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Today",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Tomorrow",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "\"Work 9-5, assignment, cybersecurity, gym, g",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "\"Client meetings & design review\"",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Auto-Draft Day",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Open Next.js Dev Tools",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Schedule",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/productivity/projects",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Finance",
+    "effect": "navigated"
+   },
+   {
+    "button": "Space:All",
+    "effect": "menu"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "New Project",
+    "effect": "dialog"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/productivity/inbox",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Finance",
+    "effect": "navigated"
+   },
+   {
+    "button": "Space:All",
+    "effect": "menu"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "Capture",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Move to Next Actions",
+    "effect": "no-visible-change"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Capture",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Move to Next Actions",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/productivity/calendar",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Finance",
+    "effect": "navigated"
+   },
+   {
+    "button": "Space:All",
+    "effect": "menu"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "Previous period",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Today",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Next period",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Day",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Week",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Agenda",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Block Time",
+    "effect": "dialog"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Previous period",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Today",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Next period",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Day",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Week",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Agenda",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/productivity/habits",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Finance",
+    "effect": "navigated"
+   },
+   {
+    "button": "Space:All",
+    "effect": "menu"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "Habits Tracker",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Routines & Rituals",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "New Habit",
+    "effect": "dialog"
+   },
+   {
+    "button": "Toggle habit Deep Reading",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Toggle habit Daily Movement / Workout",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Toggle habit Mindfulness & Reflection",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Toggle habit Hydration Target",
+    "effect": "no-visible-change"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Habits Tracker",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Routines & Rituals",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Toggle habit Deep Reading",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Toggle habit Daily Movement / Workout",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Toggle habit Mindfulness & Reflection",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Toggle habit Hydration Target",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/productivity/goals",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Finance",
+    "effect": "navigated"
+   },
+   {
+    "button": "Space:All",
+    "effect": "menu"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "New Goal",
+    "effect": "dialog"
+   },
+   {
+    "button": "+1 km",
+    "effect": "no-visible-change"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "+1 km",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/productivity/focus",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Finance",
+    "effect": "navigated"
+   },
+   {
+    "button": "Space:All",
+    "effect": "menu"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "15m Sprint",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "25m Pomodoro",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "50m Deep Block",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Start Focus Block",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Reset Timer",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Interruptions: 0",
+    "effect": "no-visible-change"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "15m Sprint",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "25m Pomodoro",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "50m Deep Block",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Start Focus Block",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Reset Timer",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Interruptions: 0",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/productivity/analytics",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Finance",
+    "effect": "navigated"
+   },
+   {
+    "button": "Space:All",
+    "effect": "menu"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "7D",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "30D",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "90D",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "All",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "How Calculated",
+    "effect": "dialog"
+   },
+   {
+    "button": "CSV",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Open Next.js Dev Tools",
+    "effect": "navigated"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "7D",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "30D",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "90D",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "All",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "CSV",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/productivity/weekly-review",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Finance",
+    "effect": "navigated"
+   },
+   {
+    "button": "Space:All",
+    "effect": "menu"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "How This Review Works",
+    "effect": "dialog"
+   },
+   {
+    "button": "Save & Archive Review",
+    "effect": "no-visible-change"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Save & Archive Review",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/finance",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "navigated"
+   },
+   {
+    "button": "Finance",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "Import CSV",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "New Entry",
+    "effect": "dialog"
+   },
+   {
+    "button": "Open Next.js Dev Tools",
+    "effect": "dialog"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Finance",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Import CSV",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/finance/accounts",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "navigated"
+   },
+   {
+    "button": "Finance",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "New Account",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Create First Account",
+    "effect": "dialog"
+   },
+   {
+    "button": "Open Next.js Dev Tools",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Inspect balance calculation inputs for Physi",
+    "effect": "dialog"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Finance",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "New Account",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Open Next.js Dev Tools",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/finance/transactions",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "navigated"
+   },
+   {
+    "button": "Finance",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "Open Next.js Dev Tools",
+    "effect": "dialog"
+   },
+   {
+    "button": "Open Next.js Dev Tools",
+    "effect": "no-visible-change"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Finance",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Open Next.js Dev Tools",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/finance/budgets",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "navigated"
+   },
+   {
+    "button": "Finance",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "How Budget Is Calculated",
+    "effect": "dialog"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Finance",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/finance/recurring",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "navigated"
+   },
+   {
+    "button": "Finance",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "New Recurring Obligation",
+    "effect": "no-visible-change"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Finance",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "New Recurring Obligation",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/finance/savings",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "navigated"
+   },
+   {
+    "button": "Finance",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "New Savings Goal",
+    "effect": "no-visible-change"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Finance",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "New Savings Goal",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/finance/debts",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "navigated"
+   },
+   {
+    "button": "Finance",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "New Debt Entry",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Calculation Formula",
+    "effect": "no-visible-change"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Finance",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "New Debt Entry",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Calculation Formula",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/finance/net-worth",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Finance",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "click-failed: TimeoutError: locator.click: Timeout 4000ms exceeded.\nCall l"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "How Net Worth Is Calculated",
+    "effect": "dialog"
+   },
+   {
+    "button": "Open Next.js Dev Tools",
+    "effect": "no-visible-change"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Finance",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "click-failed: TimeoutError: locator.click: Timeout 4000ms exceeded.\nCall l"
+   },
+   {
+    "button": "Open Next.js Dev Tools",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/finance/import",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "navigated"
+   },
+   {
+    "button": "Finance",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Finance",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/finance/reports",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "navigated"
+   },
+   {
+    "button": "Finance",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "This Month",
+    "effect": "dialog"
+   },
+   {
+    "button": "Last 30 Days",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Last 30 Days",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Open Next.js Dev Tools",
+    "effect": "no-visible-change"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Finance",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Last 30 Days",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Last 30 Days",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Open Next.js Dev Tools",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/overview",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "navigated"
+   },
+   {
+    "button": "Finance",
+    "effect": "navigated"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "Open Next.js Dev Tools",
+    "effect": "no-visible-change"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Open Next.js Dev Tools",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/overview/metrics",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "navigated"
+   },
+   {
+    "button": "Finance",
+    "effect": "navigated"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "All",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Finance",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Open in Explainer Drawer",
+    "effect": "dialog"
+   },
+   {
+    "button": "Open in Explainer Drawer",
+    "effect": "dialog"
+   },
+   {
+    "button": "Open in Explainer Drawer",
+    "effect": "dialog"
+   },
+   {
+    "button": "Open in Explainer Drawer",
+    "effect": "dialog"
+   },
+   {
+    "button": "Open in Explainer Drawer",
+    "effect": "dialog"
+   }
+  ],
+  "findings": [
+   {
+    "button": "All",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Finance",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Productivity",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/overview/settings",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "navigated"
+   },
+   {
+    "button": "Finance",
+    "effect": "navigated"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "Open Next.js Dev Tools",
+    "effect": "no-visible-change"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Open Next.js Dev Tools",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/overview/ai-governance",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "navigated"
+   },
+   {
+    "button": "Finance",
+    "effect": "navigated"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "get_daily_summary tool policy",
+    "effect": "no-visible-change"
+   }
+  ],
+  "findings": [
+   {
+    "button": "get_daily_summary tool policy",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/overview/backup",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "navigated"
+   },
+   {
+    "button": "Finance",
+    "effect": "navigated"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "Download Complete Backup (JSON)",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Select backup JSON to restore",
+    "effect": "no-visible-change"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Download Complete Backup (JSON)",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Select backup JSON to restore",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ },
+ {
+  "route": "/overview/formulas",
+  "loaded": true,
+  "clicks": [
+   {
+    "button": "Productivity",
+    "effect": "navigated"
+   },
+   {
+    "button": "Finance",
+    "effect": "navigated"
+   },
+   {
+    "button": "Search system⌘K",
+    "effect": "dialog"
+   },
+   {
+    "button": "Quick Add (⌘N)",
+    "effect": "dialog"
+   },
+   {
+    "button": "Assistant console",
+    "effect": "dialog"
+   },
+   {
+    "button": "OP — account menu",
+    "effect": "menu"
+   },
+   {
+    "button": "Budget Threshold Warning",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Progress Percentage",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Buffer Cushion Check",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Priority Escalation",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Evaluate Formula",
+    "effect": "no-visible-change"
+   }
+  ],
+  "findings": [
+   {
+    "button": "Budget Threshold Warning",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Progress Percentage",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Buffer Cushion Check",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Priority Escalation",
+    "effect": "no-visible-change"
+   },
+   {
+    "button": "Evaluate Formula",
+    "effect": "no-visible-change"
+   }
+  ],
+  "errors": []
+ }
+]

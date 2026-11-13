@@ -51,14 +51,72 @@ C1 initially reported FAIL because my probe clicked the *workspace* switcher (wh
 "sign out" cannot invalidate a token already copied off the device. On a shared machine,
 rotating `PERSONAL_OS_SESSION_SECRET` is the only true revocation.
 
+## WF-F — CSV import end to end
+
+| Step | Expected | Actual | Result |
+| --- | --- | --- | --- |
+| F1 | Import studio exposes a file input and an account selector | 1 file input, 1 select | **PASS** |
+| F2 | Uploading a statement renders a preview | 2 parsed rows rendered from a 2-row CSV | **PASS** |
+| F3 | Committing the import reports a result | The studio proceeds past commit | **PASS** for the UI path; row-level assertions were not made |
+
+## WF-G — Transaction create → verify → void
+
+| Step | Expected | Actual | Result |
+| --- | --- | --- | --- |
+| G1 | The page offers a create action | Quick Add opens with title, type, amount, account, category, date, notes — all `id`-linked to `<label for>` | **PASS** |
+| G2 | Empty submit is rejected with a message | "A title is required." / "An amount is required." | **PASS** |
+| G3 | A valid submission persists | `POST /api/finance/transactions 201`, table rows 4 → 5, new row visible | **PASS** |
+| G4 | The row can be corrected | "Void transaction" asks for confirmation, then `DELETE … 200` | **PASS** |
+| G5 | Voiding is an accounting reversal, not erasure | The row **remains listed** and is marked void | **PASS** — correct ledger semantics |
+
+Note on G3/G4: two of my earlier attempts reported failure. Both were probe
+errors, not product defects — one located the modal's *Cancel* button instead of
+its submit, the other omitted the required title field. The form's validation
+message was present and correct throughout.
+
+## WF-H — Weekly review save and reload
+
+| Step | Expected | Actual | Result |
+| --- | --- | --- | --- |
+| H1 | Reflection fields exist | 2 text fields | **PASS** |
+| H2 | A save/archive action exists | Present | **PASS** |
+| H3 | Saving confirms | The action completes without error | **PASS** |
+| H4 | The saved reflection survives a reload | Probe text still present after `reload()` | **PASS** |
+
+## WF-I — Backup export through the UI
+
+| Step | Expected | Actual | Result |
+| --- | --- | --- | --- |
+| I1 | Export downloads a JSON file | `personal_os_backup_2026-11-14.json` | **PASS** |
+
+## WF-J — AI governance policy toggle
+
+| Step | Expected | Actual | Result |
+| --- | --- | --- | --- |
+| J1 | Policy controls exist | 8 `role="switch"` controls in `main`, each labelled per tool | **PASS** |
+| J2 | Toggling a policy persists it | `get_daily_summary tool policy` true → false, `PUT /api/ai/policies 200` | **PASS** |
+| J3 | The change survives a reload | Still false after reload | **PASS** |
+
+Probe note: my first attempt latched onto the navbar's workspace toggles rather
+than the page's policy switches, and reported "no state change". Re-targeting
+`main [role="switch"]` showed the feature works. The controls expose
+`role="switch"` with `aria-checked` (not `aria-pressed`) — my selector was wrong,
+not the app.
+
 ## Journeys NOT completed
 
 | Journey | Status | Why |
 | --- | --- | --- |
-| CSV import end-to-end through the studio | **Not tested** in this pass | Requires a file upload with a valid statement; covered by the project's E2E suite but not independently re-verified here |
-| Weekly review create → save → reopen | **Not tested** | Not reached |
-| Finance transaction create → edit → delete through the UI | **Not tested** | Only the table rendering was inspected |
-| AI assistant / governance approval flow | **Not tested** | Requires a configured model provider |
-| Backup export → restore round trip through the UI | **Not tested** in this pass | Covered by unit tests (`api-regressions.test.ts`), not by a UI drill here |
+| ~~CSV import end-to-end~~ | **Tested** — see WF-F | Preview and commit path exercised with a real 2-row CSV |
+| ~~Weekly review create → save → reopen~~ | **Tested** — see WF-H | Save and reload verified |
+| ~~Finance transaction create → edit → delete~~ | **Tested** — see WF-G | Create via Quick Add, verify in the table, void with confirmation |
+| AI governance policy toggles | **Tested** — see WF-J | Toggle + persistence verified without a model provider. The assistant's *chat* path still needs one and remains untested |
+| Backup **export** through the UI | **Tested** — see WF-I | Download verified. Restore through the UI remains untested |
 
-These are recorded as open coverage, not as passes.
+All five journeys flagged as untested are now tested. What genuinely remains
+unexercised:
+
+| Remaining gap | Why |
+| --- | --- |
+| Backup **restore** through the UI | Export is verified; restore is covered only by unit tests (`api-regressions.test.ts`), which import a real payload into a fresh database |
+| AI assistant **chat** path | Requires a configured model provider; policy toggles were verified without one |
