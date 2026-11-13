@@ -18,6 +18,20 @@ import {
 } from '@/lib/auth/throttle';
 
 /**
+ * Extra latency imposed on a caller that is already throttled.
+ *
+ * Long enough to make sustained guessing painful, short enough that the operator
+ * signing in from a shared address does not think the app is broken. It is a
+ * cost, not a barrier: the point is that a lockout never refuses a valid
+ * credential.
+ */
+const LOCKED_ATTEMPT_DELAY_MS = 500;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
  * The single sign-in endpoint — the ONLY /api path exempt from the gate.
  *
  * POST { username, password } → sets an HMAC-signed session cookie.
@@ -47,21 +61,38 @@ export const POST = withApiLogging(async function POST(request: Request) {
     }
 
     const clientKey = clientKeyFromHeaders(request.headers);
-    const allowed = checkLoginAllowed(clientKey);
-    if (!allowed.allowed) {
-      return NextResponse.json(
-        { error: 'Too many failed attempts. Try again later.', retryAfterSeconds: allowed.retryAfterSeconds },
-        { status: 429, headers: { 'Retry-After': String(allowed.retryAfterSeconds ?? 60) } }
-      );
-    }
+
+    // Order matters, and it is a security decision:
+    //
+    // Credentials are verified FIRST, and a correct password always succeeds —
+    // even while the caller is throttled. Checking the limiter first would let
+    // anyone on the internet spend 20 wrong guesses and then lock the operator
+    // out of their own account for the cooldown, since the password is the only
+    // way in. Throttling exists to make guessing expensive, not to become a
+    // denial-of-service primitive against the legitimate user.
+    //
+    // A throttled caller still pays for the verification, plus an added delay, so
+    // a lockout makes brute force slower rather than merely refusing responses.
+    const throttle = checkLoginAllowed(clientKey);
 
     const body = await readBody(request);
     const username = requiredString(body.username, 'username', 200);
     const password = requiredString(body.password, 'password', 1024);
 
+    if (!throttle.allowed) {
+      await sleep(LOCKED_ATTEMPT_DELAY_MS);
+    }
+
     const valid = await verifyCredentials(config, username, password);
     if (!valid) {
       recordLoginFailure(clientKey);
+      const decision = checkLoginAllowed(clientKey);
+      if (!decision.allowed) {
+        return NextResponse.json(
+          { error: 'Too many failed attempts. Try again later.', retryAfterSeconds: decision.retryAfterSeconds },
+          { status: 429, headers: { 'Retry-After': String(decision.retryAfterSeconds ?? 60) } }
+        );
+      }
       return NextResponse.json(
         { error: 'Invalid credentials' },
         { status: 401, headers: { 'WWW-Authenticate': 'PersonalOS-Session realm="Personal OS"' } }

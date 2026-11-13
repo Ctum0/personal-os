@@ -29,6 +29,28 @@ const MAX_LOCKOUT_MS = 60 * 60 * 1000;
 /** Cap the map so a flood of spoofed addresses cannot exhaust memory. */
 const MAX_TRACKED_CLIENTS = 5_000;
 
+/**
+ * Global backstop.
+ *
+ * Per-client keys are only as trustworthy as the header they come from. Behind a
+ * CDN the proxy sets `x-forwarded-for` to its own peer, so many clients can
+ * collapse into one bucket; and if the deployment trusts a client-supplied
+ * header, an attacker can rotate the key and never reach the per-client limit.
+ * A global counter bounds total guessing regardless: it is the property that
+ * makes a single-password system non-brute-forceable.
+ *
+ * The tradeoff is deliberate and bounded — an attacker who triggers it blocks
+ * sign-in attempts for the cooldown, but an existing session keeps working, so
+ * the operator is not thrown out of the app.
+ */
+const GLOBAL_WINDOW_MS = 15 * 60 * 1000;
+const GLOBAL_MAX_FAILURES = 20;
+const GLOBAL_LOCKOUT_MS = 15 * 60 * 1000;
+
+let globalFailures = 0;
+let globalWindowStart = 0;
+let globalLockedUntil = 0;
+
 const attempts = new Map<string, AttemptRecord>();
 
 export interface ThrottleDecision {
@@ -49,6 +71,10 @@ function prune(now: number): void {
 
 /** True when this client may attempt a login right now. */
 export function checkLoginAllowed(clientKey: string, now: number = Date.now()): ThrottleDecision {
+  if (globalLockedUntil > now) {
+    return { allowed: false, retryAfterSeconds: Math.ceil((globalLockedUntil - now) / 1000) };
+  }
+
   const record = attempts.get(clientKey);
   if (!record) return { allowed: true };
   if (record.lockedUntil > now) {
@@ -60,6 +86,21 @@ export function checkLoginAllowed(clientKey: string, now: number = Date.now()): 
 /** Records a failed attempt and returns the decision for a follow-up attempt. */
 export function recordLoginFailure(clientKey: string, now: number = Date.now()): ThrottleDecision {
   prune(now);
+
+  // Global accounting runs first so the returned decision reflects the stronger
+  // of the two limits.
+  if (now - globalWindowStart > GLOBAL_WINDOW_MS) {
+    globalWindowStart = now;
+    globalFailures = 0;
+  }
+  globalFailures += 1;
+  if (globalFailures >= GLOBAL_MAX_FAILURES) {
+    globalLockedUntil = now + GLOBAL_LOCKOUT_MS;
+    globalFailures = 0;
+    globalWindowStart = now;
+    return { allowed: false, retryAfterSeconds: Math.ceil(GLOBAL_LOCKOUT_MS / 1000) };
+  }
+
   const record = attempts.get(clientKey) ?? { failures: 0, lockedUntil: 0, windowStart: now, lockouts: 0 };
 
   // A window that has fully elapsed resets the failure count but keeps the
@@ -93,15 +134,23 @@ export function recordLoginSuccess(clientKey: string): void {
 /** Test/tooling hook: forget every tracked client. */
 export function resetLoginThrottle(): void {
   attempts.clear();
+  globalFailures = 0;
+  globalWindowStart = 0;
+  globalLockedUntil = 0;
 }
 
 /**
  * Best-effort client identity for throttling.
  *
- * Next's runtime does not hand the route a socket address, so this uses the
- * forwarded-for header when a reverse proxy sets it (Coolify/Traefik do) and
- * falls back to a single shared bucket. Behind the proxy that header is written
- * by the proxy itself, not by the browser, so it cannot be rotated freely.
+ * Next's runtime does not hand the route a socket address, so this reads the
+ * first `x-forwarded-for` entry — the original client, as recorded by the edge.
+ *
+ * This is **not** a security boundary on its own: a proxy that appends to a
+ * client-supplied header, or a CDN that rewrites it to its own peer, both make
+ * the value weaker or coarser than it looks. The per-client limit is therefore
+ * paired with a global backstop above, which is what actually bounds guessing.
+ * `docs/DEPLOYMENT.md` records the proxy-side requirement (trusted proxies) that
+ * makes this value meaningful.
  */
 export function clientKeyFromHeaders(headers: Headers): string {
   const forwarded = headers.get('x-forwarded-for');

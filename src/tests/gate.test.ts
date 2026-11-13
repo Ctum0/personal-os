@@ -360,7 +360,9 @@ describe('sign-in endpoint', () => {
     }
     expect(lastStatus).toBe(429);
 
-    // Even the correct password is refused while the lockout stands.
+    // The correct password must still work while the caller is throttled. If a
+    // lockout refused it, anyone could lock the operator out of their own
+    // account by spending 20 wrong guesses — the limiter would become the attack.
     const correct = await sessionPost(
       new Request('http://localhost/api/auth/session', {
         method: 'POST',
@@ -368,8 +370,8 @@ describe('sign-in endpoint', () => {
         body: JSON.stringify({ username: USERNAME, password: PASSWORD }),
       })
     );
-    expect(correct.status).toBe(429);
-    expect(correct.headers.get('retry-after')).toBeTruthy();
+    expect(correct.status, 'a valid credential must never be refused').toBe(200);
+    expect(correct.headers.get('set-cookie')).toContain(`${SESSION_COOKIE}=`);
   });
 
   it('clears the cookie on sign-out', async () => {
@@ -392,6 +394,24 @@ describe('throttle primitives', () => {
     // A success clears the record entirely.
     recordLoginSuccess(key);
     expect(checkLoginAllowed(key).allowed).toBe(true);
+  });
+
+  it('caps total failures globally even when the client key is rotated', () => {
+    // The per-client key comes from a header. If that header is spoofable or
+    // collapses to a CDN peer, the per-client limit alone would never trigger,
+    // so a global counter bounds total guessing.
+    let blocked = false;
+    for (let i = 0; i < 40; i++) {
+      const decision = recordLoginFailure(`spoofed-${i}`);
+      if (!decision.allowed) {
+        blocked = true;
+        break;
+      }
+    }
+    expect(blocked, 'rotating the client key must not grant unlimited attempts').toBe(true);
+
+    // A fresh client is refused too while the global lockout stands.
+    expect(checkLoginAllowed('yet-another-key').allowed).toBe(false);
   });
 
   it('derives the client key from proxy headers, not from the browser', () => {

@@ -102,6 +102,32 @@ a digest that is not 64 characters, or a secret shorter than 32. This is
 deliberate: a locked door with no key must not report itself as healthy. Fix the
 named variable, or unset all four to deliberately run in open mode.
 
+### Reverse-proxy requirement: real client addresses
+
+Failed sign-ins are limited per client address, and the address comes from
+`X-Forwarded-For`. That value is only meaningful if the edge sets it:
+
+- If your proxy appends to a client-supplied header, the first entry is
+  attacker-controlled.
+- If your proxy rewrites it to its own peer address (Cloudflare in front of
+  Caddy does this by default), every request collapses into one bucket.
+
+For Caddy, trust the CDN ranges so the header carries the true client:
+
+```caddy
+{
+	servers {
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 2400:cb00::/32 …
+	}
+}
+```
+
+If you cannot maintain that list, it does not matter: a **global** limiter
+(20 failures per 15 minutes across all clients) bounds total guessing
+regardless, so the system stays non-brute-forceable. The consequence is that an
+attacker can deny *new sign-ins* for 15 minutes; existing sessions keep working,
+so an operator already signed in is not locked out of the app.
+
 ### Backup
 
 The operator's own backup page (`/overview/backup`) exports a complete JSON

@@ -61,8 +61,10 @@ test.describe('sign-in gate', () => {
   test('an api path is never treated as a static asset', async ({ request }) => {
     // The asset-extension check runs before the /api/ branch; a JSON-ish suffix
     // must not become an authentication bypass.
+    // Assert the gate's own status, not merely "not 200": with no route at all a
+    // bypass returns 404 and a loose assertion would still pass.
     const res = await request.get('/api/tasks.json', { maxRedirects: 0 });
-    expect(res.status(), 'api paths must never bypass the gate').not.toBe(200);
+    expect(res.status(), 'api paths must be gated, not treated as assets').toBe(401);
   });
 
   test('static assets referenced by the manifest stay public', async ({ request }) => {
