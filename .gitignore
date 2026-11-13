@@ -57,7 +57,7 @@ test-results/
 # audit/verification output (screenshots, JSON probes, cloned app trees).
 # These have historically contained real operator DB snapshots — never commit.
 .artifacts/
-reports/
+/reports/
 
 .next-*/
 
