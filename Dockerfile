@@ -34,7 +34,11 @@ COPY . .
 # output file tracing is configured to skip ./data entirely (next.config.ts).
 ENV NEXT_OUTPUT_STANDALONE=1 \
     PERSONAL_OS_DB_PATH=/tmp/personal-os-build/profile.db
-RUN pnpm build && rm -rf /tmp/personal-os-build
+# `next build` compiles and then type-checks the whole project, which needs far
+# more headroom than the running server. Coolify injects the runtime
+# NODE_OPTIONS (--max-old-space-size=256) into every stage, so the build sets its
+# own ceiling inline rather than inheriting the server's tight heap.
+RUN NODE_OPTIONS=--max-old-space-size=2048 pnpm build && rm -rf /tmp/personal-os-build
 
 # ---- runtime -------------------------------------------------------------
 FROM node:22-alpine AS runtime
