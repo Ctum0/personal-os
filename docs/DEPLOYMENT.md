@@ -123,10 +123,21 @@ For Caddy, trust the CDN ranges so the header carries the true client:
 ```
 
 If you cannot maintain that list, it does not matter: a **global** limiter
-(20 failures per 15 minutes across all clients) bounds total guessing
-regardless, so the system stays non-brute-forceable. The consequence is that an
-attacker can deny *new sign-ins* for 15 minutes; existing sessions keep working,
-so an operator already signed in is not locked out of the app.
+(20 failures per 15 minutes across all clients) bounds total guessing regardless,
+so the system stays non-brute-forceable.
+
+The limiter applies to failed attempts only. The sign-in route verifies the
+credential *before* consulting it, so:
+
+- a correct password always issues a session, even while the address or the
+  whole instance is throttled — a stranger cannot deny you your own account;
+- throttled failures answer `429` after an added 500 ms, so guessing stays
+  expensive;
+- a successful sign-in clears both the per-client and the global counters.
+
+The remaining tradeoff is narrow: sustained failed attempts from anywhere can
+make *wrong* passwords slower for everyone for up to 15 minutes. It cannot stop a
+correct one.
 
 ### Backup
 

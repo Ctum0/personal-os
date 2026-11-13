@@ -414,6 +414,16 @@ describe('throttle primitives', () => {
     expect(checkLoginAllowed('yet-another-key').allowed).toBe(false);
   });
 
+  it('clears the global cooldown after a successful sign-in', () => {
+    // The operator proved they hold the password; leaving the global cooldown
+    // standing would only punish their next typo.
+    for (let i = 0; i < 20; i++) recordLoginFailure(`attacker-${i}`);
+    expect(checkLoginAllowed('someone').allowed).toBe(false);
+
+    recordLoginSuccess('operator');
+    expect(checkLoginAllowed('someone').allowed, 'success must clear the global state').toBe(true);
+  });
+
   it('derives the client key from proxy headers, not from the browser', () => {
     const headers = new Headers({ 'x-forwarded-for': '198.51.100.9, 10.0.0.1' });
     expect(clientKeyFromHeaders(headers)).toBe('198.51.100.9');

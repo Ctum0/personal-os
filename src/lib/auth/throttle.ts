@@ -39,9 +39,11 @@ const MAX_TRACKED_CLIENTS = 5_000;
  * A global counter bounds total guessing regardless: it is the property that
  * makes a single-password system non-brute-forceable.
  *
- * The tradeoff is deliberate and bounded — an attacker who triggers it blocks
- * sign-in attempts for the cooldown, but an existing session keeps working, so
- * the operator is not thrown out of the app.
+ * Critically, this limits **failed** attempts only. The sign-in route verifies
+ * the credential before it consults this state, so a correct password always
+ * issues a session — a stranger cannot deny the operator their own account by
+ * spending the counter. What a triggered limiter does is make further guessing
+ * slow: PBKDF2 work plus an added delay, and a 429 instead of a 401.
  */
 const GLOBAL_WINDOW_MS = 15 * 60 * 1000;
 const GLOBAL_MAX_FAILURES = 20;
@@ -126,9 +128,19 @@ export function recordLoginFailure(clientKey: string, now: number = Date.now()):
   return { allowed: true };
 }
 
-/** Clears the record for a client that authenticated successfully. */
+/**
+ * Clears the penalty state after a successful sign-in.
+ *
+ * Both the per-client record and the global counters are cleared: the person who
+ * proved they hold the password has arrived, and leaving a global cooldown
+ * standing would only affect their next typo. Only a valid credential can reach
+ * this path, so an attacker cannot use it to reset the limiter.
+ */
 export function recordLoginSuccess(clientKey: string): void {
   attempts.delete(clientKey);
+  globalFailures = 0;
+  globalWindowStart = 0;
+  globalLockedUntil = 0;
 }
 
 /** Test/tooling hook: forget every tracked client. */
