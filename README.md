@@ -51,10 +51,14 @@ pnpm dev
   There is no signup route, no password reset, and no user table to insert into,
   so a second account cannot be created through the app even by an authenticated
   operator.
-- **Locked mode** (any variable set but incomplete still counts as unconfigured
-  and stays open — set all four or none): unauthenticated `/api/*` calls get
-  `401` + `WWW-Authenticate`. The client redirects to `/login?next=<path>` on the
-  first 401, so a protected app never looks like an empty app.
+- **Locked mode**: unauthenticated page requests are redirected to
+  `/login?next=<path>` before anything renders, and `/api/*` calls get `401`. The
+  application shell is not rendered for a signed-out visitor at all.
+- **An incomplete credential set fails closed.** If some but not all of the four
+  variables are present — a typo in a key name, a forgotten session secret —
+  every request returns `503` naming the missing variables. It is never treated
+  as "not configured", because that would silently publish an unauthenticated
+  instance. Unset all four to get open mode.
 - **Passwords are never stored.** `PERSONAL_OS_PASSWORD_HASH` is PBKDF2-HMAC-SHA256
   (210k iterations by default, 256-bit) over `PERSONAL_OS_PASSWORD_SALT`. The
   comparison is length-independent and does not short-circuit on the username.

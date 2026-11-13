@@ -34,27 +34,63 @@ export interface AuthConfig {
   sessionSecret: string;
 }
 
-/**
- * Reads the operator account from the environment.
- *
- * Returns `null` when credentials are not configured, which puts the app in open
- * workstation mode (the behaviour a local `pnpm dev` expects). A deployment that
- * exposes the port should always set them; `isAuthConfigured()` is what the
- * startup check and the docs use to state that plainly.
- */
-export function readAuthConfig(env: Record<string, string | undefined> = process.env): AuthConfig | null {
-  const username = env.PERSONAL_OS_USERNAME?.trim();
-  const salt = env.PERSONAL_OS_PASSWORD_SALT?.trim();
-  const passwordHash = env.PERSONAL_OS_PASSWORD_HASH?.trim().toLowerCase();
-  const secret = env.PERSONAL_OS_SESSION_SECRET?.trim();
+/** The four variables that together define the operator account. */
+export const REQUIRED_AUTH_ENV = [
+  'PERSONAL_OS_USERNAME',
+  'PERSONAL_OS_PASSWORD_SALT',
+  'PERSONAL_OS_PASSWORD_HASH',
+  'PERSONAL_OS_SESSION_SECRET',
+] as const;
 
-  if (!username || !salt || !passwordHash || !secret) return null;
+export type AuthConfigState =
+  /** No credential variables present at all: an intentional local workstation. */
+  | { kind: 'open' }
+  /** Some but not all present: a misconfiguration, and it must not open the app. */
+  | { kind: 'incomplete'; missing: string[] }
+  /** All present and usable. */
+  | { kind: 'configured'; config: AuthConfig };
+
+/**
+ * Classifies the environment.
+ *
+ * The three-way split matters. Treating "some variables are set" as "no
+ * credentials configured" would fail **open**: a typo in one key name, or a
+ * forgotten session secret, would leave an internet-facing instance fully
+ * unauthenticated with no error anywhere. So an incomplete set is its own state,
+ * and the gate refuses every request for it.
+ */
+export function readAuthState(env: Record<string, string | undefined> = process.env): AuthConfigState {
+  const present = REQUIRED_AUTH_ENV.filter(key => (env[key] ?? '').trim().length > 0);
+  if (present.length === 0) return { kind: 'open' };
+
+  const missing = REQUIRED_AUTH_ENV.filter(key => (env[key] ?? '').trim().length === 0);
+  if (missing.length > 0) return { kind: 'incomplete', missing: [...missing] };
+
+  const username = env.PERSONAL_OS_USERNAME!.trim();
+  const salt = env.PERSONAL_OS_PASSWORD_SALT!.trim();
+  const passwordHash = env.PERSONAL_OS_PASSWORD_HASH!.trim().toLowerCase();
+  const secret = env.PERSONAL_OS_SESSION_SECRET!.trim();
 
   const parsedIterations = Number.parseInt(env.PERSONAL_OS_PASSWORD_ITERATIONS ?? '', 10);
   const iterations =
     Number.isFinite(parsedIterations) && parsedIterations >= 10_000 ? parsedIterations : DEFAULT_ITERATIONS;
 
-  return { username, salt, passwordHash, iterations, sessionSecret: secret };
+  return { kind: 'configured', config: { username, salt, passwordHash, iterations, sessionSecret: secret } };
+}
+
+/**
+ * Reads the operator account, or `null` when the app should run open.
+ *
+ * Use `readAuthState` where the difference between "nothing configured" and
+ * "misconfigured" matters — the gate does.
+ */
+export function readAuthConfig(env: Record<string, string | undefined> = process.env): AuthConfig | null {
+  const state = readAuthState(env);
+  return state.kind === 'configured' ? state.config : null;
+}
+
+export function isAuthMisconfigured(env: Record<string, string | undefined> = process.env): boolean {
+  return readAuthState(env).kind === 'incomplete';
 }
 
 export function isAuthConfigured(env: Record<string, string | undefined> = process.env): boolean {

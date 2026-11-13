@@ -61,9 +61,9 @@ baked into the image.
 | `NEXT_TELEMETRY_DISABLED` | `1` |
 
 If **none** of the four credential variables are set, the app runs in open mode
-(every request allowed). A partially-set group is treated as unconfigured and
-also runs open — set all four or none. Any internet-facing deployment must set
-all four.
+(every request allowed). If **some** are set, the app refuses every request with
+`503` naming the missing variables — a misconfiguration must never be mistaken
+for open mode. Any internet-facing deployment must set all four.
 
 ## Generate a fresh credential set
 

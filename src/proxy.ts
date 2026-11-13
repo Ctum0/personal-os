@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { gateRequest } from "@/lib/api/gate";
-import { SESSION_COOKIE, readAuthConfig, verifySessionToken } from "@/lib/auth/credentials";
+import { SESSION_COOKIE, readAuthState, verifySessionToken } from "@/lib/auth/credentials";
 import { readCookie } from "@/lib/api/gate";
 
 /**
@@ -36,7 +36,23 @@ function isStaticAsset(pathname: string): boolean {
 
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  const config = readAuthConfig();
+  const state = readAuthState();
+
+  // A partial credential set is a deployment error, not open mode. Refuse
+  // everything (including the sign-in route) with a 503 that names the missing
+  // variables, so a typo cannot silently publish an unauthenticated instance.
+  if (state.kind === "incomplete") {
+    return NextResponse.json(
+      {
+        error: "Authentication is misconfigured",
+        missing: state.missing,
+        hint: `Set ${state.missing.join(", ")}, or unset all four credential variables to run in open mode.`,
+      },
+      { status: 503 }
+    );
+  }
+
+  const config = state.kind === "configured" ? state.config : null;
 
   // Open mode, or a public/static asset: pass through with a correlation id.
   if (!config || isStaticAsset(pathname) || PUBLIC_PAGES.has(pathname)) {

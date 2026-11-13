@@ -21,7 +21,8 @@ services:
     environment:
       PERSONAL_OS_DB_PATH: /app/data/personal_os.db
       PERSONAL_OS_TZ: ${PERSONAL_OS_TZ:-Asia/Colombo}
-      # Required. With none of these set the app runs in open mode.
+      # Required. Set all four or none: a partial set is refused with 503 rather
+      # than silently falling back to open mode.
       PERSONAL_OS_USERNAME: ${PERSONAL_OS_USERNAME:?set PERSONAL_OS_USERNAME in .env}
       PERSONAL_OS_PASSWORD_SALT: ${PERSONAL_OS_PASSWORD_SALT:?set PERSONAL_OS_PASSWORD_SALT in .env}
       PERSONAL_OS_PASSWORD_HASH: ${PERSONAL_OS_PASSWORD_HASH:?set PERSONAL_OS_PASSWORD_HASH in .env}

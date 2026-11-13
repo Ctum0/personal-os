@@ -6,8 +6,8 @@ import {
   SESSION_COOKIE,
   SESSION_TTL_MS,
   createSessionToken,
-  isAuthConfigured,
   readAuthConfig,
+  readAuthState,
   verifyCredentials,
 } from '@/lib/auth/credentials';
 import {
@@ -31,6 +31,15 @@ import {
 
 export const POST = withApiLogging(async function POST(request: Request) {
   try {
+    const state = readAuthState();
+    if (state.kind === 'incomplete') {
+      // Never treat a partial credential set as "open": refuse to authenticate
+      // and say exactly what is missing.
+      return NextResponse.json(
+        { error: 'Authentication is misconfigured', missing: state.missing },
+        { status: 503 }
+      );
+    }
     const config = readAuthConfig();
     if (!config) {
       // Nothing to sign in to: the instance is deliberately open (local dev).
@@ -79,7 +88,14 @@ export const POST = withApiLogging(async function POST(request: Request) {
 
 export const GET = withApiLogging(async function GET() {
   try {
-    if (!isAuthConfigured()) {
+    const state = readAuthState();
+    if (state.kind === 'incomplete') {
+      return NextResponse.json(
+        { error: 'Authentication is misconfigured', missing: state.missing },
+        { status: 503 }
+      );
+    }
+    if (state.kind === 'open') {
       return ok({ authenticated: true, openMode: true });
     }
     // Existence of a settled session is answered by the gate itself (any other
@@ -92,7 +108,14 @@ export const GET = withApiLogging(async function GET() {
 
 export const DELETE = withApiLogging(async function DELETE() {
   try {
-    const response = ok({ authenticated: false, openMode: !isAuthConfigured() });
+    const state = readAuthState();
+    if (state.kind === 'incomplete') {
+      return NextResponse.json(
+        { error: 'Authentication is misconfigured', missing: state.missing },
+        { status: 503 }
+      );
+    }
+    const response = ok({ authenticated: false, openMode: state.kind === 'open' });
     response.cookies.set(SESSION_COOKIE, '', {
       httpOnly: true,
       sameSite: 'lax',

@@ -182,6 +182,48 @@ describe('gate', () => {
   });
 });
 
+describe('incomplete configuration fails closed', () => {
+  it('refuses every request when only some credential variables are set', async () => {
+    // The dangerous case: an operator sets a typo'd key or forgets the session
+    // secret. Treating that as "not configured" would publish an unauthenticated
+    // instance with no error anywhere.
+    process.env.PERSONAL_OS_USERNAME = USERNAME;
+    process.env.PERSONAL_OS_PASSWORD_HASH = HASH;
+    // Deliberately omit salt and secret.
+
+    const api = await gateRequest(requestWith(), '/api/tasks');
+    expect(api.authorized).toBe(false);
+    expect(api.misconfigured).toBe(true);
+    expect(api.missing).toEqual(['PERSONAL_OS_PASSWORD_SALT', 'PERSONAL_OS_SESSION_SECRET']);
+    expect(api.openMode).toBe(false);
+
+    // Even the sign-in route is refused: there is nothing valid to sign in to.
+    const signIn = await gateRequest(requestWith(), '/api/auth/session');
+    expect(signIn.authorized).toBe(false);
+  });
+
+  it('reports 503 from the session endpoint, not open mode', async () => {
+    process.env.PERSONAL_OS_USERNAME = USERNAME;
+    const res = await sessionPost(
+      new Request('http://localhost/api/auth/session', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username: USERNAME, password: PASSWORD }),
+      })
+    );
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.missing).toContain('PERSONAL_OS_PASSWORD_SALT');
+  });
+
+  it('treats a fully unset environment as intentional open mode', async () => {
+    const result = await gateRequest(requestWith(), '/api/tasks');
+    expect(result.openMode).toBe(true);
+    expect(result.authorized).toBe(true);
+    expect(result.misconfigured).toBeUndefined();
+  });
+});
+
 describe('sign-in endpoint', () => {
   it('reports open mode when no credentials are configured', async () => {
     const res = await sessionPost(
