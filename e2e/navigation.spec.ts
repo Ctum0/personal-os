@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { gotoApp } from './helpers';
 
 /**
  * Navigation workflows: workspace switching, command palette (⌘K), quick add (⌘N).
@@ -7,7 +8,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('navigation', () => {
   test('⌘K opens command palette, Escape closes it', async ({ page }) => {
-    await page.goto('/');
+    await gotoApp(page);
     await page.keyboard.press('Control+k');
     await expect(page.locator('[aria-label="Command palette"]')).toBeVisible();
     await page.keyboard.press('Escape');
@@ -15,7 +16,7 @@ test.describe('navigation', () => {
   });
 
   test('⌘N opens Quick Add, Escape closes without saving', async ({ page }) => {
-    await page.goto('/');
+    await gotoApp(page);
     await page.keyboard.press('Control+n');
     await expect(page.getByLabel('Universal Quick Add')).toBeVisible();
     await page.keyboard.press('Escape');
@@ -23,7 +24,7 @@ test.describe('navigation', () => {
   });
 
   test('TopNav exposes ⌘K / ⌘N affordances and command palette button works', async ({ page }) => {
-    await page.goto('/');
+    await gotoApp(page);
     await expect(page.locator('[aria-label="Quick Add (⌘N)"]')).toBeVisible();
     const paletteButton = page.locator('button', { hasText: '⌘K' });
     await expect(paletteButton).toBeVisible();
@@ -34,7 +35,7 @@ test.describe('navigation', () => {
   });
 
   test('workspace switcher changes active workspace context', async ({ page }) => {
-    await page.goto('/');
+    await gotoApp(page);
     // Workspace switcher lives in TopNavbar; open it and pick another workspace.
     const switcher = page.locator('[data-testid="workspace-switcher"]');
     if ((await switcher.count()) > 0) {

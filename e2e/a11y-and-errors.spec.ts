@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { gotoApp } from './helpers';
 import fs from 'fs';
 import path from 'path';
 
@@ -189,7 +190,7 @@ test.describe('keyboard and dialog semantics', () => {
   });
 
   test('command palette supports arrow navigation and Enter', async ({ page }) => {
-    await page.goto('/');
+    await gotoApp(page);
     await page.keyboard.press('Control+k');
     const dialog = page.getByRole('dialog', { name: 'Command palette' });
     await expect(dialog).toBeVisible();
@@ -206,7 +207,7 @@ test.describe('keyboard and dialog semantics', () => {
   });
 
   test('quick add is a labelled dialog that clears between opens', async ({ page }) => {
-    await page.goto('/');
+    await gotoApp(page);
     await page.keyboard.press('Control+n');
     const dialog = page.getByRole('dialog', { name: /universal quick add/i });
     await expect(dialog).toBeVisible();
@@ -357,9 +358,12 @@ test.describe('backup round trip', () => {
 
 /** Ensures each route's file exists so a renamed page fails loudly. */
 test('every audited route maps to a page file', async () => {
-  const root = path.resolve(process.cwd(), 'src/app');
+  // Authenticated pages live in the `(app)` route group, which is a layout
+  // boundary, not part of the URL. /login is outside it by design.
+  const roots = [path.resolve(process.cwd(), 'src/app'), path.resolve(process.cwd(), 'src/app/(app)')];
   for (const route of ROUTES) {
-    const candidate = route === '/' ? path.join(root, 'page.tsx') : path.join(root, route.slice(1), 'page.tsx');
-    expect(fs.existsSync(candidate), `missing page for ${route}`).toBe(true);
+    const relative = route === '/' ? 'page.tsx' : path.join(route.slice(1), 'page.tsx');
+    const found = roots.some(root => fs.existsSync(path.join(root, relative)));
+    expect(found, `missing page for ${route}`).toBe(true);
   }
 });

@@ -5,6 +5,7 @@ import { QuickAddModal } from '@/components/modals/QuickAddModal';
 import { CommandPaletteModal } from '@/components/modals/CommandPaletteModal';
 import { ExplainerDrawer } from '@/components/modals/ExplainerDrawer';
 import { AiAssistantDrawer } from '@/components/modals/AiAssistantDrawer';
+import { HydrationMarker } from '@/components/layout/HydrationMarker';
 
 /**
  * Authenticated application shell.
@@ -17,6 +18,7 @@ import { AiAssistantDrawer } from '@/components/modals/AiAssistantDrawer';
 export default function AppLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <WorkspaceProvider>
+      <HydrationMarker />
       {/* First focusable element: keyboard users can bypass the shell. */}
       <a
         href="#main-content"

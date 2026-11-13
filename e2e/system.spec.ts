@@ -15,12 +15,10 @@ test.describe('system', () => {
     expect(download.suggestedFilename()).toMatch(/\.json$/);
   });
 
-  test('sign-in page renders and open mode reports openMode:true', async ({ page }) => {
-    // Open mode: the page must render and the endpoint must report that no
-    // credential is configured, without setting a session cookie.
-    await page.goto('/login');
-    await expect(page.getByLabel('Username')).toBeVisible();
-    await expect(page.getByLabel('Password')).toBeVisible();
+  test('open mode reports openMode:true and never sets a cookie', async ({ page }) => {
+    // With no credentials configured there is nothing to sign in to, so /login
+    // correctly forwards straight into the workspace. What must hold is that the
+    // endpoint reports open mode and issues no session cookie.
     const res = await page.request.post('/api/auth/session', {
       data: { username: 'anything', password: 'anything' },
     });
@@ -28,6 +26,11 @@ test.describe('system', () => {
     const body = await res.json();
     expect(body.openMode).toBe(true);
     expect(res.headers()['set-cookie']).toBeUndefined();
+
+    const login = await page.goto('/login');
+    expect(login?.status()).toBe(200);
+    await expect(page.locator('html[data-app-ready="true"]')).toBeAttached({ timeout: 30_000 });
+    expect(new URL(page.url()).pathname).toBe('/');
   });
 
   test('system API health contract: key list endpoints respond 200', async ({ request }) => {

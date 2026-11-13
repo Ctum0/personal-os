@@ -74,6 +74,14 @@ export default defineConfig({
       env: {
         E2E_DIST_DIR: '.next-e2e',
         PERSONAL_OS_DB_PATH: openDb,
+        // Playwright merges this object over the parent process env, so any
+        // credential exported in the developer's shell would silently put the
+        // "open" project behind a login. Blanking them keeps open mode real.
+        PERSONAL_OS_USERNAME: '',
+        PERSONAL_OS_PASSWORD_SALT: '',
+        PERSONAL_OS_PASSWORD_HASH: '',
+        PERSONAL_OS_PASSWORD_ITERATIONS: '',
+        PERSONAL_OS_SESSION_SECRET: '',
       },
     },
     {
