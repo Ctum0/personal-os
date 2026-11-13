@@ -111,6 +111,9 @@ recorded here with the guard that now prevents each one.
 
 | 69 | Copying `.env.example` produced a door with no key | Credentials were validated only for presence, so `REPLACE_ME` placeholders counted as configured: the instance announced itself as protected, answered 401 to every sign-in attempt, and no password could ever work | Credential values are shape-checked (salt ≥16 hex, digest exactly 64 hex, secret ≥32, no placeholders). An unusable value yields `incomplete` → 503 naming the variable, and `src/instrumentation.ts` logs the posture at startup. Verified against a running server with the template copied verbatim |
 
+| 70 | `/api/*` paths could inherit the static-asset exemption | The asset check ran before the `/api/` branch with `json`/`txt`/`xml` allowed, so a future route ending in those suffixes would skip authentication | The check refuses every `/api/` path by construction; text types are gone from the list and `/manifest.json` is a public page. Pinned by an E2E assertion that `/api/tasks.json` is never 200 |
+| 71 | A misconfigured instance was undiagnosable from the browser | The proxy answered `/login` with raw JSON, and the sign-in page redirected to `/` for the same state | `/login` now renders the explanation (variables + shape rules); every other page redirects to it; `/api/*` keeps the machine-readable 503. `instrumentation.ts` logs the posture once at startup, guarded to the Node runtime so the Edge pass stays out of the proxy bundle |
+
 ## Known open (not fixed, not covered by a gate)
 
 Each item is reproducible and none is a regression of the fixes above. They are

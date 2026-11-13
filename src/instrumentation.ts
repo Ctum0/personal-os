@@ -10,6 +10,12 @@
  * outside. Crash-looping would hide the reason.
  */
 export async function register(): Promise<void> {
+  // `register` runs once per runtime. Without this guard the diagnostic prints
+  // twice (Node + Edge) and this file joins the Edge bundle that `src/proxy.ts`
+  // uses, so a future Node-only import here would break authentication at
+  // deploy time instead of failing loudly.
+  if (process.env.NEXT_RUNTIME !== 'nodejs') return;
+
   const { readAuthState } = await import('@/lib/auth/credentials');
   const state = readAuthState();
 

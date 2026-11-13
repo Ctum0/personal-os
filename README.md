@@ -54,11 +54,20 @@ pnpm dev
 - **Locked mode**: unauthenticated page requests are redirected to
   `/login?next=<path>` before anything renders, and `/api/*` calls get `401`. The
   application shell is not rendered for a signed-out visitor at all.
-- **An incomplete credential set fails closed.** If some but not all of the four
-  variables are present — a typo in a key name, a forgotten session secret —
-  every request returns `503` naming the missing variables. It is never treated
-  as "not configured", because that would silently publish an unauthenticated
-  instance. Unset all four to get open mode.
+- **An unusable credential set fails closed.** A missing variable, a placeholder
+  such as `REPLACE_ME`, or a value of the wrong shape all count as a
+  misconfiguration: every request returns `503` naming the offending variables,
+  and the sign-in page explains it instead of showing a form. It is never
+  treated as "not configured", because that would silently publish an
+  unauthenticated instance. Unset all four to get open mode.
+
+  | Variable | Required shape |
+  | --- | --- |
+  | `PERSONAL_OS_PASSWORD_SALT` | at least 16 hex characters |
+  | `PERSONAL_OS_PASSWORD_HASH` | exactly 64 hex characters |
+  | `PERSONAL_OS_SESSION_SECRET` | at least 32 characters |
+
+  The generator below emits values that satisfy all three.
 - **Passwords are never stored.** `PERSONAL_OS_PASSWORD_HASH` is PBKDF2-HMAC-SHA256
   (210k iterations by default, 256-bit) over `PERSONAL_OS_PASSWORD_SALT`. The
   comparison is length-independent and does not short-circuit on the username.

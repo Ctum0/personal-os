@@ -176,6 +176,26 @@ describe('gate', () => {
     expect(blocked.authorized).toBe(false);
   });
 
+  it('accepts the exact fixture triple used by the E2E project', async () => {
+    // This suite and the `authed` Playwright project share a contract: if the
+    // shape rules tighten, the harness must be updated with them. Pinning the
+    // E2E values here makes that failure show up as a unit test, not as seven
+    // browser specs timing out against a server that 503s everything.
+    process.env.PERSONAL_OS_USERNAME = 'e2e-operator';
+    process.env.PERSONAL_OS_PASSWORD_SALT = '0123456789abcdef0123456789abcdef';
+    process.env.PERSONAL_OS_PASSWORD_HASH = '6a303efb7b786aed0bc0031f6967910732a8a30fd396b24343e9231afb3d9896';
+    process.env.PERSONAL_OS_SESSION_SECRET = 'e2e-session-secret-fixed-value-0123456789';
+    process.env.PERSONAL_OS_PASSWORD_ITERATIONS = '210000';
+
+    const result = await gateRequest(requestWith(), '/api/tasks');
+    expect(result.misconfigured).toBeUndefined();
+    expect(result.reason).toMatch(/sign in required/i);
+
+    // ...and the fixture really is the password it claims to be.
+    const config = readAuthConfig()!;
+    expect(await verifyCredentials(config, 'e2e-operator', 'e2e-fixture-password')).toBe(true);
+  });
+
   it('parses a cookie out of a multi-cookie header', () => {
     expect(readCookie('theme=dark; personal_os_session=abc.def.ghi; other=1', SESSION_COOKIE)).toBe('abc.def.ghi');
     expect(readCookie('theme=dark', SESSION_COOKIE)).toBeUndefined();

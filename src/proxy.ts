@@ -20,11 +20,18 @@ import { readCookie } from "@/lib/api/gate";
  * place that knows the correlation id.
  */
 
-/** Reachable without a session: the sign-in page and its own endpoint. */
-const PUBLIC_PAGES = new Set(["/login"]);
+/** Reachable without a session: the sign-in page, its endpoint and the manifest. */
+const PUBLIC_PAGES = new Set(["/login", "/manifest.json", "/robots.txt"]);
 
-/** Extensions served from `public/` that must never require a session. */
-const ASSET_EXTENSION = /\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|woff2?|ttf|otf|txt|xml|json|webmanifest)$/i;
+/**
+ * Extensions served from `public/` that must never require a session.
+ *
+ * Text-ish types (`json`, `txt`, `xml`) are deliberately absent: this check runs
+ * before the `/api/` branch, so allowing them would let a future `/api/…​.json`
+ * route bypass authentication entirely. `/manifest.json` is handled as a public
+ * page instead.
+ */
+const ASSET_EXTENSION = /\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|woff2?|ttf|otf|webmanifest)$/i;
 
 /**
  * True for static files that a signed-out browser legitimately requests.
@@ -35,6 +42,8 @@ const ASSET_EXTENSION = /\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|woff2?|ttf|otf|
  * No page route in this app ends in an asset extension, so the check is safe.
  */
 function isStaticAsset(pathname: string): boolean {
+  // Never treat an API path as an asset, whatever it is called.
+  if (pathname.startsWith("/api/")) return false;
   return pathname.startsWith("/_next/") || ASSET_EXTENSION.test(pathname);
 }
 
@@ -46,6 +55,18 @@ export async function proxy(request: NextRequest) {
   // everything (including the sign-in route) with a 503 that names the missing
   // variables, so a typo cannot silently publish an unauthenticated instance.
   if (state.kind === "incomplete") {
+    // Let the sign-in page render the explanation itself: it is the URL a
+    // browser is sent to, so the operator should read a sentence there, not a
+    // raw JSON body. Every other path stays a machine-readable 503.
+    if (pathname === "/login") {
+      return NextResponse.next();
+    }
+    if (!pathname.startsWith("/api/")) {
+      const target = request.nextUrl.clone();
+      target.pathname = "/login";
+      target.search = "";
+      return NextResponse.redirect(target);
+    }
     return NextResponse.json(
       {
         error: "Authentication is misconfigured",

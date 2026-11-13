@@ -58,6 +58,13 @@ test.describe('sign-in gate', () => {
     await expect(page.getByLabel('Password')).toBeVisible();
   });
 
+  test('an api path is never treated as a static asset', async ({ request }) => {
+    // The asset-extension check runs before the /api/ branch; a JSON-ish suffix
+    // must not become an authentication bypass.
+    const res = await request.get('/api/tasks.json', { maxRedirects: 0 });
+    expect(res.status(), 'api paths must never bypass the gate').not.toBe(200);
+  });
+
   test('static assets referenced by the manifest stay public', async ({ request }) => {
     // A signed-out browser still fetches the PWA icons; redirecting them to
     // /login silently breaks installability.
