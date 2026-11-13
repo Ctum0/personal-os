@@ -1,7 +1,7 @@
 # Master Progress
 
 **Status: complete for every surface exercised.**
-Last updated: 2026-11-14 · Audit build: `6dbb094`, fixes verified at `6e9d183`
+Last updated: 2026-11-14 · audit started at `6dbb094`; every fix verified against a later commit — see `git log` for the current deployed SHA
 
 No carry-forwards: the Phase 4 finance-table typography pass was completed
 (alignment, decimal consistency, density and size measured on all four recognised
@@ -69,8 +69,10 @@ filter).
 ## Current phase
 
 Phase 3 (interaction): **done for the surfaces exercised** — every route's
-controls were swept (251 clicks, zero console errors, zero dead controls
-identified), and all five previously-untested workflows are verified end to end.
+controls were swept (251 clicks, zero console errors; no dead control in the 6
+re-checked individually, with the remaining 49 non-navigating clicks unclassified
+because the detector keys only on URL change or role=dialog), and all five
+previously-untested workflows are verified end to end.
 
 Phase 4 (visual/typography): **done.** Typography and layout were inspected per
 page and measured across 8 viewports, and the four recognised finance tables were

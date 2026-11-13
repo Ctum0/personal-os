@@ -19,22 +19,22 @@
 | 10 | `/productivity/focus` | Yes | Yes | No | No | Partially tested |
 | 11 | `/productivity/analytics` | Yes | — | No | No | Partially tested |
 | 12 | `/productivity/insights` | Yes | — | n/a (redirect) | No | **Complete** (redirect verified) |
-| 13 | `/productivity/weekly-review` | Yes | — | No | Yes | Partially tested |
+| 13 | `/productivity/weekly-review` | Yes | — | Yes (WF-H: save + reload) | Yes | **Interaction verified** |
 | 14 | `/finance` | Yes | — | No | No | Partially tested |
 | 15 | `/finance/accounts` | Yes | Yes | No | No | Partially tested |
-| 16 | `/finance/transactions` | Yes | Yes | No | Yes | Partially tested |
+| 16 | `/finance/transactions` | Yes | Yes | Yes (WF-G: create → void) | Yes | **Interaction verified** |
 | 17 | `/finance/budgets` | Yes | — | No | Yes | Partially tested |
 | 18 | `/finance/recurring` | Yes | — | No | No | Partially tested |
 | 19 | `/finance/savings` | Yes | — | No | No | Partially tested |
 | 20 | `/finance/debts` | Yes | — | No | No | Partially tested |
 | 21 | `/finance/net-worth` | Yes | — | No | Yes | Partially tested |
-| 22 | `/finance/import` | Yes | Yes | No | Yes | Partially tested |
+| 22 | `/finance/import` | Yes | Yes | Yes (WF-F: file → preview → commit) | Yes | **Interaction verified** |
 | 23 | `/finance/reports` | Yes | — | No | No | Partially tested |
 | 24 | `/overview` | Yes | — | No | No | Partially tested |
 | 25 | `/overview/metrics` | Yes | — | No | No | Partially tested |
 | 26 | `/overview/settings` | Yes | Yes | Yes (read values, save present) | Yes | **Complete** (save semantics verified by the project suite) |
-| 27 | `/overview/ai-governance` | Yes | — | No | No | Partially tested |
-| 28 | `/overview/backup` | Yes | Yes | No | No | Partially tested |
+| 27 | `/overview/ai-governance` | Yes | — | Yes (WF-J: policy toggle persists) | No | **Interaction verified** (chat path needs a provider) |
+| 28 | `/overview/backup` | Yes | Yes | Yes (WF-I: real JSON download) | No | **Export verified**; restore untested |
 | 29 | `/overview/formulas` | Yes | — | No | No | Partially tested |
 | 30 | `/login` | Yes (via auth suite) | — | Yes (sign-in, wrong password, sign-out) | No | **Complete** (auth suite + KB checks) |
 
@@ -59,4 +59,4 @@ tested", but their controls are no longer unexercised.
 - Blocked: **0**
 - Not tested: **0**
 
-**No route is claimed as fully audited without interaction evidence.** The 26 partially-tested routes now have their controls swept (251 clicks, zero console errors, zero dead controls identified — see `INTERACTION_TESTS.md`), so their controls are exercised; their *record-level* behaviour is verified only where a named workflow covers it. Deductions about a functionality being correct still require a workflow, not a click.
+**No route is claimed as fully audited without interaction evidence.** The 26 partially-tested routes now have their controls swept (251 clicks, zero console errors; no dead control in the 6 re-checked individually — see `INTERACTION_TESTS.md`), so their controls are exercised; their *record-level* behaviour is verified only where a named workflow covers it. Deductions about a functionality being correct still require a workflow, not a click.

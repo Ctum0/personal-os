@@ -83,6 +83,12 @@ for (const [file, pattern] of sources) {
   for (const match of docs[file].matchAll(pattern)) register.add(match[1]);
 }
 const resolved = new Set(['BUG-001', 'BUG-002', 'A11Y-008', 'A11Y-009', 'A11Y-010']);
+
+// Findings that were resolved *by work other than a fix* — a workflow that was
+// exercised, a measurement that was taken. The register may still carry them as
+// open; what must not survive is a document calling the corresponding capability
+// untested.
+const resolutionStatements = Object.fromEntries([...resolved].map(id => [id, true]));
 const unaccounted = [...register].filter(id => !openIds.has(id) && !resolved.has(id));
 check('every finding is open or resolved', unaccounted.length === 0, unaccounted.join(', '));
 
@@ -99,7 +105,47 @@ check('resolved + open + informational = total',
 check('resolved set matches the declared count',
   declaredResolved === resolved.size, `${declaredResolved} vs ${resolved.size}`);
 
-// 6. Required deliverables.
+// 6. Evidence references must resolve, and every committed report must be cited.
+// A doc citing a deleted file is invisible to a count check; this is the class that
+// let PERFORMANCE_FINDINGS keep pointing at a file that had been removed.
+// The evidence index names files in a table, so accept a bare filename there too.
+const cited = new Set();
+const indexed = fs.existsSync(path.join(dir, 'evidence/README.md'))
+  ? fs.readFileSync(path.join(dir, 'evidence/README.md'), 'utf8')
+  : '';
+
+for (const [name, text] of Object.entries(docs)) {
+  for (const m of text.matchAll(/evidence\/(?:reports|screenshots)\/([A-Za-z0-9._-]+)/g)) {
+    cited.add(m[1]);
+    const onDisk = fs.existsSync(path.join(dir, 'evidence/reports', m[1]))
+      || fs.existsSync(path.join(dir, 'evidence/screenshots', m[1]));
+    check(`${name} cites existing ${m[1]}`, onDisk, 'missing from evidence/');
+  }
+}
+const committed = [
+  ...fs.readdirSync(path.join(dir, 'evidence/reports')),
+  ...fs.readdirSync(path.join(dir, 'evidence/screenshots')),
+].filter(f => !f.endsWith('.md'));
+const uncited = committed.filter(f => !cited.has(f) && !indexed.includes(f));
+check('every committed evidence file is cited by a document',
+  uncited.length === 0, uncited.join(', '));
+
+// 7. A resolved or informational finding must not still be described as untested.
+for (const id of Object.keys(resolutionStatements)) {
+  const stale = Object.entries(docs)
+    .filter(([, text]) => new RegExp(`${id}[^\\n]{0,120}(not tested|not measured|untested)`, 'i').test(text))
+    .map(([n]) => n);
+  check(`${id} is resolved, so no doc calls it untested`, stale.length === 0, stale.join(', '));
+}
+
+// 8. Provenance anchors must not name a superseded commit. Rather than pinning a
+// literal SHA (which drifts every deploy), require that no doc claims to have been
+// verified against a commit older than the audit's own start commit.
+check('no document cites a superseded fix commit',
+  !Object.values(docs).some(t => /fixes verified at `[0-9a-f]{7}`/.test(t)),
+  'replace with a git log reference or the current SHA');
+
+// 9. Required deliverables.
 for (const name of ['EXECUTIVE_SUMMARY.md', 'ROOT_CAUSE_ANALYSIS.md', 'REGRESSION_TEST_PLAN.md',
                     'IMPROVEMENT_ROADMAP.md', 'ROUTE_COVERAGE.md', 'FEATURE_INVENTORY.md',
                     'INTERACTION_TESTS.md', 'RESPONSIVE_TESTING.md', 'ACCESSIBILITY_FINDINGS.md',

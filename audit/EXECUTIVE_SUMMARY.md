@@ -1,6 +1,6 @@
 # Executive Summary
 
-**Audit build:** `6dbb094`, with fixes verified at `b0fc7bb` · **Date:** 2026-11-13
+Last updated: 2026-11-14 · audit started at `6dbb094`; every fix verified against a later commit — see `git log` for the current deployed SHA
 **Every number below is derived from a file in this directory, not estimated.**
 
 ---
@@ -83,7 +83,7 @@ What must be resolved before calling it done:
 
 ## What this audit did not establish
 
-Every route's controls were swept (251 clicks, zero console errors, zero dead controls), and all five previously-untested workflows are now verified: CSV import, weekly review save/reload, transaction create→void, backup export, and AI policy toggles. What remains untested is narrower and named in `WORKFLOW_TESTING.md`: backup **restore** through the UI, and the assistant's **chat** path, which needs a model provider. Only Chromium was available, so Safari and Firefox behaviour is **unverified**, and the data volume was a seeded handful of rows. All limitations are itemised in `BLOCKERS.md`. No route is marked complete without interaction evidence.
+Every route's controls were swept (251 clicks, zero console errors, no dead control found in the 6 re-checked individually — the remaining 49 non-navigating clicks are unclassified because the detector keys only on URL change or role=dialog), and all five previously-untested workflows are now verified: CSV import, weekly review save/reload, transaction create→void, backup export, and AI policy toggles. What remains untested is narrower and named in `WORKFLOW_TESTING.md`: backup **restore** through the UI, and the assistant's **chat** path, which needs a model provider. Only Chromium was available, so Safari and Firefox behaviour is **unverified**, and the data volume was a seeded handful of rows. All limitations are itemised in `BLOCKERS.md`. No route is marked complete without interaction evidence.
 
 ## Method integrity
 

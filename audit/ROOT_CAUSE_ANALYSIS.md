@@ -44,4 +44,19 @@ The account menu assumes a username exists. Authentication is *optional by desig
 
 ## What this clustering implies for the roadmap
 
-Mapping to the register's 14 findings: **RC-1** covers BUG-001 and UX-002; **RC-2** covers BUG-002 and RESP-002/003/004; **RC-3** covers A11Y-008 and A11Y-009. That is 8 of 14, and it prevents the next instance of each. Fixing the 9 findings one at a time would leave both the palette and the tables ready to reproduce the same class of defect on their next edit. This is why the roadmap is organised by root cause, not by page.
+Mapping to the register's **17** entries:
+
+| Cause | Register IDs | Count |
+| --- | --- | --- |
+| RC-1 (no unified lookup model) | `BUG-001`, `UX-002` | 2 |
+| RC-2 (per-component overflow) | `BUG-002`, `UI-005`, plus the `RESP-002/003/004` sub-items in `RESPONSIVE_TESTING.md` | 2 (+3 sub-items) |
+| RC-3 (a11y coverage stopped at the resting page) | `A11Y-008`, `A11Y-009`, `A11Y-010` | 3 |
+| Secondary (optional identity rendered as mandatory) | `BUG-003`, `UI-001` | 2 |
+
+That covers **9 of the 17**, and it prevents the next instance of each class.
+Fixing the remainder one by one would leave the palette, the tables and the
+accessibility sweep each ready to reproduce the same defect on their next edit —
+which is why the roadmap is organised by root cause rather than by page.
+
+`RESP-002/003/004` are sub-items in `RESPONSIVE_TESTING.md`, not separate register
+IDs; `RESP-001` was merged into `BUG-002` during review. This is why the roadmap is organised by root cause, not by page.

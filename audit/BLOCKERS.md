@@ -6,10 +6,10 @@ Nothing fully blocked the audit. These are the limits, stated so no result is re
 | --- | --- | --- | --- |
 | 1 | **Chromium only.** WebKit and Firefox were not available in this environment. | Safari/iOS rendering, `aria-*` propagation and scroll behaviour are **unverified**. | None. Claims are scoped to Chromium. |
 | 2 | **Seeded, small dataset.** The audit profile holds a handful of tasks and the sample accounts from first boot. | Behaviour with hundreds of rows, dense calendars, or paginated tables is **untested**. Palette result counts and table density conclusions may not hold at volume. | Documented as an assumption; no volume claims made. |
-| 3 | **AI surfaces need a provider.** `/overview/ai-governance`, the AI assistant drawer and plan generation require a configured model. | Those flows are **not tested**. | Presence and rendering verified only. |
-| 4 | **Destructive finance operations were not driven.** Deleting accounts or transactions could corrupt the audit profile's coherence mid-run. | Finance CRUD flows are **not tested**. | Table rendering, overflow and accessibility were measured instead. |
-| 5 | **Production performance not measured.** All timings came from `next dev`. | No Core Web Vitals claim is possible. | Reported as relative/dev-only and labelled. |
-| 6 | **CSV import not exercised end-to-end.** Requires a valid statement file through the file input. | The import workflow is **not tested** here (it is covered by the project's own E2E suite, which I did not re-verify). | Recorded as open coverage. |
+| 3 | **AI chat needs a provider.** `/overview/ai-governance` policy switches were verified (WF-J); the assistant *chat* path and plan generation require a configured model. | Chat and generation **not tested**. | Policy toggles verified end to end; the chat path is the remaining gap. |
+| 4 | *(Resolved)* Finance CRUD was driven against a **disposable profile** (`PERSONAL_OS_DB_PATH=/tmp/wf-db`), never the operator's database. | Tested — WF-G. | Create → verify → void, all against a throwaway DB. |
+| 5 | *(Resolved)* Production performance **was** measured — Lighthouse against the standalone build. | Tested — `PERFORMANCE_FINDINGS.md`. | 97/100/100/100; FCP/LCP 0.9 s, TBT 210 ms, CLS 0.012 on `/`. Other routes remain unprofiled. |
+| 6 | *(Resolved)* CSV import exercised end to end with a real 2-row file: upload → preview → commit (WF-F). | Tested. | Row-level assertions on the committed transactions were not made; the UI path was verified. |
 | 7 | **No non-Chromium automated accessibility tool.** | axe results reflect Chromium's accessibility tree only. | Manual keyboard checks supplemented axe. |
 
 ## Not a blocker but worth stating

@@ -92,16 +92,20 @@ Nothing here is a data-loss or security defect. A-2 is the one a phone user hits
 | Raise the minimum informational text size to 12px; reserve 10–11px for shortcut hints | UI-002 | Small | No leaf text carrying information measures below 12px |
 | Debounce the palette to 250 ms and abort superseded requests | PERF-001 | Small | At most one in-flight search; no request per keystroke |
 | Pull each page's primary control above the fold at 1366×768 | UI-004 | Small | Primary action visible without scrolling at 1366×768 on `/productivity/plan` and `/productivity/focus` |
-| Close the untested workflow gaps (CSV import, weekly review, transactions CRUD) | — | Medium | Each journey has an automated test |
+| **Run the accessibility sweep at 390px as well as 1440** | A11Y-010 (found only by Lighthouse) | Small — one loop change | `axe-sweep` audits each route at both widths; the unnamed Productivity toggle fails at 390 and passes at 1440, so a desktop-only sweep cannot catch it |
+| Automate the two remaining workflow gaps: backup **restore** through the UI, and the assistant chat path (needs a provider) | — | Medium | Each journey has an automated test |
 
 ---
 
 ## Sequencing
 
-**A-1 → A-3** can land together (same component). **A-2** is independent and can land in parallel. **B-1** should land immediately after A-3 so the new gate protects the fix. Everything in Stage B and C is independent and can be ordered by appetite.
+**A-1 → A-3** landed together (same component). **A-2** landed independently. **B-1** landed with them, so the open-dialog gate protects that fix. What is left in Stage C is independent and can be ordered by appetite.
+
+A-1, A-2, A-3 and B-1 are **done** (see `MASTER_PROGRESS.md`); the roadmap is kept
+for the reasoning, not as a to-do list.
 
 ## What is deliberately NOT recommended
 
 - **No visual redesign.** The interface is coherent: consistent dark surface, disciplined heading hierarchy, one `h1` per page, working focus management. There is no evidence justifying a restyle, and the audit's rule is that decoration must earn its place with usability.
 - **No change to the shell.** Navigation, workspace switching, history behaviour and skip-link semantics all tested correctly.
-- **No performance work beyond PERF-001.** No measured defect exists; the numbers collected on a dev server would not support optimisation claims.
+- **No performance work beyond PERF-001.** The production Lighthouse run (97/100/100/100; FCP/LCP 0.9 s, TBT 210 ms, CLS 0.012 on `/`) supports that: there is no measured defect to optimise. TBT sits marginally over the "good" boundary on a CPU-throttled mobile profile with no real-world symptom, so treating it as a target would be optimising the measurement, not the product.

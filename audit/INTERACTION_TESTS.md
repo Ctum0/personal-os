@@ -72,5 +72,7 @@ are reported as silent by construction.
 
 ## Not tested
 
-- Destructive flows (archive/delete with confirmation) were **not** driven end-to-end to observe the undo path; only the buttons' presence was confirmed. Tracked as **Not tested** in `MASTER_PROGRESS.md`.
-- CSV import commit was not exercised through the UI in this pass (covered by the project's E2E suite, but not re-verified here).
+- Both of the items previously listed here are now covered: destructive flows were
+  driven end to end (task archive with `window.confirm` in WF-A; transaction void in
+  WF-G), and CSV import was exercised through the UI with a real file (WF-F). See
+  `WORKFLOW_TESTING.md`.
