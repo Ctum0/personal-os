@@ -92,5 +92,11 @@ for (const name of ['EXECUTIVE_SUMMARY.md', 'ROOT_CAUSE_ANALYSIS.md', 'REGRESSIO
 }
 check('README links the executive summary', docs['README.md'].includes('EXECUTIVE_SUMMARY.md'));
 
+// Known limitation, stated rather than papered over: this checks counts, the
+// open/resolved split, and stale phrases it was taught. It cannot judge whether a
+// *status sentence* in prose is still true — a document can claim "audit in
+// progress" indefinitely and pass. Guarding that needs a human read or a status
+// field the documents derive from, not a string list.
+
 console.log(`\n${failures.length} failure(s)`);
 if (failures.length) process.exit(1);

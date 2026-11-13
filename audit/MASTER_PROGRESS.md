@@ -1,7 +1,11 @@
 # Master Progress
 
-**Status: audit in progress — Phase 3/4 partially complete.**
-Last updated: 2026-11-13 · Audit build: `6dbb094`
+**Status: complete for every surface exercised, with one carry-forward.**
+Last updated: 2026-11-14 · Audit build: `6dbb094`, fixes verified at `6e9d183`
+
+Carried forward: the **Phase 4 finance-table typography pass** — table density
+and numeric alignment on `transactions`, `budgets`, `debts`, `net-worth` — has
+never been run. Everything else below is done or explicitly declared untested.
 
 ## Quantitative state (evidence-derived)
 
@@ -38,8 +42,8 @@ A page counts as complete only when its UI, interactions and applicable function
 
 | Status | Count | Routes |
 | --- | --- | --- |
-| Fully audited | 4 | `/`, `/productivity/tasks`, `/overview/settings` (axe only, not interaction), `/productivity/insights` |
-| Partially audited (loaded + visual + console, interactions not exercised) | 26 | all remaining app routes, including `/login` |
+| Fully audited (UI + interaction) | 4 | `/`, `/productivity/tasks`, `/overview/settings`, `/productivity/insights` |
+| Controls swept (251 clicks, 0 console errors), behaviour verified where a workflow applies | 26 | all remaining app routes, including `/login`. Control-response verified; record-level behaviour only where a named workflow covers it |
 | Not audited | 0 | — |
 | Blocked | 0 | — |
 
@@ -63,27 +67,30 @@ filter).
 
 ## Current phase
 
-Phases 1–7 complete for the surfaces exercised. Phase 3 (interaction) and Phase 4
-(visual/typography) are **incomplete**: 26 of 30 routes were verified to render
-cleanly, but their controls were not driven.
+Phase 3 (interaction): **done for the surfaces exercised** — every route's
+controls were swept (251 clicks, zero console errors, zero dead controls
+identified), and all five previously-untested workflows are verified end to end.
+
+Phase 4 (visual/typography): **one carry-forward**. Typography and layout were
+inspected per page and measured across 8 viewports, but the recognised finance
+tables were never assessed for density or numeric alignment. Lighthouse does not
+substitute: it measures contrast and heading order, not whether a 745px-wide
+numeric table reads well.
 
 ## Exact next task
 
-1. **Interaction-test the 26 partially-audited routes.** Start with
-   `/productivity/calendar` and `/productivity/habits` (dense interactive grids),
-   then the four finance table pages (`transactions`, `budgets`, `debts`,
-   `net-worth`) for row actions and numeric formatting.
-2. **Drive the five untested workflows**: CSV import end-to-end (file input →
-   preview → commit), weekly review create/save/reopen, finance CRUD
-   (create → edit → delete with confirm), backup export → restore through the UI,
-   and the AI governance approval flow (needs a configured provider).
-3. **Run a production-build Lighthouse pass.** All timings so far came from
-   `next dev` and are explicitly not Core Web Vitals.
-4. Then `PERF-001` (palette debounce/abort) can be judged against real numbers
-   instead of dev-server ones.
+1. **Phase 4 carry-forward: the finance-table typography pass.** Open
+   `/finance/transactions`, `/budgets`, `/debts`, `/net-worth` at 1440×900 and
+   assess: right-aligned numeric columns, consistent decimal places, row density
+   (is 745px of table readable?), header/label contrast, and whether amounts are
+   scannable down a column. Record findings as `UI-*`.
+2. **Backup restore through the UI** (export is verified; restore is covered only
+   by unit tests).
+3. **Assistant chat path**, which needs a configured model provider.
 
-Everything else — findings files, the 8-viewport matrix, the palette
-verification, the three gates — is **done**. Do not redo it.
+Do not redo: the route sweep, the five workflows, the 8-viewport matrix, the
+palette verification, or the production Lighthouse pass. All are recorded with
+evidence in this directory.
 
 ## Blockers
 

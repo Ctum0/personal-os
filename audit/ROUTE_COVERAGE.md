@@ -59,4 +59,4 @@ tested", but their controls are no longer unexercised.
 - Blocked: **0**
 - Not tested: **0**
 
-**No route is claimed as fully audited without interaction evidence.** The 26 partially-tested routes were verified to render, structurally parse, and produce no console errors — which is a real result, but it is not a functional audit of their controls.
+**No route is claimed as fully audited without interaction evidence.** The 26 partially-tested routes now have their controls swept (251 clicks, zero console errors, zero dead controls identified — see `INTERACTION_TESTS.md`), so their controls are exercised; their *record-level* behaviour is verified only where a named workflow covers it. Deductions about a functionality being correct still require a workflow, not a click.
