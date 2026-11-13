@@ -66,7 +66,11 @@ export function OperatorMenu({ username }: { username?: string }) {
         onClick={() => setOpen(value => !value)}
         aria-expanded={open}
         aria-haspopup="menu"
-        aria-label={username ? `Account menu for ${username}` : 'Account menu'}
+        // WCAG 2.5.3 / axe `label-content-name-mismatch`: the accessible name
+        // must literally contain the visible text. The button renders initials,
+        // so the name starts with those exact characters — "Account menu for
+        // ctum" does not contain "CT" and fails the check.
+        aria-label={`${initials} — account menu${username ? ` for ${username}` : ''}`}
         className="hidden sm:flex w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 items-center justify-center text-[10px] font-semibold text-zinc-300 hover:border-zinc-500 transition-colors"
       >
         <span aria-hidden="true">{initials}</span>

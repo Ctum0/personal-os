@@ -117,6 +117,9 @@ recorded here with the guard that now prevents each one.
 | 72 | Sign-in throttling could be turned into a lockout of the only account | `checkLoginAllowed` ran before `verifyCredentials`, so 20 wrong guesses from anywhere refused the *correct* password for the cooldown — and the password is the only way in | Credentials are verified first and a valid credential always issues a session; the limiter only decides whether a *failed* attempt answers 429 instead of 401, and a throttled caller pays an extra 500 ms. A per-client key that can be spoofed or collapse to a CDN peer is backed by a global 20-failures-per-15-minutes limiter, so total guessing is bounded without ever denying the operator. Unit tests pin both properties |
 | 73 | The login page's misconfiguration panel was untested and had been dead code once | An earlier revision answered `/login` with JSON, and a substring assertion on the body passed anyway because the error text appeared in both shapes | `src/tests/proxy-routing.test.ts` asserts status *and* content type per path: `/login` passes through to render HTML, other pages 307 to it, `/api/*` is 503 JSON |
 
+| 74 | No way to sign out | Nothing in the UI called `DELETE /api/auth/session`; the only way to end a session was clearing cookies by hand, and the cookie lives 7 days | Operator menu in the navbar (server-supplied name, real disclosure semantics: `aria-expanded`, `role=menu`, Escape, click-outside, focus returned). Sign-out clears the cookie server-side before navigating. E2E proves `/api/tasks` is 401 afterwards and a deep link cannot restore the session |
+| 75 | A hardcoded operator identity | The navbar avatar always rendered `AM` regardless of the configured account | Initials derive from `PERSONAL_OS_USERNAME`, read on the server and passed down |
+
 ## Known open (not fixed, not covered by a gate)
 
 Each item is reproducible and none is a regression of the fixes above. They are
